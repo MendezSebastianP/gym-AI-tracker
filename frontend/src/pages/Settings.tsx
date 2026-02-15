@@ -373,7 +373,7 @@ export default function Settings() {
 			</button>
 
 			<div className="text-center mt-8 text-xs text-tertiary opacity-50">
-				Gym AI Tracker v2.5.0
+				Gym AI Tracker v0.1.0
 			</div>
 		</div>
 	);
