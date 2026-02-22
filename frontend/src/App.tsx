@@ -65,11 +65,11 @@ function App() {
 				const sessionsToStore = sessions.map((s: any) => {
 					if (s.sets) {
 						s.sets.forEach((set: any) => {
-							allSets.push({ ...set, session_id: s.id, syncStatus: 'synced' });
+							allSets.push({ ...set, session_id: s.id, syncStatus: 'synced', server_id: set.id });
 						});
 					}
 					const { sets, ...sessionData } = s;
-					return { ...sessionData, syncStatus: 'synced' };
+					return { ...sessionData, syncStatus: 'synced', server_id: s.id };
 				});
 
 				await db.sessions.clear();

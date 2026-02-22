@@ -44,8 +44,8 @@ export const syncAllDataBeforeLogout = async () => {
 
 		for (const session of unsyncedSessions) {
 			try {
-				if (session.syncStatus === 'created') {
-					// Create on server
+				if (!session.server_id) {
+					// No server ID means it was never created on the server, even if local status is 'updated'
 					const res = await api.post('/sessions', {
 						routine_id: session.routine_id,
 						day_index: session.day_index,
@@ -54,10 +54,8 @@ export const syncAllDataBeforeLogout = async () => {
 						notes: session.notes,
 					});
 
-					// Get the server-assigned ID
 					const serverId = res.data.id;
 
-					// Now sync sets for this session
 					const sessionSets = await db.sets
 						.where('session_id')
 						.equals(session.id!)
@@ -80,10 +78,8 @@ export const syncAllDataBeforeLogout = async () => {
 						}
 					}
 
-					// Mark session as synced locally
 					await db.sessions.update(session.id!, { syncStatus: 'synced', server_id: serverId });
 				} else if (session.syncStatus === 'updated' && session.server_id) {
-					// Update on server
 					await api.put(`/sessions/${session.server_id}`, {
 						completed_at: session.completed_at,
 						notes: session.notes,
@@ -102,11 +98,10 @@ export const syncAllDataBeforeLogout = async () => {
 
 		for (const set of unsyncedSets) {
 			try {
-				// Find the server session ID
 				const parentSession = await db.sessions.get(set.session_id);
 				const serverSessionId = parentSession?.server_id || set.session_id;
 
-				if (set.syncStatus === 'created') {
+				if (!set.server_id) {
 					await api.post('/sets', {
 						session_id: serverSessionId,
 						exercise_id: set.exercise_id,

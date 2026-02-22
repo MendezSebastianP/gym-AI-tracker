@@ -89,6 +89,7 @@ class SessionCreate(SessionBase):
     routine_id: Optional[int] = None
     day_index: Optional[int] = None
     started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 class SessionUpdate(SessionBase):
     started_at: Optional[datetime] = None
