@@ -1,24 +1,44 @@
 # Caddyfile — Reverse proxy for production
-# Replace YOUR_DOMAIN with your DDNS domain (e.g. mygym.duckdns.org)
-#
 # Caddy automatically obtains and renews HTTPS certificates via Let's Encrypt.
 
-YOUR_DOMAIN.duckdns.org {
-    # Frontend (Vite dev server or built static files)
-    handle {
-        reverse_proxy frontend:5173
+gym-ai-tracker.duckdns.org {
+
+    # ── Security headers on every response ───────────────────────────────
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        # Strip the Server header to avoid fingerprinting
+        -Server
     }
 
-    # API routes
-    handle /api/* {
-        reverse_proxy api:8000
+    # ── API docs: LAN-only (10.x / 172.16.x / 192.168.x / localhost) ────
+    @docsExternal {
+        path /docs /openapi.json
+        not remote_ip 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1
     }
+    respond @docsExternal 403
 
-    # API docs
     handle /docs {
         reverse_proxy api:8000
     }
     handle /openapi.json {
         reverse_proxy api:8000
+    }
+
+    # ── Webhook listener (internal — port 9000 not exposed to internet) ──
+    handle /hooks/* {
+        reverse_proxy webhook:9000
+    }
+
+    # ── API routes ────────────────────────────────────────────────────────
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    # ── Frontend catch-all ────────────────────────────────────────────────
+    handle {
+        reverse_proxy frontend:5173
     }
 }

@@ -6,7 +6,7 @@ import os
 
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60  # 30 days for MVP
+ACCESS_TOKEN_EXPIRE_MINUTES = 24 * 60  # 1 day (SEC-04: was 30 days)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

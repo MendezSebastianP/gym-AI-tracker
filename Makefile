@@ -47,3 +47,36 @@ shell-backend: ## Open a shell inside the backend container
 
 shell-db: ## Open a psql shell inside the database container
 	docker compose exec postgres psql -U postgres -d gym_tracker
+
+# ── Production targets (mini PC) ─────────────────────────────────────────────
+PROD = docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml
+
+prod-up: ## Start all production containers in background
+	$(PROD) up -d
+
+prod-build: ## Rebuild and restart all production containers
+	$(PROD) up -d --build
+
+prod-restart: ## Restart all production containers
+	$(PROD) restart
+
+prod-down: ## Stop production containers
+	$(PROD) down
+
+prod-logs: ## Follow all production logs
+	$(PROD) logs -f
+
+prod-logs-api: ## Follow API logs only
+	$(PROD) logs -f api
+
+prod-logs-caddy: ## Follow Caddy logs only
+	$(PROD) logs -f caddy
+
+prod-seed: ## Seed exercises into the production database
+	$(PROD) exec api python -m app.seed_data
+
+prod-migrate: ## Run alembic migrations on production database
+	$(PROD) exec api alembic upgrade head
+
+prod-ps: ## Show status of production containers
+	$(PROD) ps

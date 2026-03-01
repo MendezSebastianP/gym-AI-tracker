@@ -35,15 +35,16 @@ services:
   webhook:
     image: almir/webhook:2.8.1
     restart: always
-    ports:
-      - "9000:9000"
+    # Port intentionally NOT exposed — Caddy proxies /hooks/* to webhook:9000 internally
     volumes:
       - ./deploy/hooks.json:/etc/webhook/hooks.json
       - ./deploy/redeploy.sh:/scripts/redeploy.sh
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/app
     working_dir: /app
-    command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload"]
+    command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload", "-template"]
+    environment:
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
     networks:
       - default
 

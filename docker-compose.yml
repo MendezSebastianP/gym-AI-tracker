@@ -34,8 +34,8 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/gym_tracker
-      - SECRET_KEY=${SECRET_KEY:-supersecretkey}
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - postgres
@@ -44,20 +44,19 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=gym_tracker
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-gym_tracker}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Port intentionally NOT exposed to host — DB reachable only within Docker network
 
   scheduler:
     build:
       context: ./scheduler
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/gym_tracker
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       - postgres
     restart: always

@@ -11,6 +11,9 @@ pydantic==2.6.1
 pydantic-settings==2.1.0
 email-validator==2.1.0
 requests==2.31.0
+slowapi==0.1.9
+# Dev / QA tools
 flake8==7.0.0
 pytest==8.0.0
 httpx==0.26.0
+pip-audit==2.7.3
