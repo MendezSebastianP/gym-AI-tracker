@@ -39,51 +39,115 @@ function App() {
 		}
 	}, [user]);
 
+	let isSyncingUserData = false;
+
 	useEffect(() => {
 		// Initial sync of exercises on app load if authenticated
 		const syncUserData = async () => {
-			if (!isAuthenticated) return;
-			if (!navigator.onLine) return;
+			if (!isAuthenticated || !navigator.onLine) return;
+			if (isSyncingUserData) return;
 
+			isSyncingUserData = true;
 			try {
 				// Sync Exercises
 				const resEx = await api.get('/exercises');
 				await db.exercises.bulkPut(resEx.data);
 				console.log(`Synced ${resEx.data.length} exercises`);
 
-				// Sync Routines
+				// Sync Routines (server IDs are used directly as local IDs for routines)
 				const resRoutines = await api.get('/routines');
 				await db.routines.clear();
 				await db.routines.bulkPut(resRoutines.data.map((r: any) => ({ ...r, syncStatus: 'synced' })));
 				console.log(`Synced ${resRoutines.data.length} routines`);
 
 				// Sync Sessions & Sets
+				// IMPORTANT: Sessions use ++id (auto-increment local id) in Dexie.
+				// The server id must be stored as server_id only — never as the local id.
 				const resSessions = await api.get('/sessions?limit=100');
-				const sessions = resSessions.data;
-				const allSets: any[] = [];
+				const serverSessions: any[] = resSessions.data;
 
-				const sessionsToStore = sessions.map((s: any) => {
-					if (s.sets) {
-						s.sets.forEach((set: any) => {
-							allSets.push({ ...set, session_id: s.id, syncStatus: 'synced', server_id: set.id });
-						});
-					}
-					const { sets, ...sessionData } = s;
-					return { ...sessionData, syncStatus: 'synced', server_id: s.id };
-				});
+				// Save any unsynced local sessions BEFORE clearing (they have no server_id)
+				const unsyncedSessions = await db.sessions.filter((s: any) => s.syncStatus === 'created' || s.syncStatus === 'updated').toArray();
+				const unsyncedSets = await db.sets.filter((s: any) => s.syncStatus === 'created' || s.syncStatus === 'updated').toArray();
 
 				await db.sessions.clear();
 				await db.sets.clear();
-				if (sessionsToStore.length > 0) {
-					await db.sessions.bulkPut(sessionsToStore);
+
+				// Insert server sessions one-by-one so Dexie assigns local IDs,
+				// and track the server_id -> local_id map to assign correct session_id on sets
+				const localIdByServerId = new Map<number, number>();
+				for (const s of serverSessions) {
+					const { sets: serverSets, id: serverId, ...sessionData } = s;
+					const localId = await db.sessions.add({
+						...sessionData,
+						server_id: serverId,
+						syncStatus: 'synced'
+					} as any);
+					localIdByServerId.set(serverId, localId as number);
+
+					// Insert this session's sets, using the new local session id
+					if (serverSets && serverSets.length > 0) {
+						for (const set of serverSets) {
+							const { id: setServerId, ...setData } = set;
+							await db.sets.add({
+								...setData,
+								session_id: localId as number,
+								server_id: setServerId,
+								syncStatus: 'synced'
+							} as any);
+						}
+					}
 				}
-				if (allSets.length > 0) {
-					await db.sets.bulkPut(allSets);
+
+				// Re-add unsynced local sessions/sets (remap local session ids since DB was cleared)
+				for (const s of unsyncedSessions) {
+					const oldLocalId = s.id;
+					const { id, ...sessionData } = s;
+
+					let newLocalId: number;
+
+					// If this session was already synced to the server once (it has a server_id)
+					// and we fetched it from the server just now, overwrite the clean server row
+					// with our dirty local updates, so we don't duplicate it.
+					if (sessionData.server_id && localIdByServerId.has(sessionData.server_id)) {
+						newLocalId = localIdByServerId.get(sessionData.server_id)!;
+						await db.sessions.update(newLocalId, {
+							...sessionData,
+							syncStatus: s.syncStatus
+						});
+					} else {
+						newLocalId = await db.sessions.add(sessionData as any) as number;
+					}
+
+					// Re-add sets belonging to this session with updated session_id
+					for (const set of unsyncedSets) {
+						if (set.session_id === oldLocalId) {
+							const { id: setId, ...setData } = set;
+
+							if (set.server_id) {
+								// Find the locally generated ID for this server set
+								const existingSet = await db.sets.where('server_id').equals(set.server_id).first();
+								if (existingSet && existingSet.id) {
+									await db.sets.update(existingSet.id, {
+										...setData,
+										session_id: newLocalId,
+										syncStatus: set.syncStatus
+									});
+									continue;
+								}
+							}
+
+							await db.sets.add({ ...setData, session_id: newLocalId } as any);
+						}
+					}
 				}
-				console.log(`Synced ${sessions.length} sessions and ${allSets.length} sets`);
+
+				console.log(`Synced ${serverSessions.length} sessions. Retained ${unsyncedSessions.length} unsynced sessions.`);
 
 			} catch (e) {
 				console.error("Failed to sync user data", e);
+			} finally {
+				isSyncingUserData = false;
 			}
 		};
 

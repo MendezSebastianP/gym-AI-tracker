@@ -23,14 +23,8 @@ export default function Stats() {
 			.anyOf(sessionIds)
 			.toArray();
 
-		const totalSessions = completedSessions.length;
-
-		const totalVolume = sets.reduce((sum, set) => {
-			if (set.weight_kg && set.reps) {
-				return sum + (set.weight_kg * set.reps);
-			}
-			return sum;
-		}, 0);
+		const exercises = await db.exercises.toArray();
+		const exerciseMap = new Map(exercises.map(e => [e.id, e]));
 
 		// Calculate Weekly/Daily stats
 		const now = new Date();
@@ -44,22 +38,46 @@ export default function Stats() {
 		startOfWeek.setHours(0, 0, 0, 0);
 		startOfWeek.setDate(now.getDate() - diffToMon);
 
+		let weeklyVolume = 0;
+		let totalVolume = 0;
+		let weeklyTotalSessions = 0;
+
 		completedSessions.forEach(session => {
 			const d = new Date(session.completed_at!);
 			d.setHours(0, 0, 0, 0);
 
+			const isCurrentWeek = d.getTime() >= startOfWeek.getTime();
+			const sessionSets = sets.filter(s => s.session_id === session.id);
+
+			// Compute volume for this session
+			const vol = sessionSets.reduce((sum, set) => {
+				const reps = set.reps || 0;
+				if (reps === 0) return sum;
+
+				if (set.weight_kg && set.weight_kg > 0) {
+					return sum + (set.weight_kg * reps);
+				} else {
+					const exercise = exerciseMap.get(set.exercise_id);
+					const bwVolume = (exercise as any)?.default_weight_kg || 30;
+					return sum + (bwVolume * reps);
+				}
+			}, 0);
+
+			// Always add to total volume
+			totalVolume += vol;
+
+			if (isCurrentWeek) {
+				weeklyTotalSessions++;
+				weeklyVolume += vol;
+			}
+
 			// Daily (last 7 days including today)
 			const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
 			if (diffDays >= 0 && diffDays < 7) {
-				dailyCounts[6 - diffDays]++; // 6 is today, 0 is 6 days ago
+				dailyCounts[6 - diffDays]++;
 			}
 
 			// Weekly (last 8 weeks)
-			// Calculate week index relative to current week
-			// If d >= startOfWeek, index=7 (current)
-			// If d < startOfWeek, index = 7 - distinct_weeks_ago
-
-			// Calculate start of session's week
 			const sDay = d.getDay();
 			const sDiff = sDay === 0 ? 6 : sDay - 1;
 			const sStart = new Date(d);
@@ -74,15 +92,7 @@ export default function Stats() {
 		});
 
 		// Calculate Streak (Weeks)
-		// Check current week (index 7) and iterate backwards
 		let streak = 0;
-		// Check if current week has activity
-		// Wait, user might not have worked out *this week* yet but streak is active from last week.
-		// Logic:
-		// If current week > 0, streak starts 1 + backwards.
-		// If current week == 0, check last week (index 6). If >0, streak starts 1 + backwards from 6.
-		// Else streak 0.
-
 		let checkIndex = 7;
 		if (weeklyCounts[7] === 0) {
 			if (weeklyCounts[6] > 0) {
@@ -103,7 +113,7 @@ export default function Stats() {
 		}
 
 		return {
-			sessions: totalSessions,
+			sessions: weeklyTotalSessions,
 			volume: totalVolume,
 			weekly_sessions: weeklyCounts,
 			daily_sessions: dailyCounts,
@@ -143,13 +153,13 @@ export default function Stats() {
 
 	if (hasRoutines === false) {
 		return (
-			<div className="container fade-in" style={{ justifyContent: 'center', textAlign: 'center', height: '80vh' }}>
+			<div className="container" style={{ justifyContent: 'center', textAlign: 'center', height: '80vh' }}>
 				<div style={{ marginBottom: '24px' }}>
 					<Activity size={64} color="var(--primary)" style={{ opacity: 0.8 }} />
 				</div>
 
-				<h1 className="text-2xl font-bold mb-4">{t('Welcome to Gym AI')}</h1>
-				<p className="text-secondary mb-8">
+				<h1 className="text-2xl font-bold" style={{ marginBottom: '16px' }}>{t('Welcome to Gym AI')}</h1>
+				<p className="text-secondary" style={{ marginBottom: '32px', lineHeight: '1.6' }}>
 					{t("It looks like you don't have any routines yet. Let's get you set up!")}
 				</p>
 
@@ -158,7 +168,7 @@ export default function Stats() {
 					{t("Create First Routine")}
 				</Link>
 
-				<p className="text-xs text-tertiary mt-8">
+				<p className="text-xs text-tertiary" style={{ marginTop: '32px', lineHeight: '1.5' }}>
 					{t("Tip: You can use our AI wizard to generate a routine for you.")}
 				</p>
 			</div>
@@ -172,17 +182,7 @@ export default function Stats() {
 	const maxDaily = Math.max(...dailyData, 1);
 	const streakWeeks = stats.streak_weeks;
 
-	const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-	// Adjust labels so last one is Today's day name? 
-	// Standard practice is fixed labels M-S or relative.
-	// Let's use relative labels for daily: -6, -5... or just fixed Day names ending in Today?
-	// The chart puts index 6 (today) at right.
-	// Let's rotate dayLabels so index 6 matches today.
-	const todayIndex = new Date().getDay(); // 0=Sun, 1=Mon
-	const todayMonIndex = todayIndex === 0 ? 6 : todayIndex - 1; // 0=Mon...6=Sun
-	// We want the label at index 6 to be Today's name.
-	// So we need labels for [Today-6, ..., Today].
-	const adjustedDayLabels = [];
+	const adjustedDayLabels: string[] = [];
 	const baseLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']; // Mon to Sun
 	for (let i = 6; i >= 0; i--) {
 		const d = new Date();
@@ -192,10 +192,8 @@ export default function Stats() {
 		adjustedDayLabels.push(baseLabels[day]);
 	}
 
-	const weekLabels = weeklyData.map((_: any, i: number) => `W${weeklyData.length - i}`).reverse();
-
 	return (
-		<div className="container fade-in" style={{ paddingBottom: '80px' }}>
+		<div className="container" style={{ paddingBottom: '80px' }}>
 			{/* Header with icon */}
 			<div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
 				<Dumbbell size={28} color="var(--primary)" />
@@ -208,15 +206,22 @@ export default function Stats() {
 					<div className="text-3xl font-bold text-primary mb-1">
 						{stats.sessions}
 					</div>
-					<div className="text-secondary text-sm">{t('Sessions')}</div>
+					<div className="text-secondary text-sm">{t('Sessions')} <span style={{ fontSize: '10px' }}>({t('This Week')})</span></div>
 				</div>
 
 				<div className="card text-center p-4" style={{ marginBottom: 0 }}>
 					<div className="text-3xl font-bold text-accent mb-1">
-						{stats.volume >= 1000 ? `${(stats.volume / 1000).toFixed(1)}k` : stats.volume}
-						<span className="text-sm font-normal text-tertiary" style={{ marginLeft: '4px' }}>kg</span>
+						{(() => {
+							const v = stats.volume;
+							if (v >= 1000000) return `${(v / 1000000).toFixed(1)}`;
+							if (v >= 1000) return `${(v / 1000).toFixed(1)}`;
+							return Math.round(v);
+						})()}
+						<span className="text-sm font-normal text-tertiary" style={{ marginLeft: '4px' }}>
+							{stats.volume >= 1000000 ? 'kt' : stats.volume >= 1000 ? 't' : 'kg'}
+						</span>
 					</div>
-					<div className="text-secondary text-sm">{t('Volume')}</div>
+					<div className="text-secondary text-sm">{t('Volume')} <span style={{ fontSize: '10px' }}>({t('Total')})</span></div>
 				</div>
 			</div>
 

@@ -52,139 +52,38 @@ def get_weekly_stats(
     # Find start of current week (Monday)
     start_of_week = today - timedelta(days=today.weekday())
     
-    for d in dates:
-        d_date = d.date()
-        # Calculate diff in weeks
-        delta_days = (start_of_week - d_date).days
-        # If negative, it means it's in the future (timezone issues?) or later today, treat as current week
-        if delta_days < 0:
-            week_idx = 0
-        else:
-            week_idx = (delta_days // 7) 
-            if d_date > start_of_week: # Should not happen if logic is correct, but just in case
-                 week_idx = 0
-            
-            # Correction: 
-            # If today is Wednesday, start_of_week is Monday.
-            # If d_date is Sunday (yesterday), delta is 1 (Monday - Sunday = 1). 1 // 7 = 0.
-            # But Sunday belongs to previous week? ISO week starts Monday.
-            # Yes, standard python weekday: Mon=0, Sun=6.
-            # If I use Monday as start, then anything from Mon->Sun falls in same bucket.
-            # My simple logic: (Start_of_Current_Week - Date) / 7.
-            # If Date is in current week [Mon...Sun], delta is <= 0 (if future) or >= 0.
-            # Wait. 
-            # Case 1: Today Mon. Start=Mon. Date=Mon. Delta=0. Week=0. Correct.
-            # Case 2: Today Mon. Start=Mon. Date=Sun (yesterday). Delta=1. Week=0? No, should be 1.
-            # 1 // 7 is 0. 
-            # So simple division is not enough. I need strictly previous weeks.
-            # Correct logic:
-            # Week start (Mon) of current week is `start_of_week`.
-            # If date < start_of_week, it is previous week.
-            # difference in days / 7, but we need to handle the offset.
-            # Let's use isocalendar.
-            pass
-
-    # Re-impl using ISO calendar
-    current_year, current_week, _ = today.isocalendar()
-    
-    weekly_map = {} # (year, week) -> count
-    
-    for d in dates:
-        y, w, _ = d.date().isocalendar()
-        if (y, w) not in weekly_map:
-            weekly_map[(y, w)] = 0
-        weekly_map[(y, w)] += 1
-        
-    # Fill array [Week-7, ..., Week-0]
-    # We want strictly last 8 weeks ending with current week.
     weekly_counts = []
-    # Iterate backwards 7 times
-    # Note: isocalendar week logic is tricky around new year (e.g. week 53 -> 1).
-    # Using datetime subtraction is safer.
-    
-    for i in range(8):
-        # Target week start
+    # Fill array [Week-7, ..., Week-0] (left to right = oldest to newest)
+    for i in range(7, -1, -1):
         target_start = start_of_week - timedelta(weeks=i)
-        # Target week end (Sunday)
         target_end = target_start + timedelta(days=6)
         
-        count = 0
-        for d in dates:
-            d_date = d.date()
-            if target_start <= d_date <= target_end:
-                count += 1
+        count = sum(1 for d in dates if target_start <= d.date() <= target_end)
         weekly_counts.append(count)
-    
-    weekly_counts.reverse() # [Week-7, ..., Current]
 
     # 5. Daily Stats (Last 7 days)
     daily_counts = [0] * 7
     for i in range(7):
-        target_day = today - timedelta(days=i)
-        count = 0
-        for d in dates:
-             if d.date() == target_day:
-                 count += 1
-        daily_counts[6-i] = count # 0 is today (last index), 6 is 7 days ago (index 0)
+        target_day = today - timedelta(days=6 - i)  # Index 6 is today, 0 is 6 days ago
+        daily_counts[i] = sum(1 for d in dates if d.date() == target_day)
 
     # 6. Active Streak (Weeks)
-    # Consecutive weeks with at least 1 session, starting from current or previous week.
     streak_weeks = 0
-    # Provide a generous lookback for streak (52 weeks)
-    # Check if current week has session
-    has_current = False
-    target_start = start_of_week
-    target_end = target_start + timedelta(days=6)
-    for d in dates:
-        if target_start <= d.date() <= target_end:
-            has_current = True
-            break
-            
-    if has_current:
-        streak_weeks += 1
-        # Check previous weeks
-        i = 1
-        while True:
-            target_start = start_of_week - timedelta(weeks=i)
-            target_end = target_start + timedelta(days=6)
-            found = False
-            for d in dates:
-                if target_start <= d.date() <= target_end:
-                    found = True
-                    break
-            if found:
-                streak_weeks += 1
-                i += 1
-            else:
-                break
-    else:
-        # If current week has no session, check if last week had one (streak active but not extended yet)
-        # If last week had session, streak = 1 + ...
-        # If last week had no session, streak = 0.
-        target_start = start_of_week - timedelta(weeks=1)
+    
+    # Start checking backwards from the current week
+    for i in range(52):  # Max lookback is 52 weeks
+        target_start = start_of_week - timedelta(weeks=i)
         target_end = target_start + timedelta(days=6)
-        has_last = False
-        for d in dates:
-            if target_start <= d.date() <= target_end:
-                has_last = True
-                break
         
-        if has_last:
+        has_session = any(target_start <= d.date() <= target_end for d in dates)
+        
+        if has_session:
             streak_weeks += 1
-            i = 2
-            while True:
-                target_start = start_of_week - timedelta(weeks=i)
-                target_end = target_start + timedelta(days=6)
-                found = False
-                for d in dates:
-                    if target_start <= d.date() <= target_end:
-                        found = True
-                        break
-                if found:
-                    streak_weeks += 1
-                    i += 1
-                else:
-                    break
+        else:
+            # If current week has no session, it's allowed (streak from last week hasn't died yet)
+            if i == 0:
+                continue
+            break
 
     return {
         "sessions": total_sessions,

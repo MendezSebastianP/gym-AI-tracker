@@ -11,25 +11,26 @@ router = APIRouter(
     tags=["sets"]
 )
 
-@router.post("/", response_model=SetResponse)
+@router.post("", response_model=SetResponse)
 def create_set(
     set_data: SetCreate,
-    session_id: int, # passed as query param or we assume it's in body? Schema has session_id? No, SetCreate doesn't have session_id.
-    # Wait, if I use /api/sets/ endpoint, I need session_id in body unless I use /api/sessions/{id}/sets.
-    # I'll update schema to include session_id in Create? No, SetCreate: exercise_id
-    # Let's require session_id in query or path.
-    # Actually, often it's nested: POST /sessions/{id}/sets
-    # But here I'm making a flat resource /api/sets for simplicity with sync.
-    # Let's accept session_id as query param for now.
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # session_id is now part of SetCreate body
+    session_id = set_data.session_id
+
     # Verify session ownership
-    db_session = db.query(SessionModel).filter(SessionModel.id == session_id, SessionModel.user_id == current_user.id).first()
+    db_session = db.query(SessionModel).filter(
+        SessionModel.id == session_id,
+        SessionModel.user_id == current_user.id
+    ).first()
     if not db_session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    db_set = SetModel(**set_data.model_dump(), session_id=session_id)
+    set_dict = set_data.model_dump()
+    set_dict.pop("session_id")  # already used above; SetModel gets it explicitly
+    db_set = SetModel(**set_dict, session_id=session_id)
     db.add(db_set)
     db.commit()
     db.refresh(db_set)

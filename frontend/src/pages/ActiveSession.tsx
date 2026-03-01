@@ -1,12 +1,97 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
-import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Minus, Plus } from 'lucide-react';
 import WorkoutTimer from '../components/WorkoutTimer';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
 
+// ─── Inline Number Stepper (mobile-friendly) ────────────────────────
+// Replaces raw <input type="number"> with tap-to-increment/decrement buttons + editable center
+function NumberStepper({
+	value,
+	onChange,
+	step = 1,
+	min = 0,
+	inputId,
+	onNext,
+	selectOnFocus = true,
+}: {
+	value: number;
+	onChange: (v: number) => void;
+	step?: number;
+	min?: number;
+	inputId?: string;
+	onNext?: () => void;
+	selectOnFocus?: boolean;
+}) {
+	const inputRef = useRef<HTMLInputElement>(null);
+	const holdTimer = useRef<ReturnType<typeof setInterval>>();
+
+	const inc = () => onChange(Math.round((value + step) * 100) / 100);
+	const dec = () => onChange(Math.max(min, Math.round((value - step) * 100) / 100));
+
+	const startHold = (fn: () => void) => {
+		fn();
+		holdTimer.current = setInterval(fn, 120);
+	};
+	const stopHold = () => { if (holdTimer.current) clearInterval(holdTimer.current); };
+
+	return (
+		<div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '2px', minWidth: 0 }}>
+			<button
+				className="btn btn-ghost"
+				onPointerDown={() => startHold(dec)}
+				onPointerUp={stopHold}
+				onPointerLeave={stopHold}
+				style={{ padding: '6px', lineHeight: 1, touchAction: 'manipulation', borderRadius: '6px', color: 'var(--text-secondary)' }}
+				type="button"
+			>
+				<Minus size={16} />
+			</button>
+			<input
+				ref={inputRef}
+				id={inputId}
+				type="number"
+				inputMode="decimal"
+				value={value}
+				onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+				onFocus={(e) => { if (selectOnFocus) e.target.select(); }}
+				onKeyDown={(e) => {
+					if (e.key === 'Enter' || e.key === 'Tab') {
+						e.preventDefault();
+						onNext?.();
+					}
+				}}
+				className="input"
+				style={{
+					flex: 1,
+					minWidth: 0,
+					textAlign: 'center',
+					padding: '8px 2px',
+					fontSize: '16px',
+					fontWeight: 'bold',
+					WebkitAppearance: 'none',
+					MozAppearance: 'textfield',
+				} as any}
+				step={step}
+			/>
+			<button
+				className="btn btn-ghost"
+				onPointerDown={() => startHold(inc)}
+				onPointerUp={stopHold}
+				onPointerLeave={stopHold}
+				style={{ padding: '6px', lineHeight: 1, touchAction: 'manipulation', borderRadius: '6px', color: 'var(--text-secondary)' }}
+				type="button"
+			>
+				<Plus size={16} />
+			</button>
+		</div>
+	);
+}
+
+// ─── Main Component ──────────────────────────────────────────────────
 export default function ActiveSession() {
 	const { id } = useParams();
 	const navigate = useNavigate();
@@ -15,6 +100,7 @@ export default function ActiveSession() {
 	const editMode = searchParams.get('edit') === 'true';
 	const { user } = useAuthStore();
 	const { t, i18n } = useTranslation();
+	const [showHelp, setShowHelp] = useState(false);
 
 	const session = useLiveQuery(() => db.sessions.get(sessionId), [sessionId]);
 	const routine = useLiveQuery(
@@ -31,29 +117,59 @@ export default function ActiveSession() {
 	const [startTime, setStartTime] = useState<number | null>(null);
 	const [collapsedExercises, setCollapsedExercises] = useState<number[]>([]);
 	const [timerMode, setTimerMode] = useState<'stopwatch' | 'timer'>('stopwatch');
+	const prefillDone = useRef(false);
 
-	// Pre-fill sets from previous session or routine defaults
+	// ─── Auto-advance helper ──────────────────────────────────────
+	// Each input gets an id like "set-{setId}-weight" or "set-{setId}-reps"
+	// After editing weight → focus reps of same set
+	// After editing reps → focus weight of next set (or next exercise first set)
+	const focusNext = useCallback((currentSetId: number, currentField: 'weight' | 'reps') => {
+		if (!sets) return;
+		if (currentField === 'weight') {
+			// Go to reps of same set
+			const el = document.getElementById(`set-${currentSetId}-reps`);
+			if (el) { (el as HTMLInputElement).focus(); (el as HTMLInputElement).select(); }
+		} else {
+			// currentField === 'reps' → go to weight of next set
+			const sortedSets = [...sets].sort((a, b) => {
+				const exA = exercises.findIndex((e: any) => e.exercise_id === a.exercise_id);
+				const exB = exercises.findIndex((e: any) => e.exercise_id === b.exercise_id);
+				if (exA !== exB) return exA - exB;
+				return a.set_number - b.set_number;
+			});
+			const idx = sortedSets.findIndex(s => s.id === currentSetId);
+			if (idx >= 0 && idx < sortedSets.length - 1) {
+				const nextSet = sortedSets[idx + 1];
+				const el = document.getElementById(`set-${nextSet.id}-weight`);
+				if (el) { (el as HTMLInputElement).focus(); (el as HTMLInputElement).select(); }
+			}
+		}
+	}, [sets, exercises]);
+
+	// ─── Pre-fill sets from previous session or routine defaults ──
 	useEffect(() => {
 		const prefillSets = async () => {
 			if (!routine || !session || !sets || sets.length > 0 || session.day_index === undefined) return;
+			if (prefillDone.current) return;
+			prefillDone.current = true;
 
 			const day = routine.days[session.day_index];
 			if (!day || !day.exercises || day.exercises.length === 0) return;
 
-			// Fetch exercise details for default weights
 			const exerciseIds = day.exercises.map((e: any) => e.exercise_id);
 			const exerciseDetails = await db.exercises.bulkGet(exerciseIds);
 			const detailsMap = new Map();
 			exerciseDetails.forEach((ed: any) => { if (ed) detailsMap.set(ed.id, ed); });
 
+			// Find previous sessions for this routine to pre-fill from
+			let previousSets: any[] = [];
 			const previousSessions = await db.sessions
 				.where('routine_id')
 				.equals(routine.id)
-				.and((s: any) => s.completed_at !== undefined && s.id !== sessionId && s.day_index === session.day_index)
+				.filter(s => !!s.completed_at && s.id !== sessionId)
 				.reverse()
-				.sortBy('completed_at');
+				.sortBy('started_at');
 
-			let previousSets: any[] = [];
 			if (previousSessions && previousSessions.length > 0) {
 				const lastSession = previousSessions[0];
 				previousSets = await db.sets
@@ -68,7 +184,6 @@ export default function ActiveSession() {
 				const isLocked = ex.locked === true;
 				const prevExSets = previousSets.filter((s: any) => s.exercise_id === ex.exercise_id);
 				const detail = detailsMap.get(ex.exercise_id);
-				// Use the stored default weight if available
 				const defaultWeightDb = (detail as any)?.default_weight_kg || 0;
 
 				if (isLocked) {
@@ -118,11 +233,8 @@ export default function ActiveSession() {
 				}
 			}
 
-			try {
+			if (newSets.length > 0) {
 				await db.sets.bulkAdd(newSets);
-				console.log(`Pre-filled ${newSets.length} sets`);
-			} catch (e) {
-				console.error('Error pre-filling sets:', e);
 			}
 		};
 
@@ -150,12 +262,11 @@ export default function ActiveSession() {
 
 					const enriched = day.exercises.map((e: any, i: number) => {
 						const detail = exerciseDetails[i];
-						// Resolve translated name
 						const translatedName = (detail as any)?.name_translations?.[currentLang] || detail?.name || e.name || 'Unknown';
 
 						return {
 							...e,
-							name: translatedName, // Use translated name for display
+							name: translatedName,
 							is_bodyweight: detail?.is_bodyweight || false,
 						};
 					});
@@ -169,18 +280,10 @@ export default function ActiveSession() {
 	const finishSession = async () => {
 		if (!session) return;
 		const end = new Date().toISOString();
-		const duration = Math.floor((Date.now() - new Date(session.started_at).getTime()) / 1000);
-
+		const newSyncStatus = session.server_id ? 'updated' : 'created';
 		await db.sessions.update(sessionId, {
 			completed_at: end,
-			syncStatus: 'created'
-		});
-
-		await db.syncQueue.add({
-			event_type: 'complete_session',
-			payload: { id: sessionId, completed_at: end, duration_sec: duration },
-			client_timestamp: end,
-			processed: false
+			syncStatus: newSyncStatus
 		});
 		navigate('/sessions');
 	};
@@ -201,7 +304,7 @@ export default function ActiveSession() {
 			exercise_id: exerciseId,
 			set_number: nextSetNumber,
 			weight_kg: 0,
-			reps: 0,
+			reps: 10,
 			completed_at: new Date().toISOString(),
 			syncStatus: 'created'
 		});
@@ -266,14 +369,13 @@ export default function ActiveSession() {
 							onChange={async (e) => {
 								if (!e.target.value) return;
 								const newDate = new Date(e.target.value);
-								// Adjust back to ISO string (browser handles local time to ISO conversion via new Date())
 
 								const oldStart = new Date(session.started_at);
-								const oldEnd = new Date(session.completed_at!);
-								const duration = oldEnd.getTime() - oldStart.getTime();
+								const oldEnd = session.completed_at ? new Date(session.completed_at) : null;
+								const duration = oldEnd ? oldEnd.getTime() - oldStart.getTime() : 0;
 
 								const newStartIso = newDate.toISOString();
-								const newEndIso = new Date(newDate.getTime() + duration).toISOString();
+								const newEndIso = oldEnd ? new Date(newDate.getTime() + duration).toISOString() : null;
 
 								await db.sessions.update(sessionId, {
 									started_at: newStartIso,
@@ -295,7 +397,7 @@ export default function ActiveSession() {
 					</button>
 					<div>
 						<h2 style={{ fontSize: '16px', margin: 0, fontWeight: 'bold' }}>
-							{routine?.name}
+							{routine?.name || t('Session')}
 						</h2>
 						{!isCompleted && startTime && (
 							<div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -317,12 +419,42 @@ export default function ActiveSession() {
 					</div>
 				</div>
 
-				{isEditable && !isCompleted && (
-					<button className="btn btn-primary" onClick={finishSession} style={{ padding: '8px 16px', fontSize: '14px' }}>
-						{t('Finish')}
+				<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+					{/* Help tooltip button */}
+					<button className="btn btn-ghost" onClick={() => setShowHelp(!showHelp)} style={{ padding: '6px' }}>
+						<HelpCircle size={18} color="var(--text-tertiary)" />
 					</button>
-				)}
+					{isEditable && !isCompleted && (
+						<button className="btn btn-primary" onClick={finishSession} style={{ padding: '8px 16px', fontSize: '14px' }}>
+							{t('Finish')}
+						</button>
+					)}
+				</div>
 			</div>
+
+			{/* Help tooltip */}
+			{showHelp && (
+				<div style={{
+					background: 'var(--bg-tertiary)',
+					padding: '12px 16px',
+					borderRadius: '8px',
+					fontSize: '13px',
+					color: 'var(--text-secondary)',
+					border: '1px solid rgba(99, 102, 241, 0.3)',
+					marginBottom: '16px',
+					lineHeight: '1.5',
+					position: 'relative'
+				}}>
+					<button onClick={() => setShowHelp(false)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+						<X size={14} />
+					</button>
+					<strong style={{ color: 'var(--text-primary)' }}>{t('How sessions work')}</strong><br />
+					{t('Each row is a set. Use the − / + buttons or tap the number to edit weight and reps.')}<br />
+					{t('After editing one field, press Enter to jump to the next.')}<br />
+					{t('Tap "Collapse" to hide completed exercises. Tap "Finish" when done.')}<br />
+					{t('"Add Set" adds an extra set to any exercise.')}
+				</div>
+			)}
 
 			<div style={{ display: 'grid', gap: '24px' }}>
 				{exercises.map((ex: any, i: number) => {
@@ -344,7 +476,7 @@ export default function ActiveSession() {
 							>
 								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
 									<h3 style={{ margin: 0 }}>{ex.name}</h3>
-									{ex.is_bodyweight && <span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-secondary)' }}>Bodyweight</span>}
+									{ex.is_bodyweight && <span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-secondary)' }}>{t('Bodyweight')}</span>}
 									{isExerciseLocked && (
 										<span style={{
 											fontSize: '10px',
@@ -356,7 +488,7 @@ export default function ActiveSession() {
 											alignItems: 'center',
 											gap: '2px'
 										}}>
-											<Lock size={10} /> Locked
+											<Lock size={10} /> {t('Locked')}
 										</span>
 									)}
 								</div>
@@ -376,47 +508,46 @@ export default function ActiveSession() {
 
 							{!isCollapsed && (
 								<>
-									<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-tertiary)', padding: '0 8px' }}>
-										<span style={{ width: '40px' }}>SET</span>
-										<span style={{ width: '80px', textAlign: 'center' }}>{ex.is_bodyweight ? '+KG' : 'KG'}</span>
-										<span style={{ width: '80px', textAlign: 'center' }}>REPS</span>
-										<span style={{ width: '50px' }}></span>
+									<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-tertiary)', padding: '0 8px', gap: '8px' }}>
+										<span style={{ width: '30px' }}>{t('SET')}</span>
+										<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{ex.is_bodyweight ? '+KG' : 'KG'}</span>
+										<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{t('REPS')}</span>
+										<span style={{ width: '40px' }}></span>
 									</div>
 
 									{exerciseSets.map((s: any) => (
-										<div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: '4px' }}>
-											<span style={{ width: '40px', fontWeight: 'bold', fontSize: '14px' }}>{s.set_number}</span>
+										<div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: '4px', gap: '4px' }}>
+											<span style={{ width: '30px', fontWeight: 'bold', fontSize: '14px' }}>{s.set_number}</span>
 
 											{isEditable ? (
 												<>
-													<input
-														type="number"
+													<NumberStepper
 														value={s.weight_kg || 0}
-														onChange={(e: any) => updateSet(s.id!, 'weight_kg', parseFloat(e.target.value) || 0)}
-														className="input"
-														style={{ width: '80px', textAlign: 'center', padding: '6px', fontSize: '14px' }}
-														step="0.5"
+														onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
+														step={ex.is_bodyweight ? 1 : 2.5}
+														inputId={`set-${s.id}-weight`}
+														onNext={() => focusNext(s.id!, 'weight')}
 													/>
-													<input
-														type="number"
+													<NumberStepper
 														value={s.reps || 0}
-														onChange={(e: any) => updateSet(s.id!, 'reps', parseInt(e.target.value) || 0)}
-														className="input"
-														style={{ width: '80px', textAlign: 'center', padding: '6px', fontSize: '14px' }}
+														onChange={(v) => updateSet(s.id!, 'reps', v)}
+														step={1}
+														inputId={`set-${s.id}-reps`}
+														onNext={() => focusNext(s.id!, 'reps')}
 													/>
 													<button
 														className="btn btn-ghost p-1"
 														onClick={() => deleteSet(s.id!)}
-														style={{ width: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+														style={{ width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
 													>
 														<Trash2 size={16} style={{ color: 'var(--error)' }} />
 													</button>
 												</>
 											) : (
 												<>
-													<span style={{ width: '80px', textAlign: 'center' }}>{s.weight_kg}</span>
-													<span style={{ width: '80px', textAlign: 'center' }}>{s.reps}</span>
-													<span style={{ width: '50px', display: 'flex', justifyContent: 'center' }}>
+													<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.weight_kg}</span>
+													<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.reps}</span>
+													<span style={{ width: '40px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
 														<CheckCircle size={16} color="var(--success)" />
 													</span>
 												</>

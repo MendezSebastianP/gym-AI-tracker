@@ -42,6 +42,7 @@ class ExerciseBase(BaseModel):
     name: str
     description: Optional[str] = None
     muscle: Optional[str] = None
+    secondary_muscle: Optional[str] = None
     muscle_group: Optional[str] = None
     equipment: Optional[str] = None
     type: Optional[str] = None
@@ -68,6 +69,7 @@ class SetBase(BaseModel):
     completed_at: Optional[datetime] = None
 
 class SetCreate(SetBase):
+    session_id: int
     exercise_id: int
 
 class SetUpdate(SetBase):
@@ -84,6 +86,7 @@ class SetResponse(SetBase):
 # Session
 class SessionBase(BaseModel):
     notes: Optional[str] = None
+    locked_exercises: Optional[List[int]] = []
 
 class SessionCreate(SessionBase):
     routine_id: Optional[int] = None
@@ -131,10 +134,13 @@ class RoutineUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     days: Optional[List[Dict[str, Any]]] = None
+    is_favorite: Optional[bool] = None
+    archived_at: Optional[datetime] = None
 
 class RoutineResponse(RoutineBase):
     id: int
     user_id: int
+    archived_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 # Sync

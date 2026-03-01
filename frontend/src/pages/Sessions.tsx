@@ -1,14 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, Calendar, Clock, ChevronRight, History } from 'lucide-react';
+import { Play, Calendar, Clock, History, HelpCircle, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { api } from '../api/client';
-import { useEffect } from 'react';
+import { useState } from 'react';
+
 
 export default function Sessions() {
 	const { t } = useTranslation();
 	const navigate = useNavigate();
+	const [showHelp, setShowHelp] = useState(false);
 
 	// Load routines to find favorite
 	const routines = useLiveQuery(() => db.routines.toArray());
@@ -17,30 +18,14 @@ export default function Sessions() {
 	// We need all sessions to determine next up, but limit history display
 	const sessions = useLiveQuery(() => db.sessions.orderBy('started_at').reverse().toArray());
 
-	// Sync sessions on load
-	useEffect(() => {
-		if (navigator.onLine) {
-			api.get('/sessions?limit=20').then(res => {
-				// Don't overwrite if we have unsynced local changes, but here we just append/update
-				// Ideally we use a real sync, but for now fetching recent history is fine.
-				// We filter out any that we might have locally with same ID to avoid overwrite if newer?
-				// Dexie put will overwrite.
-				// For now, just ensure we have data.
-				if (res.data && res.data.length > 0) {
-					// Only put if not exists or if server version is newer? 
-					// Simplified: assume server is truth for history.
-					// But we might have local incomplete sessions.
-					const serverSessions = res.data.map((s: any) => ({ ...s, syncStatus: 'synced' }));
-					db.sessions.bulkPut(serverSessions);
-				}
-			}).catch(console.error);
-		}
-	}, []);
 
-	if (!routines || !sessions) return <div className="container fade-in">{t('Loading...')}</div>;
 
-	// Determine Active Routine (Favorite or First)
-	const activeRoutine = routines.find(r => r.is_favorite) || routines[0];
+
+	if (!routines || !sessions) return <div className="container">{t('Loading...')}</div>;
+
+	// Determine Active Routine (Favorite or First — skip archived)
+	const nonArchivedRoutines = routines.filter(r => !r.archived_at);
+	const activeRoutine = nonArchivedRoutines.find(r => r.is_favorite) || nonArchivedRoutines[0];
 
 	// Determine "Up Next"
 	let nextSessionCard = null;
@@ -51,6 +36,37 @@ export default function Sessions() {
 		if (activeSession) {
 			// Resume
 			const dayName = activeRoutine.days[activeSession.day_index || 0]?.day_name || `Day ${(activeSession.day_index || 0) + 1}`;
+
+			const discardAndStartNew = async () => {
+				if (!confirm(t("Are you sure you want to discard your in-progress session and start a new one?"))) return;
+
+				// Delete previous incomplete session and its sets
+				await db.sets.where('session_id').equals(activeSession.id!).delete();
+				await db.sessions.delete(activeSession.id!);
+
+				// Calculate next day for new session
+				const completedSessions = sessions.filter(s => s.completed_at && s.routine_id === activeRoutine.id);
+				const lastSession = completedSessions[0];
+				let nextDayIndex = 0;
+				if (activeRoutine.days && activeRoutine.days.length > 0) {
+					if (lastSession && typeof lastSession.day_index === 'number') {
+						nextDayIndex = (lastSession.day_index + 1) % activeRoutine.days.length;
+					}
+				}
+
+				if (!activeRoutine.days || activeRoutine.days.length === 0) return;
+
+				const id = await db.sessions.add({
+					user_id: activeRoutine.user_id,
+					routine_id: activeRoutine.id,
+					day_index: nextDayIndex,
+					started_at: new Date().toISOString(),
+					syncStatus: 'created',
+					locked_exercises: []
+				});
+				navigate(`/sessions/${id}`);
+			};
+
 			nextSessionCard = (
 				<div className="card" style={{ borderLeft: '4px solid var(--accent)', background: 'linear-gradient(to right, rgba(0,255,255,0.05), transparent)' }}>
 					<h2 className="text-lg font-bold mb-2 flex items-center gap-2">
@@ -64,12 +80,20 @@ export default function Sessions() {
 							Started {new Date(activeSession.started_at).toLocaleString()}
 						</div>
 					</div>
-					<button
-						onClick={() => navigate(`/sessions/${activeSession.id}`)}
-						className="btn btn-primary w-full"
-					>
-						{t('Resume Session')}
-					</button>
+					<div className="flex gap-2">
+						<button
+							onClick={() => navigate(`/sessions/${activeSession.id}`)}
+							className="btn btn-primary flex-1"
+						>
+							{t('Resume Session')}
+						</button>
+						<button
+							onClick={discardAndStartNew}
+							className="btn btn-secondary flex-1"
+						>
+							{t('Start New')}
+						</button>
+					</div>
 				</div>
 			);
 		} else {
@@ -149,8 +173,36 @@ export default function Sessions() {
 	const historySessions = sessions.filter(s => !!s.completed_at);
 
 	return (
-		<div className="container fade-in" style={{ paddingBottom: '80px' }}>
-			<h1 className="text-2xl font-bold mb-6">{t('Sessions')}</h1>
+		<div className="container" style={{ paddingBottom: '80px' }}>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+				<h1 className="text-2xl font-bold">{t('Sessions')}</h1>
+				<button className="btn btn-ghost" onClick={() => setShowHelp(!showHelp)} style={{ padding: '4px' }}>
+					<HelpCircle size={18} color="var(--text-tertiary)" />
+				</button>
+			</div>
+
+			{showHelp && (
+				<div style={{
+					background: 'var(--bg-tertiary)',
+					padding: '12px 16px',
+					borderRadius: '8px',
+					fontSize: '13px',
+					color: 'var(--text-secondary)',
+					border: '1px solid rgba(99, 102, 241, 0.3)',
+					marginBottom: '16px',
+					lineHeight: '1.6',
+					position: 'relative'
+				}}>
+					<button onClick={() => setShowHelp(false)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+						<X size={14} />
+					</button>
+					<strong style={{ color: 'var(--text-primary)' }}>{t('How sessions work')}</strong><br />
+					{t('A session is one workout. Your active routine determines what\'s "Up Next".')}<br />
+					{t('Sessions cycle through each day of your routine automatically.')}<br />
+					{t('If you have an unfinished session, you can resume or discard it.')}<br />
+					{t('Completed sessions appear in the History below.')}
+				</div>
+			)}
 
 			<h3 className="section-title text-sm font-semibold text-secondary uppercase tracking-wider mb-3 px-1">{t('Current')}</h3>
 			{nextSessionCard}
@@ -168,7 +220,7 @@ export default function Sessions() {
 				<div className="grid gap-3">
 					{historySessions.map(session => {
 						const routine = routines.find(r => r.id === session.routine_id);
-						const dayName = routine?.days[session.day_index || 0]?.day_name || 'Unknown Day';
+						const dayName = routine?.days[session.day_index || 0]?.day_name || t('Unknown Day');
 						const date = new Date(session.completed_at!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 						const duration = session.started_at && session.completed_at
 							? Math.round((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 60000)
@@ -183,7 +235,7 @@ export default function Sessions() {
 							>
 								<div>
 									<div className="font-semibold text-white mb-1">
-										{routine?.name || 'Unknown Routine'}
+										{routine?.name || t('Unknown Routine')}
 									</div>
 									<div className="text-sm text-secondary">
 										{dayName}

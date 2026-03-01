@@ -24,6 +24,13 @@ restart: ## Restart all containers
 logs: ## Follow logs of all containers
 	docker compose logs -f
 
+ready: ## Wait until the API is ready to serve requests (run after 'make up')
+	@echo "Waiting for API to be ready..."
+	@until curl -sf http://localhost:8000/docs > /dev/null 2>&1; do sleep 1; printf "."; done
+	@echo ""
+	@echo "✅ API is ready at http://localhost:8000"
+	@echo "✅ Frontend is ready at http://localhost:5173"
+
 clean: ## Stop containers and remove volumes (WARNING: Deletes database data!)
 	docker compose down -v
 

@@ -142,7 +142,7 @@ export default function Onboarding() {
 					</div>
 
 					<div className="flex gap-4 mt-8">
-						<button className="btn btn-ghost flex-1" onClick={() => setStep(1)}>{t('Back')}</button>
+						<button className="btn btn-ghost flex-1" onClick={() => setStep(1)}>{t('Go Back')}</button>
 						<button
 							className="btn btn-primary flex-1"
 							onClick={handleSubmit}

@@ -119,7 +119,7 @@ export default function Settings() {
 	const priorityOptions = ['strength', 'hypertrophy', 'endurance', 'flexibility'];
 
 	return (
-		<div className="container fade-in" style={{ paddingBottom: '100px', maxWidth: '600px' }}>
+		<div className="container" style={{ paddingBottom: '100px', maxWidth: '600px' }}>
 			<div className="flex items-center justify-between mb-4">
 				<h1 className="text-2xl font-bold" style={{ fontSize: '24px' }}>{t('Settings')}</h1>
 			</div>
@@ -341,9 +341,9 @@ export default function Settings() {
 				</div>
 			</div>
 
+			{/* System Section Hidden Temporarily 
 			<h3 className="text-sm font-bold text-secondary mb-4 mt-8" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>{t('System')}</h3>
 
-			{/* Database Sync */}
 			<div className="card mb-4 p-4">
 				<div className="flex items-center gap-2 font-bold mb-2">
 					<Database size={18} className="text-secondary" />
@@ -361,6 +361,7 @@ export default function Settings() {
 					{syncing ? 'Syncing...' : t('Resync Exercises')}
 				</button>
 			</div>
+			*/}
 
 			{/* Logout */}
 			<button

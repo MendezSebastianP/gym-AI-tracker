@@ -11,7 +11,7 @@ router = APIRouter(
     tags=["sync"]
 )
 
-@router.post("/")
+@router.post("")
 def sync_events(
     events: list[SyncEventCreate],
     db: Session = Depends(get_db),

@@ -1,0 +1,24 @@
+# Caddyfile — Reverse proxy for production
+# Replace YOUR_DOMAIN with your DDNS domain (e.g. mygym.duckdns.org)
+#
+# Caddy automatically obtains and renews HTTPS certificates via Let's Encrypt.
+
+YOUR_DOMAIN.duckdns.org {
+    # Frontend (Vite dev server or built static files)
+    handle {
+        reverse_proxy frontend:5173
+    }
+
+    # API routes
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    # API docs
+    handle /docs {
+        reverse_proxy api:8000
+    }
+    handle /openapi.json {
+        reverse_proxy api:8000
+    }
+}

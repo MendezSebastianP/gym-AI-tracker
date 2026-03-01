@@ -7,6 +7,10 @@ const Layout = () => {
 	const { t } = useTranslation();
 	const location = useLocation();
 
+	React.useEffect(() => {
+		window.scrollTo(0, 0);
+	}, [location.pathname]);
+
 	const isActive = (path: string) => location.pathname === path;
 
 	return (

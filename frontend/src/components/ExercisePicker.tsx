@@ -43,22 +43,47 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 	// Extract unique filter options
 	const options = useMemo(() => {
 		if (!exercises) return { muscles: [], groups: [], equipment: [] };
-		const muscles = Array.from(new Set(exercises.map(e => e.muscle).filter(Boolean))).sort();
-		const groups = Array.from(new Set(exercises.map(e => e.muscle_group).filter(Boolean))).sort();
-		const equipment = Array.from(new Set(exercises.map(e => e.equipment).filter(Boolean))).sort();
+
+		const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+
+		const defaultMuscles = ["Abdominals", "Biceps", "Calves", "Chest", "Forearms", "Glutes", "Hamstrings", "Lats", "Lower Back", "Neck", "Quadriceps", "Shoulders", "Traps", "Triceps"];
+		const dbMuscles = exercises.map(e => e.muscle ? capitalize(e.muscle) : null).filter(Boolean);
+		const muscles = Array.from(new Set([...defaultMuscles, ...dbMuscles])).sort();
+
+		const defaultGroups = ["Core", "Arms", "Legs", "Chest", "Back", "Shoulders", "Full Body", "Cardio"];
+		const dbGroups = exercises.map(e => e.muscle_group ? capitalize(e.muscle_group) : null).filter(Boolean);
+		const groups = Array.from(new Set([...defaultGroups, ...dbGroups])).sort();
+
+		const defaultEquipment = ["None (Bodyweight)", "Barbell", "Dumbbell", "Kettlebell", "Machine", "Cable", "Bands", "Smith Machine", "Other"];
+		const dbEquipment = exercises.map(e => e.equipment ? capitalize(e.equipment) : null).filter(Boolean);
+		const equipment = Array.from(new Set([...defaultEquipment, ...dbEquipment])).sort();
+
 		return { muscles, groups, equipment };
 	}, [exercises]);
 
 	const filteredExercises = useMemo(() => {
 		if (!exercises) return [];
 		return exercises.filter(ex => {
-			if (search && !ex._displayName.toLowerCase().includes(search.toLowerCase())) return false;
-			if (filters.muscle && ex.muscle !== filters.muscle) return false;
-			if (filters.group && ex.muscle_group !== filters.group) return false;
-			if (filters.equipment && ex.equipment !== filters.equipment) return false;
+			if (search) {
+				const s = search.toLowerCase();
+				const matchName = ex._displayName.toLowerCase().includes(s);
+				const matchMuscle = t(ex.muscle || '').toLowerCase().includes(s);
+				const matchSecondary = t(ex.secondary_muscle || '').toLowerCase().includes(s);
+				const matchGroup = t(ex.muscle_group || '').toLowerCase().includes(s);
+				const matchEq = t(ex.equipment || '').toLowerCase().includes(s);
+				if (!matchName && !matchMuscle && !matchSecondary && !matchGroup && !matchEq) return false;
+			}
+			if (filters.muscle) {
+				const fMuscle = filters.muscle.toLowerCase();
+				const pMuscle = ex.muscle?.toLowerCase();
+				const sMuscle = ex.secondary_muscle?.toLowerCase();
+				if (pMuscle !== fMuscle && sMuscle !== fMuscle) return false;
+			}
+			if (filters.group && ex.muscle_group?.toLowerCase() !== filters.group.toLowerCase()) return false;
+			if (filters.equipment && ex.equipment?.toLowerCase() !== filters.equipment.toLowerCase()) return false;
 			return true;
 		}).slice(0, 100);
-	}, [exercises, search, filters]);
+	}, [exercises, search, filters, t]);
 
 	const toggleFilter = (type: 'muscle' | 'group' | 'equipment', value: string) => {
 		setFilters(prev => ({ ...prev, [type]: prev[type] === value ? '' : value }));
@@ -121,16 +146,22 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 						<label className="text-sm text-secondary mb-1 block">{t('Target Zone')}</label>
 						<select className="input w-full" value={customGroup} onChange={e => setCustomGroup(e.target.value)}>
 							<option value="">{t('Select Target Zone')}</option>
-							{options.groups.map(g => <option key={g} value={g}>{g}</option>)}
+							{options.groups.map(g => <option key={g} value={g}>{t(g!)}</option>)}
 						</select>
 					</div>
 					<div>
 						<label className="text-sm text-secondary mb-1 block">{t('Specific Muscle')}</label>
-						<input className="input w-full" value={customMuscle} onChange={e => setCustomMuscle(e.target.value)} placeholder={t("e.g. Biceps")} />
+						<select className="input w-full" value={customMuscle} onChange={e => setCustomMuscle(e.target.value)}>
+							<option value="">{t('Select Muscle')}</option>
+							{options.muscles.map(m => <option key={m} value={m as string}>{t(m as string)}</option>)}
+						</select>
 					</div>
 					<div>
 						<label className="text-sm text-secondary mb-1 block">{t('Equipment')}</label>
-						<input className="input w-full" value={customEquipment} onChange={e => setCustomEquipment(e.target.value)} placeholder={t("e.g. Dumbbell")} />
+						<select className="input w-full" value={customEquipment} onChange={e => setCustomEquipment(e.target.value)}>
+							<option value="">{t('Select Equipment')}</option>
+							{options.equipment.map(e => <option key={e} value={e as string}>{t(e as string)}</option>)}
+						</select>
 					</div>
 					<button
 						className="btn btn-primary mt-4 py-3"
@@ -194,7 +225,7 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 							<div className="flex" style={{ flexWrap: 'wrap', gap: '8px' }}>
 								{options.groups.map(g => (
 									<button key={g} onClick={() => toggleFilter('group', g!)} className={`chip ${filters.group === g ? 'active' : 'inactive'}`}>
-										{g}
+										{t(g!)}
 									</button>
 								))}
 							</div>
@@ -209,7 +240,7 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 							<div className="flex" style={{ flexWrap: 'wrap', gap: '8px' }}>
 								{options.muscles.map(m => (
 									<button key={m} onClick={() => toggleFilter('muscle', m!)} className={`chip ${filters.muscle === m ? 'active' : 'inactive'}`}>
-										{m}
+										{t(m!)}
 									</button>
 								))}
 							</div>
@@ -223,7 +254,7 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 							<div className="flex" style={{ flexWrap: 'wrap', gap: '8px' }}>
 								{options.equipment.map(e => (
 									<button key={e} onClick={() => toggleFilter('equipment', e!)} className={`chip ${filters.equipment === e ? 'active' : 'inactive'}`}>
-										{e}
+										{t(e!)}
 									</button>
 								))}
 							</div>
@@ -257,9 +288,9 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 					>
 						<div style={{ fontWeight: 'bold', fontSize: '15px' }}>{ex._displayName}</div>
 						<div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-							{ex.muscle_group && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={10} /> {ex.muscle_group}</span>}
-							{ex.equipment && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Dumbbell size={10} /> {ex.equipment}</span>}
-							{ex.muscle && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Activity size={10} /> {ex.muscle}</span>}
+							{ex.muscle_group && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={10} /> {t(ex.muscle_group)}</span>}
+							{ex.equipment && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Dumbbell size={10} /> {t(ex.equipment)}</span>}
+							{ex.muscle && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Activity size={10} /> {t(ex.muscle)}</span>}
 						</div>
 					</div>
 				))}

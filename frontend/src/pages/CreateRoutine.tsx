@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { db } from '../db/schema';
+import { useLiveQuery } from 'dexie-react-hooks';
 import ExercisePicker from '../components/ExercisePicker';
-import { Plus, Trash, Wand2 } from 'lucide-react';
+import { Plus, Trash, Wand2, GripVertical } from 'lucide-react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
 
 export default function CreateRoutine() {
@@ -11,6 +15,18 @@ export default function CreateRoutine() {
 	const [name, setName] = useState('');
 	const [days, setDays] = useState<any[]>([{ day_name: 'Day 1', exercises: [] }]);
 	const [showPicker, setShowPicker] = useState<{ dayIndex: number } | null>(null);
+	const [nameInitialized, setNameInitialized] = useState(false);
+
+	const existingRoutines = useLiveQuery(() => db.routines.count());
+
+	useEffect(() => {
+		if (!nameInitialized && existingRoutines !== undefined) {
+			if (existingRoutines === 0) {
+				setName('Main Routine');
+			}
+			setNameInitialized(true);
+		}
+	}, [existingRoutines, nameInitialized]);
 
 	// AI State
 	const [aiPrompt, setAiPrompt] = useState({ days: 3, goal: 'hypertrophy', equipment: 'full_gym' });
@@ -18,6 +34,33 @@ export default function CreateRoutine() {
 
 	const navigate = useNavigate();
 	const { t } = useTranslation();
+
+	const sensors = useSensors(
+		useSensor(PointerSensor, {
+			activationConstraint: {
+				delay: 100, // wait 100ms before drag starts, allows normal clicks
+				tolerance: 5,
+			},
+		}),
+		useSensor(KeyboardSensor, {
+			coordinateGetter: sortableKeyboardCoordinates,
+		})
+	);
+
+	const handleDragEnd = (event: any, dayIndex: number) => {
+		const { active, over } = event;
+		if (over && active.id !== over.id) {
+			const newDays = [...days];
+			const exercises = newDays[dayIndex].exercises;
+			const oldIndex = exercises.findIndex((ex: any) => ex._id === active.id);
+			const newIndex = exercises.findIndex((ex: any) => ex._id === over.id);
+
+			const [movedItem] = exercises.splice(oldIndex, 1);
+			exercises.splice(newIndex, 0, movedItem);
+
+			setDays(newDays);
+		}
+	};
 
 	const handleSave = async () => {
 		if (!name) return alert('Name is required');
@@ -64,10 +107,11 @@ export default function CreateRoutine() {
 	const addExercise = (dayIndex: number, exercise: any) => {
 		const newDays = [...days];
 		newDays[dayIndex].exercises.push({
+			_id: Math.random().toString(36).substring(7),
 			exercise_id: exercise.id,
 			name: exercise.name, // cache name for display
 			sets: 3,
-			reps: '8-12',
+			reps: '10',
 			rest: 60
 		});
 		setDays(newDays);
@@ -94,6 +138,7 @@ export default function CreateRoutine() {
 					)}
 				</div>
 				<div style={{ display: 'grid', gap: '16px', marginTop: '32px' }}>
+					{/* AI Wizard Temporarily Hidden
 					<button className="card" onClick={() => setMode('ai')} style={{ textAlign: 'left', cursor: 'pointer' }}>
 						<h3 style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
 							<Wand2 size={20} /> {t('AI Wizard')}
@@ -102,6 +147,7 @@ export default function CreateRoutine() {
 							{t('Answer a few questions and let AI build a plan for you.')}
 						</p>
 					</button>
+					*/}
 
 					<button className="card" onClick={() => setMode('manual')} style={{ textAlign: 'left', cursor: 'pointer' }}>
 						<h3 style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -119,7 +165,7 @@ export default function CreateRoutine() {
 	if (loading) return <div className="container" style={{ justifyContent: 'center', alignItems: 'center' }}>Generating...</div>;
 
 	return (
-		<div className="container fade-in">
+		<div className="container fade-in" style={{ paddingBottom: '96px' }}>
 			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
 				<h1>{mode === 'ai' ? t('AI Setup') : t('New Routine')}</h1>
 				<button className="btn btn-ghost" onClick={() => setMode('select')}>{t('Cancel')}</button>
@@ -161,12 +207,35 @@ export default function CreateRoutine() {
 									}}><Trash size={16} /></button>
 								</div>
 
-								{day.exercises.map((ex: any, eIndex: number) => (
-									<div key={eIndex} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #333' }}>
-										<span>{ex.name}</span>
-										<span style={{ color: 'var(--text-tertiary)' }}>{ex.sets} x {ex.reps}</span>
+								{day.exercises.length > 0 && (
+									<div style={{ display: 'flex', alignItems: 'center', fontSize: '11px', color: 'var(--text-tertiary)', padding: '0 8px', marginBottom: '4px' }}>
+										<span style={{ width: '24px' }}>Move</span>
+										<span style={{ flex: 1, paddingLeft: '8px' }}>Exercise</span>
+										<span style={{ width: '40px', textAlign: 'center' }}>Sets</span>
+										<span style={{ width: '12px', textAlign: 'center' }}></span>
+										<span style={{ width: '40px', textAlign: 'center' }}>Reps</span>
+										<span style={{ width: '32px', textAlign: 'center' }}></span>
 									</div>
-								))}
+								)}
+
+								<DndContext
+									sensors={sensors}
+									collisionDetection={closestCenter}
+									onDragEnd={(e) => handleDragEnd(e, dIndex)}
+								>
+									<SortableContext items={day.exercises.map((e: any) => e._id)} strategy={verticalListSortingStrategy}>
+										{day.exercises.map((ex: any, eIndex: number) => (
+											<SortableCreateExerciseRow
+												key={ex._id}
+												ex={ex}
+												eIndex={eIndex}
+												dIndex={dIndex}
+												days={days}
+												setDays={setDays}
+											/>
+										))}
+									</SortableContext>
+								</DndContext>
 
 								<button
 									className="btn btn-secondary"
@@ -195,6 +264,78 @@ export default function CreateRoutine() {
 					onClose={() => setShowPicker(null)}
 				/>
 			)}
+		</div>
+	);
+}
+
+function SortableCreateExerciseRow({ ex, eIndex, dIndex, days, setDays }: any) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+	} = useSortable({ id: ex._id });
+
+	const style = {
+		transform: CSS.Transform.toString(transform),
+		transition,
+		display: 'flex',
+		justifyContent: 'space-between',
+		alignItems: 'center',
+		padding: '8px',
+		backgroundColor: 'rgba(0,0,0,0.2)',
+		borderRadius: '6px',
+		gap: '8px',
+		marginBottom: '4px',
+		border: '1px solid transparent'
+	};
+
+	return (
+		<div ref={setNodeRef} style={style}>
+			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', cursor: 'grab' }} {...attributes} {...listeners}>
+				<GripVertical size={16} color="var(--text-tertiary)" />
+			</div>
+
+			<span style={{ flex: 1, fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+				{ex.name}
+			</span>
+			<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+				<input
+					className="input p-1 text-center"
+					style={{ width: '40px', fontSize: '13px' }}
+					type="number"
+					value={ex.sets}
+					onChange={e => {
+						const newDays = [...days];
+						newDays[dIndex].exercises[eIndex].sets = parseInt(e.target.value) || 1;
+						setDays(newDays);
+					}}
+				/>
+				<span style={{ color: 'var(--text-tertiary)' }}>x</span>
+				<input
+					className="input p-1 text-center"
+					style={{ width: '40px', fontSize: '13px' }}
+					type="text"
+					value={ex.reps || '10'}
+					onChange={e => {
+						const newDays = [...days];
+						newDays[dIndex].exercises[eIndex].reps = e.target.value;
+						setDays(newDays);
+					}}
+				/>
+				<button
+					className="btn btn-ghost p-1"
+					onClick={() => {
+						const newDays = [...days];
+						newDays[dIndex].exercises.splice(eIndex, 1);
+						setDays(newDays);
+					}}
+					style={{ color: 'var(--error)', flexShrink: 0, width: '32px', display: 'flex', justifyContent: 'center' }}
+				>
+					<Trash size={16} />
+				</button>
+			</div>
 		</div>
 	);
 }

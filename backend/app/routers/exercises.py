@@ -12,7 +12,7 @@ router = APIRouter(
     tags=["exercises"]
 )
 
-@router.get("/", response_model=List[ExerciseResponse])
+@router.get("", response_model=List[ExerciseResponse])
 def get_exercises(
     search: Optional[str] = None,
     muscle: Optional[str] = None,
@@ -30,7 +30,7 @@ def get_exercises(
         
     return query.all()
 
-@router.post("/", response_model=ExerciseResponse)
+@router.post("", response_model=ExerciseResponse)
 def create_exercise(
     exercise: ExerciseCreate,
     db: Session = Depends(get_db),

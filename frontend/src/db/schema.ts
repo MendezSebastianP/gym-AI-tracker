@@ -19,6 +19,7 @@ export interface Exercise {
 	name: string;
 	description?: string;
 	muscle?: string;
+	secondary_muscle?: string;
 	muscle_group?: string;
 	equipment?: string;
 	type?: string;
@@ -53,6 +54,7 @@ export interface Routine {
 	days: RoutineDay[];
 	syncStatus?: 'synced' | 'created' | 'updated' | 'deleted';
 	is_favorite?: boolean;
+	archived_at?: string;
 }
 
 export interface Session {

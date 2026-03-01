@@ -9,6 +9,7 @@ class Exercise(Base):
     name = Column(String, index=True, nullable=False)
     description = Column(String, nullable=True)
     muscle = Column(String, nullable=True) # Primary muscle
+    secondary_muscle = Column(String, nullable=True) # Secondary muscle
     muscle_group = Column(String, nullable=True) # Broader group (Chest, Back, etc)
     equipment = Column(String, nullable=True)
     type = Column(String, nullable=True) # Strength, cardio, etc

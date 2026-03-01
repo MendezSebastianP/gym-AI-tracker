@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, JSON, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, JSON, ForeignKey, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -10,6 +10,7 @@ class Routine(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     is_favorite = Column(Boolean, default=False)
+    archived_at = Column(DateTime(timezone=True), nullable=True, default=None)
     
     # JSON structure:
     # [

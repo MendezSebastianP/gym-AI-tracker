@@ -13,7 +13,7 @@ router = APIRouter(
     tags=["sessions"]
 )
 
-@router.get("/", response_model=List[SessionResponse])
+@router.get("", response_model=List[SessionResponse])
 def get_sessions(
     skip: int = 0,
     limit: int = 20,
@@ -35,13 +35,24 @@ def get_session(
         raise HTTPException(status_code=404, detail="Session not found")
     return session
 
-@router.post("/", response_model=SessionResponse)
+@router.post("", response_model=SessionResponse)
 def create_session(
     session: SessionCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    db_session = SessionModel(**session.model_dump(), user_id=current_user.id)
+    session_data = session.model_dump()
+    # If routine_id is provided but the routine doesn't exist for this user,
+    # set it to None to avoid FK constraint errors (e.g. from client sync with local IDs)
+    if session_data.get("routine_id"):
+        from app.models.routine import Routine
+        routine = db.query(Routine).filter(
+            Routine.id == session_data["routine_id"],
+            Routine.user_id == current_user.id
+        ).first()
+        if not routine:
+            session_data["routine_id"] = None
+    db_session = SessionModel(**session_data, user_id=current_user.id)
     db.add(db_session)
     db.commit()
     db.refresh(db_session)
@@ -64,3 +75,20 @@ def update_session(
     db.commit()
     db.refresh(db_session)
     return db_session
+
+@router.delete("/{session_id}")
+def delete_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    db_session = db.query(SessionModel).filter(
+        SessionModel.id == session_id,
+        SessionModel.user_id == current_user.id
+    ).first()
+    if not db_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    db.delete(db_session)
+    db.commit()
+    return {"ok": True}

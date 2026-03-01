@@ -55,6 +55,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 		set({ user: null, token: null, isAuthenticated: false });
 	},
 
+
 	checkAuth: async () => {
 		const token = localStorage.getItem('token');
 		if (!token) {
@@ -83,8 +84,18 @@ export const useAuthStore = create<AuthState>((set) => ({
 
 	// Update user object in store (for immediate local reflection of settings changes)
 	updateUser: (updates: Partial<User>) => {
-		set((state) => ({
+		set((state: AuthState) => ({
 			user: state.user ? { ...state.user, ...updates } : null
 		}));
 	}
 }));
+
+// Listen for logout events from other tabs
+if (typeof window !== 'undefined') {
+	window.addEventListener('storage', (event) => {
+		if (event.key === 'token' && !event.newValue) {
+			console.log('Token removed in another tab. Logging out...');
+			useAuthStore.getState().logout();
+		}
+	});
+}

@@ -1,0 +1,52 @@
+# Production docker-compose — run on the mini PC
+# Usage: docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d
+#
+# This overlays production-specific services on top of the base docker-compose.yml:
+# - Caddy reverse proxy (auto HTTPS via Let's Encrypt)
+# - Webhook listener (auto-deploy on push to main)
+
+services:
+  # Override frontend to not expose port directly (Caddy handles it)
+  frontend:
+    ports: []
+
+  # Override API to not expose port directly
+  api:
+    ports: []
+
+  # Caddy — reverse proxy with automatic HTTPS
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - api
+    networks:
+      - default
+
+  # Webhook listener — receives GitHub webhooks and triggers deploy
+  webhook:
+    image: almir/webhook:2.8.1
+    restart: always
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./deploy/hooks.json:/etc/webhook/hooks.json
+      - ./deploy/redeploy.sh:/scripts/redeploy.sh
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/app
+    working_dir: /app
+    command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload"]
+    networks:
+      - default
+
+volumes:
+  caddy_data:
+  caddy_config:
