@@ -27,25 +27,30 @@ class UserResponse(UserBase):
     weight: Optional[int] = None
     height: Optional[int] = None
     age: Optional[int] = None
+    gender: Optional[str] = None
     priorities: Optional[Dict[str, Any]] = None
+    level: int = 1
+    experience: int = 0
+    currency: int = 0
     model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):
     weight: Optional[int] = None
     height: Optional[int] = None
     age: Optional[int] = None
+    gender: Optional[str] = None
     priorities: Optional[Dict[str, Any]] = None
     settings: Optional[Dict[str, Any]] = None
 
 # Exercise
 class ExerciseBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    muscle: Optional[str] = None
-    secondary_muscle: Optional[str] = None
-    muscle_group: Optional[str] = None
-    equipment: Optional[str] = None
-    type: Optional[str] = None
+    name: str = Field(max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    muscle: Optional[str] = Field(None, max_length=50)
+    secondary_muscle: Optional[str] = Field(None, max_length=50)
+    muscle_group: Optional[str] = Field(None, max_length=50)
+    equipment: Optional[str] = Field(None, max_length=50)
+    type: Optional[str] = Field(None, max_length=50)
     is_bodyweight: bool = False
     default_weight_kg: Optional[float] = None
     name_translations: Optional[Dict[str, str]] = None
@@ -57,6 +62,8 @@ class ExerciseResponse(ExerciseBase):
     id: int
     source: str
     user_id: Optional[int] = None
+    difficulty_factor: float = 1.0
+    bw_ratio: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
 
 # Set
@@ -85,7 +92,7 @@ class SetResponse(SetBase):
 
 # Session
 class SessionBase(BaseModel):
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=2000)
     locked_exercises: Optional[List[int]] = []
 
 class SessionCreate(SessionBase):
@@ -112,20 +119,20 @@ class SessionResponse(SessionBase):
 class RoutineDayExercise(BaseModel):
     exercise_id: int
     sets: int
-    reps: str
+    reps: str = Field(max_length=20)
     rest: int
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=500)
 
 class RoutineDay(BaseModel):
-    day_name: str
+    day_name: str = Field(max_length=50)
     exercises: List[RoutineDayExercise]
 
 # Routine
 class RoutineBase(BaseModel):
-    name: str
-    description: Optional[str] = None
+    name: str = Field(max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
     is_favorite: bool = False
-    days: List[Dict[str, Any]] = [] # Flexible for now, or use RoutineDay
+    days: List[Dict[str, Any]] = []  # Flexible for now, or use RoutineDay
 
 class RoutineCreate(RoutineBase):
     pass
@@ -145,6 +152,6 @@ class RoutineResponse(RoutineBase):
 
 # Sync
 class SyncEventCreate(BaseModel):
-    event_type: str
+    event_type: str = Field(max_length=50)
     payload: Dict[str, Any]
     client_timestamp: datetime

@@ -1,7 +1,8 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Home, Dumbbell, Calendar, User, Settings as SettingsIcon } from 'lucide-react';
+import { Home, Dumbbell, Calendar, Settings as SettingsIcon, BarChart2 } from 'lucide-react';
 import React from 'react';
+import GamificationToast from './GamificationToast';
 
 const Layout = () => {
 	const { t } = useTranslation();
@@ -15,6 +16,7 @@ const Layout = () => {
 
 	return (
 		<div className="layout-container" style={{ paddingBottom: '80px' }}>
+			<GamificationToast />
 			<main>
 				<Outlet />
 			</main>
@@ -25,19 +27,20 @@ const Layout = () => {
 				bottom: 0,
 				left: 0,
 				right: 0,
-				backgroundColor: 'var(--bg-secondary)',
-				borderTop: '1px solid #333',
+				borderTop: '1px solid var(--border)',
 				padding: '10px 0',
 				display: 'flex',
 				justifyContent: 'space-around',
 				alignItems: 'center',
 				zIndex: 100,
 				backdropFilter: 'blur(10px)',
-				backgroundColor: 'rgba(30, 30, 30, 0.9)'
+				backgroundColor: 'var(--nav-bg)'
 			}}>
-				<NavItem to="/" icon={<Home size={24} />} label={t("Dashboard")} active={isActive('/')} />
+				<NavItem to="/" icon={<Home size={24} />} label={t("Home")} active={isActive('/')} />
+				<NavItem to="/dashboard" icon={<BarChart2 size={24} />} label={t("Stats")} active={isActive('/dashboard')} />
 				<NavItem to="/sessions" icon={<Calendar size={24} />} label={t("Sessions")} active={isActive('/sessions')} />
 				<NavItem to="/routines" icon={<Dumbbell size={24} />} label={t("Routines")} active={isActive('/routines')} />
+
 				<NavItem to="/settings" icon={<SettingsIcon size={24} />} label={t("Settings")} active={isActive('/settings')} />
 			</nav>
 		</div>

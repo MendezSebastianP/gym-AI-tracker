@@ -17,6 +17,7 @@ export default function Settings() {
 		weight: user?.weight || '',
 		height: user?.height || '',
 		age: user?.age || '',
+		gender: user?.gender || '',
 		priorities: (user?.priorities as any)?.selected || []
 	});
 
@@ -32,6 +33,7 @@ export default function Settings() {
 				weight: user.weight || '',
 				height: user.height || '',
 				age: user.age || '',
+				gender: user.gender || '',
 				priorities: (user.priorities as any)?.selected || []
 			});
 		}
@@ -87,6 +89,7 @@ export default function Settings() {
 			if (profileData.weight) updates.weight = Number(profileData.weight);
 			if (profileData.height) updates.height = Number(profileData.height);
 			if (profileData.age) updates.age = Number(profileData.age);
+			if (profileData.gender) updates.gender = profileData.gender;
 			if (profileData.priorities.length > 0) updates.priorities = { selected: profileData.priorities };
 
 			await api.put('/auth/me', updates);
@@ -186,6 +189,10 @@ export default function Settings() {
 								<span className="text-xs text-secondary">{t('Age')}</span>
 								<span className="font-bold">{user?.age ? user.age : '-'}</span>
 							</div>
+							<div className="flex flex-col gap-2">
+								<span className="text-xs text-secondary">{t('Gender')}</span>
+								<span className="font-bold">{user?.gender ? t(user.gender.charAt(0).toUpperCase() + user.gender.slice(1)) : '-'}</span>
+							</div>
 							<div className="flex flex-col gap-2" style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
 								<span className="text-xs text-secondary">{t('Priorities')}</span>
 								<div className="flex" style={{ flexWrap: 'wrap', gap: '8px' }}>
@@ -203,7 +210,7 @@ export default function Settings() {
 						</div>
 					) : (
 						<div className="flex flex-col gap-4 fade-in">
-							<div className="grid grid-cols-3 gap-4">
+							<div className="grid grid-cols-2 gap-4">
 								<div className="flex flex-col gap-2">
 									<label className="text-xs text-secondary">{t('Weight')}</label>
 									<input
@@ -236,6 +243,19 @@ export default function Settings() {
 										style={{ padding: '8px' }}
 										placeholder="yrs"
 									/>
+								</div>
+								<div className="flex flex-col gap-2">
+									<label className="text-xs text-secondary">{t('Gender')}</label>
+									<select
+										value={profileData.gender}
+										onChange={e => setProfileData({ ...profileData, gender: e.target.value })}
+										className="input"
+										style={{ padding: '8px', background: 'var(--bg-tertiary)', border: '1px solid #444' }}
+									>
+										<option value="">{t('Select...')}</option>
+										<option value="male">{t('Male')}</option>
+										<option value="female">{t('Female')}</option>
+									</select>
 								</div>
 							</div>
 							<div className="flex flex-col gap-2">

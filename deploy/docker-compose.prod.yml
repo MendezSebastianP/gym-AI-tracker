@@ -32,22 +32,54 @@ services:
       - default
 
   # Webhook listener — receives GitHub webhooks and triggers deploy
+  # Restricted Docker API proxy — only allows the calls needed by redeploy.sh
+  dockerproxy:
+    image: tecnativa/docker-socket-proxy
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Whitelist only what docker compose build/up/exec needs
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      POST: 1
+      BUILD: 1
+      EXEC: 1
+      # Everything else off
+      SWARM: 0
+      AUTH: 0
+      SECRETS: 0
+      PLUGINS: 0
+    networks:
+      - agent_net
+
   webhook:
     image: almir/webhook:2.8.1
     restart: always
+    depends_on:
+      - dockerproxy
     # Port intentionally NOT exposed — Caddy proxies /hooks/* to webhook:9000 internally
     volumes:
       - ./deploy/hooks.json:/etc/webhook/hooks.json
       - ./deploy/redeploy.sh:/scripts/redeploy.sh
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Docker socket removed — routed through restricted dockerproxy instead
       - .:/app
     working_dir: /app
     command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload", "-template"]
     environment:
       - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - DOCKER_HOST=tcp://dockerproxy:2375
     networks:
       - default
+      - agent_net
 
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  agent_net:
+    driver: bridge
+    internal: true  # Isolated — not reachable from internet

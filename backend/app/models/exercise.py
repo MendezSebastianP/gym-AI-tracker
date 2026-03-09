@@ -20,7 +20,16 @@ class Exercise(Base):
     # Multilingual names: {"en": "Bench Press", "es": "Press de Banca", "fr": "Développé couché"}
     name_translations = Column(JSON, nullable=True, default={})
     
+    # Difficulty scoring for NSS (Normalised Strength Score)
+    # For weighted exercises: NSS = est_1rm × difficulty_factor
+    # Anchored at Bench Press = 1.0; factor ≈ typical_bench_max / typical_exercise_max
+    difficulty_factor = Column(Float, default=1.0, nullable=False, server_default="1.0")
+    # For bodyweight exercises: fraction of bodyweight engaged per rep
+    # Anchored at Pull-up = 1.0
+    bw_ratio = Column(Float, nullable=True)
+    
     # User ownership for custom exercises (if null, it's a system exercise)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
     user = relationship("User")
+

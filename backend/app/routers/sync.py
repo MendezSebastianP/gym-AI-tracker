@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.sync import SyncEvent
@@ -17,10 +17,11 @@ def sync_events(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Guard against payload flooding — no real sync needs more than 200 events at once
+    if len(events) > 200:
+        raise HTTPException(status_code=422, detail="Too many sync events per request (max 200)")
+
     # MVP: Log events, effectively "client wins" implicit by processing order
     # In a real implementation we would process each event to update DB entities
     # and map client temp IDs to server IDs.
-    
-    # For now, we'll just acknowledge receipt.
-    # The client-side logic will be heavy lifting here in v1.
     return {"status": "synced", "processed": len(events)}

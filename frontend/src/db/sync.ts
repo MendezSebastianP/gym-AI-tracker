@@ -146,13 +146,20 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 
 		} else if (session.syncStatus === 'updated' && session.server_id) {
 			// Already on server, just update timestamps/notes
-			await api.put(`/sessions/${session.server_id}`, {
+			const updateRes = await api.put(`/sessions/${session.server_id}`, {
 				started_at: session.started_at,
 				completed_at: session.completed_at,
 				notes: session.notes,
 				locked_exercises: session.locked_exercises || [],
 			});
 			await db.sessions.update(session.id!, { syncStatus: 'synced' });
+
+			// If server awarded gamification rewards, emit event for the UI
+			if (updateRes.data?.gamification) {
+				window.dispatchEvent(new CustomEvent('gamification-reward', {
+					detail: updateRes.data.gamification
+				}));
+			}
 
 			// Also sync any unsynced sets belonging to this session
 			const sessionSets = await db.sets

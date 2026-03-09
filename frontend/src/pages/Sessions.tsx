@@ -1,51 +1,88 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, Calendar, Clock, History, HelpCircle, X } from 'lucide-react';
+import { Play, Calendar, Clock, History, HelpCircle, X, Trash2, ChevronUp, ChevronDown, User } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { api } from '../api/client';
 
 
 export default function Sessions() {
 	const { t } = useTranslation();
 	const navigate = useNavigate();
 	const [showHelp, setShowHelp] = useState(false);
+	const [selectedRoutineFilter, setSelectedRoutineFilter] = useState<number | 'others' | null>(null);
+	const [expandedSessionId, setExpandedSessionId] = useState<number | null>(null);
+	const expandedRef = useRef<HTMLDivElement>(null);
+	const [demoMode, setDemoMode] = useState(false);
+	const [demoSessions, setDemoSessions] = useState<any[]>([]);
 
 	// Load routines to find favorite
 	const routines = useLiveQuery(() => db.routines.toArray());
 
 	// Load sessions for history and current status
-	// We need all sessions to determine next up, but limit history display
 	const sessions = useLiveQuery(() => db.sessions.orderBy('started_at').reverse().toArray());
 
+	// Load sets for expanded session detail
+	const expandedSets = useLiveQuery(
+		() => expandedSessionId && !demoMode ? db.sets.where('session_id').equals(expandedSessionId).toArray() : Promise.resolve([]),
+		[expandedSessionId, demoMode]
+	);
 
+	// Fetch demo sessions when demo mode is toggled on
+	useEffect(() => {
+		if (demoMode) {
+			api.get('/sessions/demo/history')
+				.then(res => setDemoSessions(res.data))
+				.catch(() => setDemoSessions([]));
+		}
+	}, [demoMode]);
 
+	// Set default filter to favorite routine once routines load
+	useEffect(() => {
+		if (!demoMode && routines && routines.length > 0 && selectedRoutineFilter === null) {
+			const nonArchived = routines.filter((r: any) => !r.archived_at);
+			const fav = nonArchived.find((r: any) => r.is_favorite) || nonArchived[0];
+			if (fav) setSelectedRoutineFilter(fav.id!);
+		}
+	}, [routines, selectedRoutineFilter, demoMode]);
+
+	// Scroll expanded detail into view
+	useEffect(() => {
+		if (expandedSessionId && expandedRef.current) {
+			setTimeout(() => {
+				expandedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			}, 100);
+		}
+	}, [expandedSessionId]);
+
+	const deleteSession = useCallback(async (sessionId: number) => {
+		if (demoMode) return;
+		if (!confirm(t('Are you sure you want to delete this session? This cannot be undone.'))) return;
+		await db.sets.where('session_id').equals(sessionId).delete();
+		await db.sessions.delete(sessionId);
+		setExpandedSessionId(null);
+	}, [t, demoMode]);
 
 	if (!routines || !sessions) return <div className="container">{t('Loading...')}</div>;
 
 	// Determine Active Routine (Favorite or First — skip archived)
-	const nonArchivedRoutines = routines.filter(r => !r.archived_at);
-	const activeRoutine = nonArchivedRoutines.find(r => r.is_favorite) || nonArchivedRoutines[0];
+	const nonArchivedRoutines = routines.filter((r: any) => !r.archived_at);
+	const activeRoutine = nonArchivedRoutines.find((r: any) => r.is_favorite) || nonArchivedRoutines[0];
 
 	// Determine "Up Next"
 	let nextSessionCard = null;
 	if (activeRoutine) {
-		// Check for incomplete active session
-		const activeSession = sessions.find(s => !s.completed_at && s.routine_id === activeRoutine.id);
+		const activeSession = sessions.find((s: any) => !s.completed_at && s.routine_id === activeRoutine.id);
 
 		if (activeSession) {
-			// Resume
 			const dayName = activeRoutine.days[activeSession.day_index || 0]?.day_name || `Day ${(activeSession.day_index || 0) + 1}`;
 
 			const discardAndStartNew = async () => {
 				if (!confirm(t("Are you sure you want to discard your in-progress session and start a new one?"))) return;
-
-				// Delete previous incomplete session and its sets
 				await db.sets.where('session_id').equals(activeSession.id!).delete();
 				await db.sessions.delete(activeSession.id!);
-
-				// Calculate next day for new session
-				const completedSessions = sessions.filter(s => s.completed_at && s.routine_id === activeRoutine.id);
+				const completedSessions = sessions.filter((s: any) => s.completed_at && s.routine_id === activeRoutine.id);
 				const lastSession = completedSessions[0];
 				let nextDayIndex = 0;
 				if (activeRoutine.days && activeRoutine.days.length > 0) {
@@ -53,9 +90,7 @@ export default function Sessions() {
 						nextDayIndex = (lastSession.day_index + 1) % activeRoutine.days.length;
 					}
 				}
-
 				if (!activeRoutine.days || activeRoutine.days.length === 0) return;
-
 				const id = await db.sessions.add({
 					user_id: activeRoutine.user_id,
 					routine_id: activeRoutine.id,
@@ -81,40 +116,28 @@ export default function Sessions() {
 						</div>
 					</div>
 					<div className="flex gap-2">
-						<button
-							onClick={() => navigate(`/sessions/${activeSession.id}`)}
-							className="btn btn-primary flex-1"
-						>
+						<button onClick={() => navigate(`/sessions/${activeSession.id}`)} className="btn btn-primary flex-1">
 							{t('Resume Session')}
 						</button>
-						<button
-							onClick={discardAndStartNew}
-							className="btn btn-secondary flex-1"
-						>
+						<button onClick={discardAndStartNew} className="btn btn-secondary flex-1">
 							{t('Start New')}
 						</button>
 					</div>
 				</div>
 			);
 		} else {
-			// Calculate next day
-			// Find most recent completed session for this routine
-			const completedSessions = sessions.filter(s => s.completed_at && s.routine_id === activeRoutine.id);
-			// sessions is already sorted by started_at reverse (newest first)
+			const completedSessions = sessions.filter((s: any) => s.completed_at && s.routine_id === activeRoutine.id);
 			const lastSession = completedSessions[0];
-
 			let nextDayIndex = 0;
 			if (activeRoutine.days && activeRoutine.days.length > 0) {
 				if (lastSession && typeof lastSession.day_index === 'number') {
 					nextDayIndex = (lastSession.day_index + 1) % activeRoutine.days.length;
 				}
 			}
-
 			const nextDay = activeRoutine.days?.[nextDayIndex];
 
 			const startSession = async () => {
 				if (!activeRoutine.days || activeRoutine.days.length === 0) return;
-
 				const id = await db.sessions.add({
 					user_id: activeRoutine.user_id,
 					routine_id: activeRoutine.id,
@@ -136,41 +159,72 @@ export default function Sessions() {
 						<div className="mb-4">
 							<div className="text-sm text-primary uppercase tracking-wider mb-1">{activeRoutine.name}</div>
 							<div className="text-xl font-semibold mb-1">{nextDay?.day_name || `Day ${nextDayIndex + 1}`}</div>
-							<div className="text-sm text-secondary">
-								{nextDay?.exercises.length || 0} {t('exercises')}
-							</div>
+							<div className="text-sm text-secondary">{nextDay?.exercises.length || 0} {t('exercises')}</div>
 						</div>
-						<button
-							onClick={startSession}
-							className="btn btn-primary w-full"
-						>
-							{t('Start Workout')}
-						</button>
+						<button onClick={startSession} className="btn btn-primary w-full">{t('Start Workout')}</button>
 					</div>
 				);
 			} else {
 				nextSessionCard = (
-					<div className="card text-center p-8 text-tertiary">
-						{t('Routine has no days configured.')}
-					</div>
+					<div className="card text-center p-8 text-tertiary">{t('Routine has no days configured.')}</div>
 				);
 			}
 		}
 	} else {
-		// No routines at all
 		nextSessionCard = (
 			<div className="card" style={{ textAlign: 'center', padding: '32px 16px' }}>
 				<h3 className="text-lg font-semibold mb-2">{t('No active routine')}</h3>
 				<p className="text-secondary mb-4">{t('Create a routine to start tracking your workouts.')}</p>
-				<Link to="/routines/new" className="btn btn-primary">
-					{t('Create Routine')}
-				</Link>
+				<Link to="/routines/new" className="btn btn-primary">{t('Create Routine')}</Link>
 			</div>
 		);
 	}
 
-	// History List (Completed sessions)
-	const historySessions = sessions.filter(s => !!s.completed_at);
+	// History
+	const historySessions = demoMode ? demoSessions : sessions.filter((s: any) => !!s.completed_at);
+
+	// Build routine filter options (only for normal mode)
+	const routineIds = new Set(historySessions.map((s: any) => s.routine_id));
+	const knownRoutineIds = new Set(routines.map((r: any) => r.id));
+	const hasOrphans = [...routineIds].some(id => !knownRoutineIds.has(id));
+
+	// Filter sessions by selected routine (skip in demo mode — show all)
+	let filteredSessions = historySessions;
+	if (!demoMode) {
+		if (selectedRoutineFilter === 'others') {
+			filteredSessions = historySessions.filter((s: any) => !knownRoutineIds.has(s.routine_id));
+		} else if (selectedRoutineFilter !== null) {
+			filteredSessions = historySessions.filter((s: any) => s.routine_id === selectedRoutineFilter);
+		}
+	}
+
+	// Calculate routine cycles to alternate colors per cycle
+	const sessionCycleMap = new Map<number, number>();
+	if (filteredSessions.length > 0) {
+		const chronologicalSessions = [...filteredSessions].reverse();
+		let currentCycle = 0;
+		let lastDayIndex = -1;
+		for (const session of chronologicalSessions) {
+			const currentDayIndex = session.day_index || 0;
+			if (currentDayIndex <= lastDayIndex) {
+				currentCycle++;
+			}
+			sessionCycleMap.set(session.id!, currentCycle);
+			lastDayIndex = currentDayIndex;
+		}
+	}
+
+	// Navigate expanded session
+	const currentExpandedIndex = filteredSessions.findIndex((s: any) => s.id === expandedSessionId);
+	const canGoUp = currentExpandedIndex > 0;
+	const canGoDown = currentExpandedIndex < filteredSessions.length - 1 && currentExpandedIndex >= 0;
+
+	const goToPrev = () => {
+		if (canGoUp) setExpandedSessionId(filteredSessions[currentExpandedIndex - 1].id!);
+	};
+	const goToNext = () => {
+		if (canGoDown) setExpandedSessionId(filteredSessions[currentExpandedIndex + 1].id!);
+	};
 
 	return (
 		<div className="container" style={{ paddingBottom: '80px' }}>
@@ -179,7 +233,41 @@ export default function Sessions() {
 				<button className="btn btn-ghost" onClick={() => setShowHelp(!showHelp)} style={{ padding: '4px' }}>
 					<HelpCircle size={18} color="var(--text-tertiary)" />
 				</button>
+				<div style={{ marginLeft: 'auto' }}>
+					<button
+						onClick={() => { setDemoMode(!demoMode); setExpandedSessionId(null); }}
+						style={{
+							background: demoMode ? 'rgba(255, 215, 0, 0.15)' : 'transparent',
+							border: demoMode ? '1px solid rgba(255, 215, 0, 0.4)' : '1px solid rgba(255,255,255,0.1)',
+							borderRadius: '8px', padding: '6px', cursor: 'pointer',
+							display: 'flex', alignItems: 'center', justifyContent: 'center',
+							transition: 'all 0.2s'
+						}}
+						title={t('Toggle Demo Mode')}
+					>
+						<User size={18} color={demoMode ? '#FFD700' : 'var(--text-tertiary)'} />
+					</button>
+				</div>
 			</div>
+
+			{demoMode && (
+				<div style={{
+					background: 'rgba(255, 215, 0, 0.08)',
+					border: '1px solid rgba(255, 215, 0, 0.25)',
+					borderRadius: '10px',
+					padding: '10px 14px',
+					marginBottom: '16px',
+					fontSize: '12px',
+					color: '#FFD700',
+					display: 'flex',
+					alignItems: 'center',
+					gap: '8px',
+					lineHeight: 1.4
+				}}>
+					<User size={14} />
+					{t('Demo mode — showing 16 months of PPL training history')}
+				</div>
+			)}
 
 			{showHelp && (
 				<div style={{
@@ -204,9 +292,14 @@ export default function Sessions() {
 				</div>
 			)}
 
-			<h3 className="section-title text-sm font-semibold text-secondary uppercase tracking-wider mb-3 px-1">{t('Current')}</h3>
-			{nextSessionCard}
+			{!demoMode && (
+				<>
+					<h3 className="section-title text-sm font-semibold text-secondary uppercase tracking-wider mb-3 px-1">{t('Current')}</h3>
+					{nextSessionCard}
+				</>
+			)}
 
+			{/* History Section */}
 			<h3 className="section-title text-sm font-semibold text-secondary uppercase tracking-wider mb-3 mt-8 px-1 flex items-center gap-2">
 				<History size={16} />
 				{t('History')}
@@ -217,46 +310,194 @@ export default function Sessions() {
 					{t('No completed sessions yet.')}
 				</div>
 			) : (
-				<div className="grid gap-3">
-					{historySessions.map(session => {
-						const routine = routines.find(r => r.id === session.routine_id);
-						const dayName = routine?.days[session.day_index || 0]?.day_name || t('Unknown Day');
-						const date = new Date(session.completed_at!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-						const duration = session.started_at && session.completed_at
-							? Math.round((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 60000)
-							: 0;
+				<>
+					{/* Routine filter dropdown */}
+					{!demoMode && <select
+						value={selectedRoutineFilter === 'others' ? 'others' : (selectedRoutineFilter ?? '')}
+						onChange={e => {
+							const val = e.target.value;
+							if (val === 'others') setSelectedRoutineFilter('others');
+							else setSelectedRoutineFilter(Number(val));
+							setExpandedSessionId(null);
+						}}
+						style={{
+							width: '100%', padding: '10px 12px', borderRadius: '8px',
+							background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
+							border: '1px solid #444', fontSize: '14px', marginBottom: '16px', outline: 'none'
+						}}
+					>
+						{nonArchivedRoutines
+							.filter((r: any) => routineIds.has(r.id))
+							.map((r: any) => (
+								<option key={r.id} value={r.id}>{r.name}</option>
+							))
+						}
+						{hasOrphans && <option value="others">{t('Others')}</option>}
+					</select>}
 
-						return (
-							<Link
-								key={session.id}
-								to={`/sessions/${session.id}`}
-								className="card hover:bg-white/5 transition-colors"
-								style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}
-							>
-								<div>
-									<div className="font-semibold text-white mb-1">
-										{routine?.name || t('Unknown Routine')}
-									</div>
-									<div className="text-sm text-secondary">
-										{dayName}
-									</div>
-								</div>
-								<div className="text-right flex flex-col items-end gap-1">
-									<div className="flex items-center gap-1.5 text-xs text-secondary bg-white/5 px-2 py-1 rounded">
-										<Calendar size={12} />
-										{date}
-									</div>
-									{duration > 0 && (
-										<div className="flex items-center gap-1.5 text-xs text-tertiary">
-											<Clock size={12} />
-											{duration} min
+					{/* Compact 3-per-row session tabs */}
+					{filteredSessions.length === 0 ? (
+						<div className="text-center text-tertiary py-6 text-sm">
+							{t('No sessions for this routine.')}
+						</div>
+					) : (
+						<>
+							<div style={{
+								display: 'grid',
+								gridTemplateColumns: 'repeat(3, 1fr)',
+								gap: '8px',
+								marginBottom: '16px'
+							}}>
+								{filteredSessions.map((session: any, idx: number) => {
+									const isExpanded = session.id === expandedSessionId;
+									const cycleIndex = sessionCycleMap.get(session.id!) || 0;
+									const isDarkCycle = cycleIndex % 2 === 1;
+									const baseBg = isDarkCycle ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.02)';
+
+									const date = new Date(session.completed_at!);
+									const dayNum = date.getDate();
+									const monthShort = date.toLocaleString(undefined, { month: 'short' });
+									const routine = routines.find((r: any) => r.id === session.routine_id);
+									const dayName = demoMode
+										? (session.day_name || `D${(session.day_index || 0) + 1}`)
+										: (routine?.days[session.day_index || 0]?.day_name || `D${(session.day_index || 0) + 1}`);
+
+									return (
+										<button
+											key={session.id}
+											onClick={() => setExpandedSessionId(isExpanded ? null : session.id!)}
+											style={{
+												padding: '10px 6px',
+												borderRadius: '10px',
+												border: isExpanded ? '2px solid var(--primary)' : '1px solid var(--overlay-medium)',
+												background: isExpanded ? 'var(--primary-glow)' : baseBg,
+												cursor: 'pointer',
+												textAlign: 'center',
+												transition: 'all 0.15s ease',
+											}}
+										>
+											<div style={{ fontSize: '16px', fontWeight: 700, color: isExpanded ? 'var(--primary)' : 'var(--text-primary)' }}>
+												{dayNum}
+											</div>
+											<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
+												{monthShort}
+											</div>
+											<div style={{
+												fontSize: '10px', color: isExpanded ? 'var(--primary)' : 'var(--text-secondary)',
+												marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+											}}>
+												{dayName}
+											</div>
+										</button>
+									);
+								})}
+							</div>
+
+							{/* Expanded Session Detail */}
+							{expandedSessionId && (() => {
+								const session = filteredSessions.find((s: any) => s.id === expandedSessionId);
+								if (!session) return null;
+								const routine = routines.find((r: any) => r.id === session.routine_id);
+								const dayName = demoMode
+									? (session.day_name || t('Unknown Day'))
+									: (routine?.days[session.day_index || 0]?.day_name || t('Unknown Day'));
+								const dateStr = new Date(session.completed_at!).toLocaleDateString(undefined, {
+									weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+								});
+								const duration = session.started_at && session.completed_at
+									? Math.round((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 60000)
+									: 0;
+
+								return (
+									<div ref={expandedRef} className="card" style={{
+										border: '1px solid var(--primary-border)',
+										background: 'linear-gradient(to bottom, var(--primary-glow), transparent)',
+									}}>
+										{/* Nav arrows */}
+										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+											<button
+												onClick={goToPrev}
+												disabled={!canGoUp}
+												style={{
+													background: 'none', border: 'none', cursor: canGoUp ? 'pointer' : 'default',
+													color: canGoUp ? 'var(--text-primary)' : 'var(--text-tertiary)', padding: '4px',
+													opacity: canGoUp ? 1 : 0.3
+												}}
+											>
+												<ChevronUp size={20} />
+											</button>
+											<span className="text-xs text-tertiary">
+												{currentExpandedIndex + 1} / {filteredSessions.length}
+											</span>
+											<button
+												onClick={goToNext}
+												disabled={!canGoDown}
+												style={{
+													background: 'none', border: 'none', cursor: canGoDown ? 'pointer' : 'default',
+													color: canGoDown ? 'var(--text-primary)' : 'var(--text-tertiary)', padding: '4px',
+													opacity: canGoDown ? 1 : 0.3
+												}}
+											>
+												<ChevronDown size={20} />
+											</button>
 										</div>
-									)}
-								</div>
-							</Link>
-						);
-					})}
-				</div>
+
+										{/* Session info */}
+										<div style={{ marginBottom: '12px' }}>
+											<div className="text-lg font-bold">{demoMode ? (session.routine_name || 'Demo Routine') : (routine?.name || t('Unknown Routine'))}</div>
+											<div className="text-sm text-secondary">{dayName}</div>
+										</div>
+										<div className="flex gap-4 mb-4" style={{ flexWrap: 'wrap' }}>
+											<div className="flex items-center gap-1.5 text-xs text-secondary">
+												<Calendar size={13} /> {dateStr}
+											</div>
+											{duration > 0 && (
+												<div className="flex items-center gap-1.5 text-xs text-secondary">
+													<Clock size={13} /> {duration} min
+												</div>
+											)}
+										</div>
+
+										{/* Sets summary */}
+										{(demoMode ? session.set_count > 0 : expandedSets && expandedSets.length > 0) && (
+											<div style={{
+												background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px 12px',
+												marginBottom: '12px', fontSize: '12px', color: 'var(--text-secondary)'
+											}}>
+												<strong style={{ color: 'var(--text-primary)' }}>{demoMode ? session.set_count : expandedSets!.length} {t('sets')}</strong>
+											</div>
+										)}
+
+										{/* Action buttons */}
+										{!demoMode && (
+											<div className="flex gap-2">
+												<button
+													onClick={() => navigate(`/sessions/${session.id}`)}
+													className="btn btn-secondary flex-1"
+													style={{ fontSize: '13px' }}
+												>
+													{t('View Details')}
+												</button>
+												<button
+													onClick={() => deleteSession(session.id!)}
+													className="btn flex items-center justify-center gap-1"
+													style={{
+														fontSize: '13px', background: 'transparent',
+														border: '1px solid var(--error)', color: 'var(--error)',
+														padding: '8px 12px'
+													}}
+												>
+													<Trash2 size={14} />
+													{t('Delete')}
+												</button>
+											</div>
+										)}
+									</div>
+								);
+							})()}
+						</>
+					)}
+				</>
 			)}
 		</div>
 	);

@@ -54,8 +54,12 @@ PROD = docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml
 prod-up: ## Start all production containers in background
 	$(PROD) up -d
 
-prod-build: ## Rebuild and restart all production containers
+prod-build: ## Rebuild and restart all production containers (includes migrations + seeds)
 	$(PROD) up -d --build
+	sleep 5
+	$(PROD) exec api alembic upgrade head
+	$(PROD) exec api python -m app.seed_data
+	$(PROD) exec api python -m app.seed_demo
 
 prod-restart: ## Restart all production containers
 	$(PROD) restart
@@ -72,8 +76,9 @@ prod-logs-api: ## Follow API logs only
 prod-logs-caddy: ## Follow Caddy logs only
 	$(PROD) logs -f caddy
 
-prod-seed: ## Seed exercises into the production database
+prod-seed: ## Seed exercises + demo data into the production database
 	$(PROD) exec api python -m app.seed_data
+	$(PROD) exec api python -m app.seed_demo
 
 prod-migrate: ## Run alembic migrations on production database
 	$(PROD) exec api alembic upgrade head

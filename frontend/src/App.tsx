@@ -8,9 +8,12 @@ import CreateRoutine from './pages/CreateRoutine';
 import RoutineDetails from './pages/RoutineDetails';
 import ActiveSession from './pages/ActiveSession';
 import Stats from './pages/Stats';
+import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Sessions from './pages/Sessions';
 import Onboarding from './pages/Onboarding';
+import Quests from './pages/Quests';
+
 import { useEffect } from 'react';
 import { api } from './api/client';
 import { db } from './db/schema';
@@ -36,6 +39,12 @@ function App() {
 				i18n.changeLanguage(savedLang);
 				localStorage.setItem('i18nextLng', savedLang);
 			}
+		}
+		// Restore theme from user settings
+		if (user?.settings?.active_theme && user.settings.active_theme !== 'dark') {
+			document.documentElement.setAttribute('data-theme', user.settings.active_theme);
+		} else {
+			document.documentElement.removeAttribute('data-theme');
 		}
 	}, [user]);
 
@@ -163,12 +172,15 @@ function App() {
 				<Route path="/onboarding" element={<Onboarding />} />
 				<Route element={<Layout />}>
 					<Route path="/" element={<Stats />} />
+					<Route path="/dashboard" element={<Dashboard />} />
 					<Route path="/sessions" element={<Sessions />} />
 					<Route path="/sessions/:id" element={<ActiveSession />} />
 					<Route path="/routines" element={<Routines />} />
 					<Route path="/routines/new" element={<CreateRoutine />} />
 					<Route path="/routines/:id" element={<RoutineDetails />} />
 					<Route path="/stats" element={<Stats />} />
+					<Route path="/quests" element={<Quests />} />
+
 					<Route path="/settings" element={<Settings />} />
 				</Route>
 			</Route>

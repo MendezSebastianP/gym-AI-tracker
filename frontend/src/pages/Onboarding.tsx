@@ -15,6 +15,7 @@ export default function Onboarding() {
 		weight: user?.weight || '',
 		height: user?.height || '',
 		age: user?.age || '',
+		gender: user?.gender || '',
 		priorities: user?.priorities || { strength: false, hypertrophy: false, endurance: false, flexibility: false }
 	});
 	const [loading, setLoading] = useState(false);
@@ -41,6 +42,7 @@ export default function Onboarding() {
 				weight: formData.weight ? parseInt(formData.weight as string) : undefined,
 				height: formData.height ? parseInt(formData.height as string) : undefined,
 				age: formData.age ? parseInt(formData.age as string) : undefined,
+				gender: formData.gender || undefined,
 				priorities: formData.priorities
 			};
 
@@ -105,6 +107,22 @@ export default function Onboarding() {
 							onChange={handleChange}
 							placeholder="e.g. 25"
 						/>
+					</div>
+
+					<div className="input-group flex flex-col mb-4">
+						<label className="label">{t('Gender')}</label>
+						<select
+							name="gender"
+							className="input"
+							value={formData.gender || ''}
+							onChange={handleChange}
+							style={{ appearance: 'none' }}
+						>
+							<option value="">{t('Select Gender')}</option>
+							<option value="male">{t('Male')}</option>
+							<option value="female">{t('Female')}</option>
+							<option value="other">{t('Other')}</option>
+						</select>
 					</div>
 
 					<button className="btn btn-primary w-full mt-6" onClick={() => setStep(2)}>

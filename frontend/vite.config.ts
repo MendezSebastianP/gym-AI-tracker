@@ -52,6 +52,15 @@ export default defineConfig({
 		watch: {
 			usePolling: true
 		},
+		hmr: {
+			overlay: false
+		},
+		allowedHosts: [
+			'gym-ai-tracker.duckdns.org',
+			'.duckdns.org', // allow all duckdns subdomains
+			'localhost',
+			'192.168.1.45',
+		],
 		proxy: {
 			'/api': {
 				target: 'http://api:8000',

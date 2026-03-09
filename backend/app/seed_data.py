@@ -233,6 +233,11 @@ def seed_exercises():
     added = 0
     updated = 0
     
+    # Apply per-exercise difficulty scoring
+    from app.exercise_scoring import apply_scoring
+    for data in exercises_data:
+        apply_scoring(data)
+
     # We use an UPSERT approach to avoid breaking foreign keys
     existing_exercises = db.query(Exercise).filter(Exercise.user_id == None).all()
     existing_map = {ex.name: ex for ex in existing_exercises}
@@ -254,3 +259,4 @@ def seed_exercises():
 
 if __name__ == "__main__":
     seed_exercises()
+
