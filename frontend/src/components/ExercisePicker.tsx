@@ -112,6 +112,21 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 				if (!isMatch) return false;
 			}
 			return true;
+		}).sort((a, b) => {
+			if (!search) return 0;
+			const s = search.toLowerCase();
+			const aName = a._displayName.toLowerCase();
+			const bName = b._displayName.toLowerCase();
+
+			if (aName === s && bName !== s) return -1;
+			if (bName === s && aName !== s) return 1;
+
+			const aStarts = aName.startsWith(s);
+			const bStarts = bName.startsWith(s);
+			if (aStarts && !bStarts) return -1;
+			if (bStarts && !aStarts) return 1;
+
+			return 0;
 		}).slice(0, 100);
 	}, [exercises, search, filters, t]);
 

@@ -11,9 +11,16 @@ import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
 
 export default function CreateRoutine() {
-	const [mode, setMode] = useState<'select' | 'manual' | 'ai'>('select');
-	const [name, setName] = useState('');
-	const [days, setDays] = useState<any[]>([{ day_name: 'Day 1', exercises: [] }]);
+	const [mode, setMode] = useState<'select' | 'manual' | 'ai'>(() => {
+		return (localStorage.getItem('draftRoutineMode') as any) || 'select';
+	});
+	const [name, setName] = useState(() => {
+		return localStorage.getItem('draftRoutineName') || '';
+	});
+	const [days, setDays] = useState<any[]>(() => {
+		const saved = localStorage.getItem('draftRoutineDays');
+		return saved ? JSON.parse(saved) : [{ day_name: 'Day 1', exercises: [] }];
+	});
 	const [showPicker, setShowPicker] = useState<{ dayIndex: number } | null>(null);
 	const [nameInitialized, setNameInitialized] = useState(false);
 
@@ -21,12 +28,27 @@ export default function CreateRoutine() {
 
 	useEffect(() => {
 		if (!nameInitialized && existingRoutines !== undefined) {
-			if (existingRoutines === 0) {
+			if (existingRoutines === 0 && !localStorage.getItem('draftRoutineName')) {
 				setName('Main Routine');
 			}
 			setNameInitialized(true);
 		}
 	}, [existingRoutines, nameInitialized]);
+
+	useEffect(() => {
+		localStorage.setItem('draftRoutineMode', mode);
+		localStorage.setItem('draftRoutineName', name);
+		localStorage.setItem('draftRoutineDays', JSON.stringify(days));
+	}, [mode, name, days]);
+
+	const handleCancel = () => {
+		setMode('select');
+		setName('');
+		setDays([{ day_name: 'Day 1', exercises: [] }]);
+		localStorage.removeItem('draftRoutineMode');
+		localStorage.removeItem('draftRoutineName');
+		localStorage.removeItem('draftRoutineDays');
+	};
 
 	// AI State
 	const [aiPrompt, setAiPrompt] = useState({ days: 3, goal: 'hypertrophy', equipment: 'full_gym' });
@@ -83,6 +105,12 @@ export default function CreateRoutine() {
 					processed: false
 				});
 			}
+
+			// Clear drafts upon successful save
+			localStorage.removeItem('draftRoutineMode');
+			localStorage.removeItem('draftRoutineName');
+			localStorage.removeItem('draftRoutineDays');
+
 			navigate('/routines');
 		} catch (e) {
 			alert('Error creating routine');
@@ -168,7 +196,7 @@ export default function CreateRoutine() {
 		<div className="container fade-in" style={{ paddingBottom: '96px' }}>
 			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
 				<h1>{mode === 'ai' ? t('AI Setup') : t('New Routine')}</h1>
-				<button className="btn btn-ghost" onClick={() => setMode('select')}>{t('Cancel')}</button>
+				<button className="btn btn-ghost" onClick={handleCancel}>{t('Cancel')}</button>
 			</div>
 
 			{mode === 'ai' ? (

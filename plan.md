@@ -1,78 +1,70 @@
-# AI Personalized Routine Generation: Data Gathering Plan
+# Plan for Handling Assisted Exercises and Drop Sets
 
-## Objective
-To gather comprehensive user data necessary for generating highly personalized and effective workout routines using Large Language Models (LLMs) in the future. The data collection must be completely optional and designed as a flow ("tree") with a "Fill Later" option.
+## 1. Difficulty in Assisted & Easiest Variations
+Currently, the app uses a Normalised Strength Score (NSS) through `bw_ratio` (for bodyweight exercises) and `difficulty_factor` (for weighted exercises). 
 
-## Strategy: Dynamic Questionnaire Flow (Tree Structure)
-We will implement an onboarding flow (or a "Profile Setup" section) that acts as a structured question tree. This allows us to gather data step-by-step. All questions are **optional**, and the user can skip the entire process by clicking a "Fill Later" button to complete it from the Settings page later. 
+- **Normal Pull-Ups/Dips**: A standard Pull-Up has a `bw_ratio` of 1.0 (meaning 100% of your body weight is moved). A standard Dip has a `bw_ratio` of 0.85 (moving slightly less body mass relative to the fulcrum).
+- **Assisted Variations**: Assisted Pull-Ups and Assisted Dips have pre-defined `bw_ratio`s of 0.50 and 0.45, respectively, assuming they are about half the difficulty of an unassisted rep. 
+- **The "Assistance Weight" Problem**: On assisted machines, adding weight means adding *assistance* (making the exercise easier). However, standard fitness trackers calculate volume as `Weight × Reps`. If you log "20kg" for an Assisted Pull-Up, standard logic inherently views that as *more work* than "10kg", which is backwards. 
+- **Solution Strategy**: We need to treat "Assisted" exercises uniquely in our statistics engine. If an exercise is tagged as "Assisted Machine", the logged weight should be subtracted from an assumed body weight, or statistically inverted, so that logging 0kg (0 assistance) generates a higher score than logging 20kg (20kg of assistance). 
 
-In the Settings page, there will be a section to "Take the Routine Questionnaire" so users can retake it at any point.
+## 2. Handling Mixed Sets (e.g., 2 Pull Ups + 6 Assisted Pull Ups)
+When you combine unassisted reps with assisted reps in the same continuous series (a drop set), keeping the UI clean is paramount.
 
-### Question Tree
+**Recommended Approach:**
+Log the entire series under a single exercise block (e.g., `Assisted Pull Up`) as multiple sets, or as a single set with variable weights:
+* **Option A (Drop Sets within one exercise)**: Since we established `0kg` represents "0kg of assistance" (equivalent to a normal pull-up), you can map the transition in the same block.
+   - Set 1: 2 reps at 0kg (meaning pure unassisted pull-ups)
+   - Set 2: 6 reps at 20kg (the assisted portion)
+   *This keeps the routine clean without adding a separate "Pull Up" exercise card just for those 2 reps.*
+* **Option B (Note/Tagging system)**: Allow users to log `8 reps` on Pull-Ups but add a tag or note like `Drop set: 6 reps assisted`. While cleaner visually, this makes the back-end statistics less accurate regarding the real volume lifted.
 
-**Screen 1: Primary Goal**
-- What is your main fitness goal?
-  - Muscle Gain (Hypertrophy) (Leads to Screen 2A: Split focus)
-  - Strength Progression (Leads to Screen 2B: Programming focus)
-  - Weight Loss / Cutting (Leads to Screen 2C: Cardio/Weight balance)
-  - General Fitness / Endurance
-  - I don't know
-  - Other (Text input)
+**Developer Conclusion:** Option A is the optimal way moving forward. We will rely on logging "0kg" for the unassisted portion and "20kg" for the assisted portion within the exact same exercise card (Assisted Pull Up) to prevent interface clutter.
 
-**Screen 2 (Conditional based on Screen 1):**
-- *If Muscle Gain:* What kind of training split do you prefer to follow? (e.g., Full Body, Upper/Lower, Push/Pull/Legs, Body Part split)
-- *If Strength:* What type of strength progression logic do you prefer? (e.g., Linear Progression, Percentage Based, RPE Based)
-- *If Weight Loss:* Do you prefer incorporating high-intensity cardio, steady-state, or purely diet-focused weightlifting?
+## 3. The Issue of Statistics Inflation with Option A
 
-**Screen 3: Current Experience Level**
-- How long have you been lifting consistently?
-  - Beginner (0-6 months)
-  - Intermediate (6 months - 2 years)
-  - Advanced (2+ years)
-  - I don't know
+While "Option A" keeps the UI extremely clean, it introduces a mathematical quirk that can **inflate your statistics** if we don't handle the internal difficulty multipliers carefully.
 
-**Screen 4: Available Equipment (Multi-Select)**
-- What equipment do you have access to? (Check all that apply)
-  - Full Commercial Gym (Cable machines, racks, variety of machines)
-  - Dumbbells
-  - Barbells and Plates
-  - Power Rack / Squat Stand
-  - Pull-up Bar / Dip Station
-  - Resistance Bands
-  - Bodyweight Only
-  - Other (Text input)
+Let's look at a concrete example using our `BW_RATIOS`:
+- A normal **Pull Up** has a `bw_ratio` of **1.00** (Full difficulty).
+- An **Assisted Pull Up** has a `bw_ratio` of **0.50** (Half difficulty relative to a full pull up).
 
-**Screen 5: Time Commitment**
-- How many days per week can you realistically train? (Slider 1 to 7, or "I don't know")
-- What is your preferred session duration?
-  - 30 mins
-  - 45 mins
-  - 60 mins
-  - 90+ mins
-  - I don't know
+By logging the *entire* drop set under the "Assisted Pull Up" card (Option A), the system will apply the `0.50` multiplier to *all* reps in that card, even the reps you logged with 0kg assistance (which are technically full pull-ups).
 
-**Screen 6: Recovery and Lifestyle**
-- How would you rate your typical sleep and recovery? (e.g., Poor, Average, Excellent)
-- Do you have a highly active job outside the gym? (Yes/No)
-- How aggressively do you want to progress? (e.g., Slow & Steady, Moderate, Aggressive)
+### Example Scenario
+Assume a user weighs 80kg. The goal is to calculate the **Volume Score**.
 
-**Screen 7: Physical Limitations & Injuries**
-- Do you have any injuries or physical limitations?
-  - Yes (Reveals checkboxes: Lower Back, Shoulders, Knees, Wrists, Other: Text input)
-  - No
+**Scenario 1: True Logging (Separated Cards)**
+- Card 1: **Pull Up** (bw_ratio: 1.0)
+  - 4 reps
+  - Formula: (80kg * 1.0) * 4 reps = **320 points**
+- **Total Score for 4 pure pull ups: 320**
 
-**Screen 8: Open-Ended Details**
-- "Tell us any other information that the AI model should take into account when generating your routine." (Optional text box)
+**Scenario 2: Drop Set via Option A**
+- Card 1: **Assisted Pull Up** (bw_ratio: 0.50)
+  - Set 1: 2 reps at 0kg (Pure pull ups)
+  - Set 2: 6 reps at 20kg (Assisted)
+- *The Math (if unadjusted):*
+  - Set 1: Since it's under "Assisted Pull Up", the system incorrectly applies the 0.50 ratio. (80kg - 0kg assistance = 80kg) * 0.50 * 2 reps = **80 points** (it robbed the user of 80 points because it degraded the pull-up!).
+  - Set 2: (80kg - 20kg assistance = 60kg) * 0.50 * 6 reps = **180 points**.
+- **Total Score for 2 normal + 6 assisted: 260**
 
-## Implementation Steps
-1. **Database Schema Update:**
-   - Create a `user_preferences` table to store this data linked to `users.id`.
-   - Fields should support nullable values reflecting the optional nature of all questions.
-2. **Frontend UI:**
-   - Develop a multi-step form with Next/Back buttons and a persistent "Fill Later" button.
-   - Use engaging UI elements (cards, toggles, multi-select grids).
-   - Add a button in the Settings page to allow retaking the questionnaire.
-3. **Backend API:**
-   - Add endpoints to Get/Update these preferences.
-4. **LLM Integration (Future):**
-   - Use the gathered data (accounting for "I don't know" or missing values) to construct a detailed context prompt for the LLM. 
+**Wait, where is the inflation?**
+The inflation actually happens in the reverse scenario if the user chooses to log the entire drop-set under the **Unassisted Pull Up** card.
+If the user added a normal "Pull Up" card and logged:
+- Set 1: 2 reps @ 0kg (Pure pull up)
+- Set 2: 6 reps @ -20kg (Assisted)
+Because the "Pull Up" card has a `1.0` multiplier, the math becomes:
+- Set 1: 80 * 1.0 * 2 = 160 points.
+- Set 2: (80 - 20 = 60) * 1.0 * 6 = 360 points.
+- **Total Score: 520 points!** 
+
+The user just generated 520 points using assistance, vastly out-scoring the person who did 4 pure, extremely difficult pull-ups (320 points).
+
+### The Fix
+To prevent this massive statistical inflation (or unfair deflation), the back-end statistics processor must **dynamically shift the `bw_ratio` within the dataset if assistance is detected.**
+
+1. If an exercise is "Assisted Pull Up" but logged at **0kg assistance**, the processor must temporarily override the `bw_ratio` from `0.50` to `1.0` (matching a normal pull-up) for that specific set.
+2. If an exercise is a normal "Pull Up" but logged with **negative weight or band assistance**, the processor must dynamically drop the `bw_ratio` proportionally depending on the level of assistance.
+
+This ensures option A remains visually clean for the user in the app, but mathematically truthful in the background.
