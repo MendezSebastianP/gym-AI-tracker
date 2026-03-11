@@ -26,7 +26,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-from app.routers import auth, exercises, routines, sessions, sets, stats, sync, gamification
+from app.routers import auth, exercises, routines, sessions, sets, stats, sync, gamification, user_preferences
 
 app.include_router(auth.router)
 app.include_router(exercises.router)
@@ -36,6 +36,7 @@ app.include_router(sets.router)
 app.include_router(stats.router)
 app.include_router(sync.router)
 app.include_router(gamification.router)
+app.include_router(user_preferences.router)
 
 @app.get("/")
 def read_root():

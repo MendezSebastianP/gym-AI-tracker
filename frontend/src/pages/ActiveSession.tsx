@@ -94,10 +94,36 @@ function NumberStepper({
 
 // ─── Main Component ──────────────────────────────────────────────────
 export default function ActiveSession() {
-	const { id } = useParams();
+	const { id, routineName, index } = useParams();
 	const navigate = useNavigate();
 	const [searchParams] = useSearchParams();
-	const sessionId = parseInt(id || '0');
+	const [sessionId, setSessionId] = useState<number>(id ? parseInt(id) : 0);
+
+	useEffect(() => {
+		if (!id && routineName && index) {
+			const resolveSession = async () => {
+				const decodedName = decodeURIComponent(routineName);
+				const r = await db.routines.filter(rout => rout.name === decodedName).first();
+				const targetRoutineId = r ? r.id : undefined;
+
+				const allSessions = await db.sessions.toArray();
+				const matching = allSessions
+					.filter(s => s.routine_id === targetRoutineId && s.completed_at)
+					.sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime());
+
+				const n = parseInt(index);
+				if (n > 0 && n <= matching.length) {
+					setSessionId(matching[n - 1].id!);
+				} else {
+					navigate('/sessions'); // Fallback if not found
+				}
+			};
+			resolveSession();
+		} else if (id) {
+			setSessionId(parseInt(id));
+		}
+	}, [id, routineName, index, navigate]);
+
 	const editMode = searchParams.get('edit') === 'true';
 	const { user } = useAuthStore();
 	const { t, i18n } = useTranslation();

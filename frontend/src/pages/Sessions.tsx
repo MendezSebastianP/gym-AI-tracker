@@ -356,13 +356,19 @@ export default function Sessions() {
 									return (
 										<button
 											key={session.id}
-											onClick={() => navigate(`/sessions/${session.id}`)}
+											onClick={() => {
+												if (!demoMode) {
+													const n = filteredSessions.length - idx;
+													const routineSlug = encodeURIComponent(routine?.name || 'General');
+													navigate(`/sessions/${routineSlug}/${n}`);
+												}
+											}}
 											style={{
 												padding: '10px 6px',
 												borderRadius: '10px',
 												border: '1px solid var(--overlay-medium)',
 												background: baseBg,
-												cursor: 'pointer',
+												cursor: demoMode ? 'default' : 'pointer',
 												textAlign: 'center',
 												transition: 'all 0.15s ease',
 											}}

@@ -12,48 +12,56 @@ In the Settings page, there will be a section to "Take the Routine Questionnaire
 
 **Screen 1: Primary Goal**
 - What is your main fitness goal?
-  - 💪 Muscle Gain (Hypertrophy) (Leads to Screen 2A: Body Part focus)
-  - 🏋️ Strength Progression (Leads to Screen 2B: Lift focus)
-  - 📉 Weight Loss / Cutting (Leads to Screen 2C: Cardio/Weight balance)
-  - 🏃 General Fitness / Endurance
-  - 🤷 I don't know
-  - ➕ Other (Text input)
+  - Muscle Gain (Hypertrophy) (Leads to Screen 2A: Split focus)
+  - Strength Progression (Leads to Screen 2B: Programming focus)
+  - Weight Loss / Cutting (Leads to Screen 2C: Cardio/Weight balance)
+  - General Fitness / Endurance
+  - I don't know
+  - Other (Text input)
 
 **Screen 2 (Conditional based on Screen 1):**
-- *If Muscle Gain:* Which areas do you want to prioritize? (e.g., Upper Body, Lower Body, Balanced)
-- *If Strength:* Which compound lift do you want to improve the most? (e.g., Bench, Squat, Deadlift)
+- *If Muscle Gain:* What kind of training split do you prefer to follow? (e.g., Full Body, Upper/Lower, Push/Pull/Legs, Body Part split)
+- *If Strength:* What type of strength progression logic do you prefer? (e.g., Linear Progression, Percentage Based, RPE Based)
 - *If Weight Loss:* Do you prefer incorporating high-intensity cardio, steady-state, or purely diet-focused weightlifting?
 
 **Screen 3: Current Experience Level**
-- How long have you been lifting?
-  - 🟢 Beginner (0-6 months)
-  - 🟡 Intermediate (6 months - 2 years)
-  - 🔴 Advanced (2+ years)
-  - 🤷 I don't know
+- How long have you been lifting consistently?
+  - Beginner (0-6 months)
+  - Intermediate (6 months - 2 years)
+  - Advanced (2+ years)
+  - I don't know
 
-**Screen 4: Available Equipment / Environment**
-- Where will you be working out?
-  - 🏢 Full Commercial Gym
-  - 🏠 Home Gym (Dumbbells/Barbells)
-  - 🤸 Bodyweight Only (Calisthenics)
-  - ⚙️ Machines Only
-  - ➕ Other
+**Screen 4: Available Equipment (Multi-Select)**
+- What equipment do you have access to? (Check all that apply)
+  - Full Commercial Gym (Cable machines, racks, variety of machines)
+  - Dumbbells
+  - Barbells and Plates
+  - Power Rack / Squat Stand
+  - Pull-up Bar / Dip Station
+  - Resistance Bands
+  - Bodyweight Only
+  - Other (Text input)
 
 **Screen 5: Time Commitment**
 - How many days per week can you realistically train? (Slider 1 to 7, or "I don't know")
 - What is your preferred session duration?
-  - ⏱️ 30 mins
-  - ⏱️ 45 mins
-  - ⏱️ 60 mins
-  - ⏱️ 90+ mins
-  - 🤷 I don't know
+  - 30 mins
+  - 45 mins
+  - 60 mins
+  - 90+ mins
+  - I don't know
 
-**Screen 6: Physical Limitations & Injuries**
+**Screen 6: Recovery and Lifestyle**
+- How would you rate your typical sleep and recovery? (e.g., Poor, Average, Excellent)
+- Do you have a highly active job outside the gym? (Yes/No)
+- How aggressively do you want to progress? (e.g., Slow & Steady, Moderate, Aggressive)
+
+**Screen 7: Physical Limitations & Injuries**
 - Do you have any injuries or physical limitations?
   - Yes (Reveals checkboxes: Lower Back, Shoulders, Knees, Wrists, Other: Text input)
   - No
 
-**Screen 7: Open-Ended Details**
+**Screen 8: Open-Ended Details**
 - "Tell us any other information that the AI model should take into account when generating your routine." (Optional text box)
 
 ## Implementation Steps
@@ -62,9 +70,9 @@ In the Settings page, there will be a section to "Take the Routine Questionnaire
    - Fields should support nullable values reflecting the optional nature of all questions.
 2. **Frontend UI:**
    - Develop a multi-step form with Next/Back buttons and a persistent "Fill Later" button.
-   - Use engaging UI elements (cards with icons) rather than a simple dropdown list.
+   - Use engaging UI elements (cards, toggles, multi-select grids).
    - Add a button in the Settings page to allow retaking the questionnaire.
 3. **Backend API:**
    - Add endpoints to Get/Update these preferences.
 4. **LLM Integration (Future):**
-   - Use the gathered data (accounting for "I don't know" or missing values) to construct a detailed prompt for the LLM. 
+   - Use the gathered data (accounting for "I don't know" or missing values) to construct a detailed context prompt for the LLM. 

@@ -243,7 +243,7 @@ def buy_shop_item(
     if (current_user.currency or 0) < item["price"]:
         raise HTTPException(status_code=400, detail="Not enough coins")
 
-    current_user.currency -= item["price"]
+    current_user.currency = max(0, (current_user.currency or 0) - item["price"])
     purchased.append(req.item_id)
     settings["purchased_themes"] = purchased
     current_user.settings = settings

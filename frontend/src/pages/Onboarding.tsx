@@ -56,7 +56,7 @@ export default function Onboarding() {
 			const { checkAuth } = useAuthStore.getState();
 			await checkAuth();
 
-			navigate('/routines/new?onboarding=true');
+			navigate('/settings/questionnaire?onboarding=true');
 		} catch (e) {
 			console.error("Onboarding failed", e);
 		} finally {

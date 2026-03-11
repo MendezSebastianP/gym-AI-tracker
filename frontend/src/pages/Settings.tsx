@@ -3,7 +3,8 @@ import { useAuthStore } from '../store/authStore';
 import { db } from '../db/schema';
 import { api } from '../api/client';
 import { useState, useEffect } from 'react';
-import { Clock, Timer, Zap, User, Edit3, Save, X, Database, Globe, LogOut } from 'lucide-react';
+import { Clock, Timer, Zap, User, Edit3, Save, X, Database, Globe, LogOut, ClipboardList } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function Settings() {
 	const { t, i18n } = useTranslation();
@@ -279,6 +280,19 @@ export default function Settings() {
 
 			{/* Section Title */}
 			<h3 className="text-sm font-bold text-secondary mb-4" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>{t('Preferences')}</h3>
+
+			{/* Questionnaire */}
+			<Link to="/settings/questionnaire" className="card mb-4 p-4 flex items-center justify-between" style={{ textDecoration: 'none' }}>
+				<div className="flex items-center gap-3">
+					<div style={{ padding: '8px', background: 'rgba(204, 255, 0, 0.1)', borderRadius: '8px', color: 'var(--primary)' }}>
+						<ClipboardList size={20} />
+					</div>
+					<div>
+						<div className="font-bold text-primary">{t('Routine Questionnaire')}</div>
+						<div className="text-xs text-secondary">{t('Update your data for personalized AI routines')}</div>
+					</div>
+				</div>
+			</Link>
 
 			{/* Language */}
 			<div className="card mb-4 p-4 flex flex-col gap-4">

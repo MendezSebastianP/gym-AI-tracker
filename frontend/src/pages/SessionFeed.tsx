@@ -80,6 +80,9 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
         }
         await db.sets.where('session_id').equals(sessionId).delete();
         await db.sessions.delete(sessionId);
+        if (isTarget) {
+            navigate('/sessions');
+        }
     };
 
     return (

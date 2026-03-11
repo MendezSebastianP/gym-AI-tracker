@@ -226,7 +226,21 @@ export default function RoutineDetails() {
 				{days.map((day: any, dIndex: number) => (
 					<div key={dIndex} className="card" style={{ marginBottom: 0 }}>
 						<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-							<h3 style={{ margin: 0 }}>{day.day_name}</h3>
+							{editMode ? (
+								<input
+									type="text"
+									className="input"
+									value={day.day_name || ''}
+									onChange={(e) => {
+										const newDays = JSON.parse(JSON.stringify(editedDays));
+										newDays[dIndex].day_name = e.target.value;
+										setEditedDays(newDays);
+									}}
+									style={{ fontWeight: 'bold', fontSize: '18px', padding: '4px 8px', maxWidth: '200px' }}
+								/>
+							) : (
+								<h3 style={{ margin: 0 }}>{day.day_name}</h3>
+							)}
 							{!editMode && (
 								<button
 									className="btn btn-primary"

@@ -167,7 +167,7 @@ def remove_session_xp(db: Session, user: User, session_id: int):
         # Give back the experience for the level we just lost (e.g., passing from 2 to 1 means adding 100 to -10 -> 90)
         user.experience += exp_for_next_level(user.level)
         # Deduct the 10 coins given
-        user.currency = max(0, user.currency - 10)
+        user.currency = max(0, (user.currency or 0) - 10)
 
     # Floor at 0 if doing something weird down at level 1
     if user.level == 1 and user.experience < 0:
