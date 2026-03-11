@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Mi
 import WorkoutTimer from '../components/WorkoutTimer';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
+import SessionFeed from './SessionFeed';
 
 // ─── Inline Number Stepper (mobile-friendly) ────────────────────────
 // Replaces raw <input type="number"> with tap-to-increment/decrement buttons + editable center
@@ -112,6 +113,7 @@ export default function ActiveSession() {
 		() => db.sets.where('session_id').equals(sessionId).toArray(),
 		[sessionId]
 	);
+
 
 	const [exercises, setExercises] = useState<any[]>([]);
 	const [startTime, setStartTime] = useState<number | null>(null);
@@ -285,6 +287,14 @@ export default function ActiveSession() {
 			completed_at: end,
 			syncStatus: newSyncStatus
 		});
+
+		try {
+			const { processSyncQueue } = await import('../db/sync');
+			await processSyncQueue();
+		} catch (e) {
+			console.error("Sync on finish failed", e);
+		}
+
 		navigate('/sessions');
 	};
 
@@ -332,22 +342,13 @@ export default function ActiveSession() {
 
 	if (!session) return <div className="container">Loading session...</div>;
 
+	// ─── Completed session in browse mode → show feed ─────────────
+	if (isCompleted && !editMode) {
+		return <SessionFeed targetSessionId={sessionId} />;
+	}
+
 	return (
 		<div className="container fade-in" style={{ paddingBottom: '100px' }}>
-			{isCompleted && !editMode && (
-				<div style={{ background: 'var(--success)', color: '#000', padding: '10px', textAlign: 'center', marginBottom: '16px', borderRadius: '8px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-					<span>{t('Session Completed')}</span>
-					<button
-						className="btn btn-ghost"
-						onClick={() => navigate(`/sessions/${sessionId}?edit=true`)}
-						style={{ padding: '4px 12px', fontSize: '12px', background: 'rgba(255,255,255,0.3)', color: '#000' }}
-					>
-						<Edit size={14} style={{ marginRight: '4px' }} />
-						{t('Edit')}
-					</button>
-				</div>
-			)}
-
 			{isCompleted && editMode && (
 				<div style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--text-primary)', padding: '16px', marginBottom: '16px', borderRadius: '8px', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
 					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -392,7 +393,7 @@ export default function ActiveSession() {
 
 			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
 				<div style={{ display: 'flex', alignItems: 'center' }}>
-					<button className="btn btn-ghost" onClick={() => navigate(-1)} style={{ paddingLeft: 0, marginRight: '8px' }}>
+					<button className="btn btn-ghost" onClick={() => navigate('/sessions')} style={{ paddingLeft: 0, marginRight: '8px' }}>
 						<ArrowLeft size={24} />
 					</button>
 					<div>
@@ -424,6 +425,25 @@ export default function ActiveSession() {
 					<button className="btn btn-ghost" onClick={() => setShowHelp(!showHelp)} style={{ padding: '6px' }}>
 						<HelpCircle size={18} color="var(--text-tertiary)" />
 					</button>
+					{isEditable && !isCompleted && (
+						<button
+							className="btn btn-ghost"
+							onClick={async () => {
+								if (!confirm(t('Are you sure you want to delete this active session?'))) return;
+								try {
+									if (session.server_id) {
+										await api.delete(`/sessions/${session.server_id}`);
+									}
+								} catch (e) { }
+								await db.sets.where('session_id').equals(sessionId).delete();
+								await db.sessions.delete(sessionId);
+								navigate('/sessions');
+							}}
+							style={{ padding: '6px', color: 'var(--error)' }}
+						>
+							<Trash2 size={18} />
+						</button>
+					)}
 					{isEditable && !isCompleted && (
 						<button className="btn btn-primary" onClick={finishSession} style={{ padding: '8px 16px', fontSize: '14px' }}>
 							{t('Finish')}
@@ -536,11 +556,11 @@ export default function ActiveSession() {
 														onNext={() => focusNext(s.id!, 'reps')}
 													/>
 													<button
-														className="btn btn-ghost p-1"
+														className="btn btn-ghost"
 														onClick={() => deleteSet(s.id!)}
-														style={{ width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+														style={{ minWidth: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
 													>
-														<Trash2 size={16} style={{ color: 'var(--error)' }} />
+														<Trash2 size={20} style={{ color: 'var(--error)' }} />
 													</button>
 												</>
 											) : (

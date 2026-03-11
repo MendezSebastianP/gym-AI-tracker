@@ -4,7 +4,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.quest import Quest, UserQuest
-from app.gamification import exp_for_next_level, claim_quest_reward, assign_default_quests
+from app.gamification import _update_quest_progress, claim_quest_reward, assign_quests, exp_for_next_level
 
 router = APIRouter(
     prefix="/api/gamification",
@@ -47,7 +47,7 @@ def get_quests_demo(db: Session = Depends(get_db)):
     if not demo_user:
         return []
 
-    assign_default_quests(db, demo_user.id)
+    assign_quests(db, demo_user.id)
 
     user_quests = db.query(UserQuest).filter(
         UserQuest.user_id == demo_user.id
@@ -83,7 +83,7 @@ def get_quests(
 ):
     """Return all quests assigned to the user with their progress."""
     # Auto-assign any new quests the user doesn't have yet
-    assign_default_quests(db, current_user.id)
+    assign_quests(db, current_user.id)
 
     user_quests = db.query(UserQuest).filter(
         UserQuest.user_id == current_user.id
@@ -108,6 +108,7 @@ def get_quests(
             "completed": uq.completed,
             "claimed": uq.claimed,
             "completed_at": uq.completed_at.isoformat() if uq.completed_at else None,
+            "is_weekly": quest.is_weekly,
         })
 
     return result
@@ -271,7 +272,7 @@ def activate_theme(
     settings = dict(current_user.settings or {})
     purchased = settings.get("purchased_themes", [])
 
-    if req.theme != "dark" and req.theme not in purchased:
+    if req.theme != "dark" and f"theme_{req.theme}" not in purchased and req.theme not in purchased:
         raise HTTPException(status_code=400, detail="Theme not owned")
 
     settings["active_theme"] = req.theme

@@ -61,9 +61,9 @@
   --overlay-medium: rgba(0, 0, 0, 0.08);
   --primary-glow: rgba(45, 122, 58, 0.1);
   --primary-border: rgba(45, 122, 58, 0.3);
-  --gold: #D97706;
-  --gold-bg: rgba(217, 119, 6, 0.1);
-  --gold-border: rgba(217, 119, 6, 0.25);
+  --gold: #B45309;
+  --gold-bg: rgba(180, 83, 9, 0.1);
+  --gold-border: rgba(180, 83, 9, 0.25);
 }
 
 /* ── Theme: Gold ──────────────────────────────────────────────────── */
@@ -79,6 +79,16 @@
   --accent: #DAA520;
   --error: #FF6B6B;
   --success: #7FCC4D;
+  --border: #4A3D2E;
+  --nav-bg: rgba(26, 21, 16, 0.95);
+  --btn-text: #1A1510;
+  --overlay-light: rgba(245, 230, 200, 0.06);
+  --overlay-medium: rgba(245, 230, 200, 0.1);
+  --primary-glow: rgba(255, 215, 0, 0.15);
+  --primary-border: rgba(255, 215, 0, 0.3);
+  --gold: #FFD700;
+  --gold-bg: rgba(255, 215, 0, 0.1);
+  --gold-border: rgba(255, 215, 0, 0.25);
 }
 
 * {
@@ -121,7 +131,7 @@ a {
 
 .btn {
   display: inline-flex;
-  align_items: center;
+  align-items: center;
   justify-content: center;
   padding: 12px 24px;
   border-radius: var(--radius-md);

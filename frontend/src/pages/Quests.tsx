@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Scroll, Target, Trophy, Rocket, Medal, Crown, Repeat, Zap, Mountain, Sparkles, CheckCircle, Lock, User as UserIcon } from 'lucide-react';
+import { Scroll, Target, Trophy, Rocket, Medal, Crown, Repeat, Zap, Mountain, Sparkles, CheckCircle, Lock, User as UserIcon, ArrowLeft } from 'lucide-react';
 
 interface QuestData {
     id: number;
@@ -17,6 +18,7 @@ interface QuestData {
     completed: boolean;
     claimed: boolean;
     completed_at: string | null;
+    is_weekly?: boolean;
 }
 
 const ICON_MAP: Record<string, any> = {
@@ -35,6 +37,7 @@ const ICON_MAP: Record<string, any> = {
 
 export default function Quests() {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const [quests, setQuests] = useState<QuestData[]>([]);
     const [loading, setLoading] = useState(true);
     const [claiming, setClaiming] = useState<number | null>(null);
@@ -96,6 +99,12 @@ export default function Quests() {
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button onClick={() => navigate(-1)} style={{
+                        background: 'transparent', border: 'none', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', padding: '4px', color: 'var(--text-secondary)'
+                    }}>
+                        <ArrowLeft size={24} />
+                    </button>
                     <Scroll size={28} color="var(--primary)" />
                     <h1 className="text-2xl font-bold">{t('Quests')}</h1>
                 </div>
@@ -144,13 +153,22 @@ export default function Quests() {
                                             flexShrink: 0,
                                             border: quest.completed ? '1px solid rgba(204, 255, 0, 0.3)' : '1px solid rgba(255,255,255,0.08)'
                                         }}>
-                                            <IconComponent size={20} color={quest.completed ? '#CCFF00' : 'var(--text-tertiary)'} />
+                                            <IconComponent size={20} color={quest.completed ? 'var(--primary)' : 'var(--text-tertiary)'} />
                                         </div>
 
                                         {/* Info */}
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                                <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{quest.name}</h3>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{quest.name}</h3>
+                                                    {quest.is_weekly && (
+                                                        <span style={{
+                                                            fontSize: '9px', fontWeight: 700, textTransform: 'uppercase',
+                                                            background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1',
+                                                            padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.5px'
+                                                        }}>Weekly</span>
+                                                    )}
+                                                </div>
                                                 <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                                                     {progress}/{quest.req_value}
                                                 </span>
@@ -169,7 +187,7 @@ export default function Quests() {
                                                     height: '100%', borderRadius: '3px',
                                                     width: `${pct}%`,
                                                     background: quest.completed
-                                                        ? 'linear-gradient(90deg, #CCFF00, #6366f1)'
+                                                        ? 'linear-gradient(90deg, var(--primary), #6366f1)'
                                                         : 'var(--primary)',
                                                     transition: 'width 0.5s ease'
                                                 }} />
@@ -193,7 +211,7 @@ export default function Quests() {
                                                         style={{
                                                             padding: '6px 16px', fontSize: '12px',
                                                             fontWeight: 700, borderRadius: '8px',
-                                                            background: isDemo ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, #CCFF00, #a0cc00)',
+                                                            background: isDemo ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, var(--primary), var(--primary-dim))',
                                                             color: isDemo ? 'var(--text-tertiary)' : '#000',
                                                             border: 'none',
                                                             cursor: isDemo ? 'not-allowed' : 'pointer',
@@ -231,8 +249,20 @@ export default function Quests() {
                                     border: '1px solid rgba(255,255,255,0.05)',
                                     opacity: 0.6
                                 }}>
-                                    <IconComponent size={18} color="var(--text-tertiary)" />
-                                    <span style={{ flex: 1, fontSize: '13px', color: 'var(--text-secondary)' }}>{quest.name}</span>
+                                    <IconComponent size={18} color="var(--text-tertiary)" style={{ marginTop: '2px' }} />
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{quest.name}</span>
+                                            {quest.is_weekly && (
+                                                <span style={{
+                                                    fontSize: '9px', fontWeight: 700, textTransform: 'uppercase',
+                                                    background: 'rgba(99, 102, 241, 0.1)', color: 'var(--text-tertiary)',
+                                                    padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.5px'
+                                                }}>Weekly</span>
+                                            )}
+                                        </div>
+                                        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{quest.description}</span>
+                                    </div>
                                     <CheckCircle size={16} color="var(--success)" />
                                 </div>
                             );

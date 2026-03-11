@@ -55,7 +55,26 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 		const groups = Array.from(new Set([...defaultGroups, ...dbGroups])).sort();
 
 		const defaultEquipment = ["None (Bodyweight)", "Barbell", "Dumbbell", "Kettlebell", "Machine", "Cable", "Bands", "Smith Machine", "Other"];
-		const dbEquipment = exercises.map(e => e.equipment ? capitalize(e.equipment) : null).filter(Boolean);
+		const defaultEquipmentLower = new Set(defaultEquipment.map(e => e.toLowerCase()));
+		// Map known DB aliases to canonical display names
+		const aliasMap: Record<string, string> = {
+			'bodyweight': 'None (Bodyweight)',
+			'body weight': 'None (Bodyweight)',
+			'none': 'None (Bodyweight)',
+			'none (bodyweight)': 'None (Bodyweight)',
+			'smith machine': 'Smith Machine',
+		};
+		const dbEquipment = exercises
+			.map(e => {
+				if (!e.equipment) return null;
+				const lower = e.equipment.toLowerCase();
+				// If it maps to a default via alias, skip (already in defaults)
+				if (aliasMap[lower]) return null;
+				// If it matches a default exactly (case-insensitive), skip
+				if (defaultEquipmentLower.has(lower)) return null;
+				return capitalize(e.equipment);
+			})
+			.filter(Boolean);
 		const equipment = Array.from(new Set([...defaultEquipment, ...dbEquipment])).sort();
 
 		return { muscles, groups, equipment };
@@ -80,7 +99,18 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 				if (pMuscle !== fMuscle && sMuscle !== fMuscle) return false;
 			}
 			if (filters.group && ex.muscle_group?.toLowerCase() !== filters.group.toLowerCase()) return false;
-			if (filters.equipment && ex.equipment?.toLowerCase() !== filters.equipment.toLowerCase()) return false;
+			if (filters.equipment) {
+				const filterEq = filters.equipment.toLowerCase();
+				const exEq = (ex.equipment || '').toLowerCase();
+				// Alias matching for equipment filter
+				const bodyweightAliases = ['none (bodyweight)', 'bodyweight', 'body weight', 'none'];
+				const smithAliases = ['smith machine', 'smith'];
+				const isMatch =
+					filterEq === exEq ||
+					(bodyweightAliases.includes(filterEq) && bodyweightAliases.includes(exEq)) ||
+					(smithAliases.includes(filterEq) && smithAliases.includes(exEq));
+				if (!isMatch) return false;
+			}
 			return true;
 		}).slice(0, 100);
 	}, [exercises, search, filters, t]);

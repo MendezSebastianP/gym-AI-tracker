@@ -115,8 +115,9 @@ export default function GamificationToast() {
                     borderRadius: '10px'
                 }}>
                     <Trophy size={22} color="#FFD700" />
+                    <Trophy size={22} color="var(--gold)" />
                     <div>
-                        <div style={{ fontWeight: 800, fontSize: '16px', color: '#FFD700' }}>
+                        <div style={{ fontWeight: 800, fontSize: '16px', color: 'var(--gold)' }}>
                             Level Up!
                         </div>
                         <div style={{ fontSize: '12px', color: 'rgba(255, 215, 0, 0.8)' }}>
@@ -134,7 +135,7 @@ export default function GamificationToast() {
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0
                 }}>
-                    <Star size={20} color="#CCFF00" />
+                    <Star size={20} color="var(--gold)" />
                 </div>
                 <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
@@ -179,7 +180,7 @@ export default function GamificationToast() {
             {/* Currency earned on level up */}
             {reward.leveled_up && (
                 <div style={{
-                    marginTop: '8px', fontSize: '12px', color: '#FFD700',
+                    marginTop: '8px', fontSize: '12px', color: 'var(--gold)',
                     display: 'flex', alignItems: 'center', gap: '4px'
                 }}>
                     🪙 +10 coins earned!

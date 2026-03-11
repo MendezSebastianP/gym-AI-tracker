@@ -10,12 +10,14 @@ class Quest(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
-    req_type = Column(String(50), nullable=False)    # 'sessions', 'sets', 'weight_pr', 'rep_pr', 'volume'
+    req_type = Column(String(50), nullable=False)    # 'sessions', 'sets', 'weight_pr', 'rep_pr', 'volume', 'routines', 'duration'
     req_value = Column(Integer, nullable=False)       # target count/amount
     exp_reward = Column(Integer, nullable=False, default=0)
     currency_reward = Column(Integer, nullable=False, default=0)
     icon = Column(String(50), nullable=True, default="target")  # lucide icon name
     is_repeatable = Column(Boolean, default=False)
+    is_weekly = Column(Boolean, default=False)
+    week_group = Column(String(10), nullable=True)   # A, B, C, or D
 
 
 class UserQuest(Base):

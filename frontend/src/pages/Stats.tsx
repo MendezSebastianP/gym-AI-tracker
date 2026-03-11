@@ -33,6 +33,7 @@ interface QuestData {
 	completed: boolean;
 	claimed: boolean;
 	completed_at: string | null;
+	is_weekly?: boolean;
 }
 
 interface ShopItem {
@@ -165,7 +166,7 @@ export default function Stats() {
 			await api.post('/gamification/shop/activate', { theme: themeId });
 			// Apply theme to DOM
 			if (themeId !== 'dark') {
-				document.documentElement.setAttribute('data-theme', themeId);
+				document.documentElement.setAttribute('data-theme', 'theme_' + themeId);
 			} else {
 				document.documentElement.removeAttribute('data-theme');
 			}
@@ -373,15 +374,15 @@ export default function Stats() {
 				}}>
 					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
 						<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-							<Star size={18} color="#CCFF00" fill="#CCFF00" />
+							<Star size={18} color="var(--gold)" fill="var(--gold)" />
 							<span style={{ fontSize: '15px', fontWeight: 700 }}>
 								{t('Level')} {gamification.level}
 							</span>
 						</div>
 						<div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-							<Coins size={15} color="#FFD700" />
-							<span style={{ fontSize: '14px', fontWeight: 600, color: '#FFD700' }}>
-								{gamification.currency.toLocaleString()}
+							<Coins size={15} color="var(--gold)" />
+							<span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--gold)' }}>
+								{gamification.currency} {t('coins')}
 							</span>
 						</div>
 					</div>
@@ -393,7 +394,7 @@ export default function Stats() {
 						<div style={{
 							height: '100%', borderRadius: '4px',
 							width: `${Math.round((gamification.experience / gamification.exp_to_next) * 100)}%`,
-							background: 'linear-gradient(90deg, #6366f1, #CCFF00)',
+							background: 'linear-gradient(90deg, #6366f1, var(--primary))',
 							transition: 'width 0.5s ease',
 						}} />
 					</div>
@@ -583,12 +584,21 @@ export default function Stats() {
 												flexShrink: 0,
 												border: quest.completed ? '1px solid rgba(204, 255, 0, 0.3)' : '1px solid rgba(255,255,255,0.08)'
 											}}>
-												<IconComponent size={20} color={quest.completed ? '#CCFF00' : 'var(--text-tertiary)'} />
+												<IconComponent size={20} color={quest.completed ? 'var(--primary)' : 'var(--text-tertiary)'} />
 											</div>
 
 											<div style={{ flex: 1, minWidth: 0 }}>
 												<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-													<h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{quest.name}</h3>
+													<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+														<h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{quest.name}</h3>
+														{quest.is_weekly && (
+															<span style={{
+																fontSize: '9px', fontWeight: 700, textTransform: 'uppercase',
+																background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1',
+																padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.5px'
+															}}>Weekly</span>
+														)}
+													</div>
 													<span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
 														{progress}/{quest.req_value}
 													</span>
@@ -607,7 +617,7 @@ export default function Stats() {
 														height: '100%', borderRadius: '3px',
 														width: `${pct}%`,
 														background: quest.completed
-															? 'linear-gradient(90deg, #CCFF00, #6366f1)'
+															? 'linear-gradient(90deg, var(--primary), #6366f1)'
 															: 'var(--primary)',
 														transition: 'width 0.5s ease'
 													}} />
@@ -619,7 +629,7 @@ export default function Stats() {
 														<span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 600 }}>
 															⭐ {quest.exp_reward} XP
 														</span>
-														<span style={{ fontSize: '11px', color: '#FFD700', fontWeight: 600 }}>
+														<span style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: 600 }}>
 															🪙 {quest.currency_reward}
 														</span>
 													</div>
@@ -631,7 +641,7 @@ export default function Stats() {
 															style={{
 																padding: '6px 16px', fontSize: '12px',
 																fontWeight: 700, borderRadius: '8px',
-																background: isDemo ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, #CCFF00, #a0cc00)',
+																background: isDemo ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, var(--primary), var(--primary-dim))',
 																color: isDemo ? 'var(--text-tertiary)' : '#000',
 																border: 'none',
 																cursor: isDemo ? 'not-allowed' : 'pointer',
@@ -671,7 +681,8 @@ export default function Stats() {
 					{/* Theme items */}
 					<div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
 						{shop.items.map(item => {
-							const isActive = shop.active_theme === item.id.replace('theme_', '');
+							const themeKey = item.id.replace('theme_', '');
+							const isActive = shop.active_theme === themeKey;
 							return (
 								<div key={item.id} className="card" style={{ padding: '14px 16px', marginBottom: 0 }}>
 									<div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -681,7 +692,7 @@ export default function Stats() {
 											background: `linear-gradient(135deg, ${item.preview.primary}, ${item.preview.accent})`,
 											display: 'flex', alignItems: 'center', justifyContent: 'center',
 											flexShrink: 0,
-											border: isActive ? '2px solid #CCFF00' : '1px solid rgba(255,255,255,0.1)',
+											border: isActive ? '2px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)',
 											boxShadow: isActive ? '0 0 12px rgba(204, 255, 0, 0.3)' : 'none'
 										}}>
 											<Palette size={20} color={item.preview.text_primary || '#fff'} />
@@ -691,7 +702,7 @@ export default function Stats() {
 											<div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
 												<h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{item.name}</h3>
 												{isActive && (
-													<span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(204,255,0,0.15)', color: '#CCFF00', fontWeight: 600 }}>
+													<span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(204,255,0,0.15)', color: 'var(--primary)', fontWeight: 600 }}>
 														{t('Active')}
 													</span>
 												)}
@@ -704,10 +715,10 @@ export default function Stats() {
 										{/* Action button */}
 										<div style={{ flexShrink: 0 }}>
 											{item.owned && isActive ? (
-												<Check size={20} color="#CCFF00" />
+												<Check size={20} color="var(--primary)" />
 											) : item.owned ? (
 												<button
-													onClick={() => !isDemo && activateTheme(item.id.replace('theme_', ''))}
+													onClick={() => !isDemo && activateTheme(themeKey)}
 													disabled={!!isDemo}
 													style={{
 														padding: '6px 12px', fontSize: '11px', fontWeight: 600,
@@ -731,7 +742,7 @@ export default function Stats() {
 														background: isDemo
 															? 'rgba(255,255,255,0.06)'
 															: (gamification?.currency || 0) >= item.price
-																? 'linear-gradient(135deg, #FFD700, #DAA520)'
+																? 'linear-gradient(135deg, var(--gold), #DAA520)'
 																: 'rgba(255,255,255,0.06)',
 														color: isDemo
 															? 'var(--text-tertiary)'
@@ -760,7 +771,7 @@ export default function Stats() {
 							border: '1px solid rgba(255, 215, 0, 0.15)',
 						}}>
 							<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-								<Gift size={16} color="#FFD700" />
+								<Gift size={16} color="var(--gold)" />
 								<span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Promo Code')}</span>
 							</div>
 							<div style={{ display: 'flex', gap: '8px' }}>
@@ -795,7 +806,7 @@ export default function Stats() {
 							{promoMsg && (
 								<div style={{
 									marginTop: '8px', fontSize: '12px', fontWeight: 600,
-									color: promoMsg.ok ? '#CCFF00' : '#ff6b6b',
+									color: promoMsg.ok ? 'var(--primary)' : '#ff6b6b',
 									transition: 'all 0.3s'
 								}}>
 									{promoMsg.text}

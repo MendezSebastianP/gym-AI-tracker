@@ -53,9 +53,15 @@ def client(db_engine):
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+
+    # Disable rate limiting during tests
+    from app.limiter import limiter
+    limiter.enabled = False
+
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+    limiter.enabled = True
 
 
 # ── Helper: register + login a user and return auth headers ─────────────────

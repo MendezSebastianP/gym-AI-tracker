@@ -101,78 +101,94 @@ export const processSyncQueue = async () => {
  */
 const syncSessionToServer = async (session: any): Promise<number | null> => {
 	try {
+		const sessionSets = await db.sets.where('session_id').equals(session.id!).toArray();
+
 		if (!session.server_id) {
 			// Never created on server — create it now
 			const res = await api.post('/sessions', {
 				routine_id: session.routine_id,
 				day_index: session.day_index,
 				started_at: session.started_at,
-				completed_at: session.completed_at,
+				completed_at: null, // Send as null initially
 				notes: session.notes,
 				locked_exercises: session.locked_exercises || [],
 			});
 
 			const serverId: number = res.data.id;
+			session.server_id = serverId;
+			await db.sessions.update(session.id!, { server_id: serverId });
+		}
 
-			// Sync all sets for this local session
-			const sessionSets = await db.sets
-				.where('session_id')
-				.equals(session.id!)
-				.toArray();
+		const serverId = session.server_id;
 
-			for (const set of sessionSets) {
-				try {
-					const setRes = await api.post('/sets', {
-						session_id: serverId,   // server session id in body
-						exercise_id: set.exercise_id,
-						set_number: set.set_number,
-						weight_kg: set.weight_kg,
-						reps: set.reps,
-						duration_sec: set.duration_sec,
-						rpe: set.rpe,
-						completed_at: set.completed_at,
-					});
-					await db.sets.update(set.id!, {
-						syncStatus: 'synced',
-						server_id: setRes.data.id,
-					});
-				} catch (setErr) {
-					console.error(`Failed to sync set ${set.id}`, setErr);
-				}
-			}
-
-			await db.sessions.update(session.id!, { syncStatus: 'synced', server_id: serverId });
-			return serverId;
-
-		} else if (session.syncStatus === 'updated' && session.server_id) {
-			// Already on server, just update timestamps/notes
-			const updateRes = await api.put(`/sessions/${session.server_id}`, {
-				started_at: session.started_at,
+		if (session.completed_at) {
+			// Bulk sync and complete
+			const bulkPayload = {
 				completed_at: session.completed_at,
 				notes: session.notes,
-				locked_exercises: session.locked_exercises || [],
-			});
-			await db.sessions.update(session.id!, { syncStatus: 'synced' });
+				sets: sessionSets.map((s: any) => ({
+					exercise_id: s.exercise_id,
+					set_number: s.set_number,
+					weight_kg: s.weight_kg,
+					reps: s.reps,
+					duration_sec: s.duration_sec,
+					rpe: s.rpe,
+					completed_at: s.completed_at || session.completed_at
+				}))
+			};
 
-			// If server awarded gamification rewards, emit event for the UI
-			if (updateRes.data?.gamification) {
+			const finalRes = await api.post(`/sessions/${serverId}/complete_bulk`, bulkPayload);
+
+			// Dispatch gamification if it was just completed
+			if (finalRes.data?.gamification) {
 				window.dispatchEvent(new CustomEvent('gamification-reward', {
-					detail: updateRes.data.gamification
+					detail: finalRes.data.gamification
 				}));
 			}
 
-			// Also sync any unsynced sets belonging to this session
-			const sessionSets = await db.sets
-				.where('session_id')
-				.equals(session.id!)
-				.toArray();
+			// Mark everything synced locally
+			await db.sessions.update(session.id!, { syncStatus: 'synced' });
 
+			for (const s of sessionSets) {
+				if (finalRes.data?.sets) {
+					const serverSets = finalRes.data.sets;
+					const matchingServerSet = serverSets.find((srv: any) => srv.exercise_id === s.exercise_id && srv.set_number === s.set_number);
+					if (matchingServerSet) {
+						await db.sets.update(s.id!, { syncStatus: 'synced', server_id: matchingServerSet.id });
+					} else {
+						await db.sets.update(s.id!, { syncStatus: 'synced' });
+					}
+				} else {
+					await db.sets.update(s.id!, { syncStatus: 'synced' });
+				}
+			}
+			return serverId;
+
+		} else {
+			// Routine sync loop for IN-PROGRESS session
+			if (session.syncStatus === 'updated') {
+				const updateRes = await api.put(`/sessions/${serverId}`, {
+					started_at: session.started_at,
+					completed_at: session.completed_at,
+					notes: session.notes,
+					locked_exercises: session.locked_exercises || [],
+				});
+				await db.sessions.update(session.id!, { syncStatus: 'synced' });
+
+				if (updateRes.data?.gamification) {
+					window.dispatchEvent(new CustomEvent('gamification-reward', {
+						detail: updateRes.data.gamification
+					}));
+				}
+			}
+
+			// Also sync any unsynced sets belonging to this session
 			for (const set of sessionSets) {
 				if (set.syncStatus && set.syncStatus !== 'synced') {
 					try {
 						if (!set.server_id) {
 							const setRes = await api.post('/sets', {
-								session_id: session.server_id,
+								session_id: serverId,
 								exercise_id: set.exercise_id,
 								set_number: set.set_number,
 								weight_kg: set.weight_kg,
@@ -199,7 +215,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 				}
 			}
 
-			return session.server_id;
+			return serverId;
 		}
 	} catch (sessionErr) {
 		console.error(`Failed to sync session ${session.id}`, sessionErr);

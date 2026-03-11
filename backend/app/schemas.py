@@ -101,6 +101,20 @@ class SessionCreate(SessionBase):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
+class CompleteSetItem(BaseModel):
+    exercise_id: int
+    set_number: int
+    weight_kg: Optional[float] = None
+    reps: Optional[int] = None
+    duration_sec: Optional[int] = None
+    rpe: Optional[float] = None
+    completed_at: Optional[datetime] = None
+
+class SessionCompleteBulk(BaseModel):
+    completed_at: datetime
+    notes: Optional[str] = None
+    sets: List[CompleteSetItem] = []
+
 class SessionUpdate(SessionBase):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

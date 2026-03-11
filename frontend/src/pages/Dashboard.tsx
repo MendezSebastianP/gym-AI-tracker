@@ -119,7 +119,7 @@ export default function Dashboard() {
             });
     }, [demoMode, filterLevel, selectedGroup, selectedMuscle, selectedExerciseId]);
 
-    const lineColor = demoMode ? '#FFB347' : '#CCFF00';
+    const lineColor = demoMode ? '#FFB347' : 'var(--primary)';
     const hasData = progressData.length > 0;
 
     // Custom tooltip
@@ -152,11 +152,11 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <BarChart2 size={26} color="var(--primary)" />
                     <h1 style={{ fontSize: '22px', fontWeight: 700 }}>Stats</h1>
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
                     <button onClick={() => setShowHelp(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         <HelpCircle size={22} color="var(--text-tertiary)" />
                     </button>
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
                     <button
                         onClick={() => setDemoMode(!demoMode)}
                         style={{

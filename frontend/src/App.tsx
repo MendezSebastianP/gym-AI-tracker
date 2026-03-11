@@ -42,7 +42,7 @@ function App() {
 		}
 		// Restore theme from user settings
 		if (user?.settings?.active_theme && user.settings.active_theme !== 'dark') {
-			document.documentElement.setAttribute('data-theme', user.settings.active_theme);
+			document.documentElement.setAttribute('data-theme', 'theme_' + user.settings.active_theme);
 		} else {
 			document.documentElement.removeAttribute('data-theme');
 		}

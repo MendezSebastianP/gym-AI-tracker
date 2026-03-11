@@ -14,7 +14,7 @@ router = APIRouter(
 
 # Dummy hash used in login to keep response time constant regardless of whether
 # the email exists — prevents timing-based email enumeration (SEC-05)
-_DUMMY_HASH = "$2b$12$LV4dummyhashpreventstimingattacksfromemail.enumeration"
+_DUMMY_HASH = "$2b$12$fuDzP9mAD1GLGh5ZLU0g0uMH3/UtUNT95LJgs8k02GhpapoYN1Lge"
 
 @router.post("/register", response_model=Token)
 @limiter.limit("3/day")  # SEC-03: max 3 registrations per IP per day

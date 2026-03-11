@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, Calendar, Clock, History, HelpCircle, X, Trash2, ChevronUp, ChevronDown, User } from 'lucide-react';
+import { Play, History, HelpCircle, User, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
@@ -59,6 +59,16 @@ export default function Sessions() {
 	const deleteSession = useCallback(async (sessionId: number) => {
 		if (demoMode) return;
 		if (!confirm(t('Are you sure you want to delete this session? This cannot be undone.'))) return;
+
+		try {
+			const session = await db.sessions.get(sessionId);
+			if (session && session.server_id) {
+				await api.delete(`/sessions/${session.server_id}`);
+			}
+		} catch (e) {
+			console.error("Failed to delete from server", e);
+		}
+
 		await db.sets.where('session_id').equals(sessionId).delete();
 		await db.sessions.delete(sessionId);
 		setExpandedSessionId(null);
@@ -78,28 +88,17 @@ export default function Sessions() {
 		if (activeSession) {
 			const dayName = activeRoutine.days[activeSession.day_index || 0]?.day_name || `Day ${(activeSession.day_index || 0) + 1}`;
 
-			const discardAndStartNew = async () => {
-				if (!confirm(t("Are you sure you want to discard your in-progress session and start a new one?"))) return;
+			const discardSession = async () => {
+				if (!confirm(t("Are you sure you want to discard your in-progress session?"))) return;
+				try {
+					if (activeSession.server_id) {
+						await api.delete(`/sessions/${activeSession.server_id}`);
+					}
+				} catch (e) {
+					console.error("Failed to delete active session on server", e);
+				}
 				await db.sets.where('session_id').equals(activeSession.id!).delete();
 				await db.sessions.delete(activeSession.id!);
-				const completedSessions = sessions.filter((s: any) => s.completed_at && s.routine_id === activeRoutine.id);
-				const lastSession = completedSessions[0];
-				let nextDayIndex = 0;
-				if (activeRoutine.days && activeRoutine.days.length > 0) {
-					if (lastSession && typeof lastSession.day_index === 'number') {
-						nextDayIndex = (lastSession.day_index + 1) % activeRoutine.days.length;
-					}
-				}
-				if (!activeRoutine.days || activeRoutine.days.length === 0) return;
-				const id = await db.sessions.add({
-					user_id: activeRoutine.user_id,
-					routine_id: activeRoutine.id,
-					day_index: nextDayIndex,
-					started_at: new Date().toISOString(),
-					syncStatus: 'created',
-					locked_exercises: []
-				});
-				navigate(`/sessions/${id}`);
 			};
 
 			nextSessionCard = (
@@ -119,8 +118,10 @@ export default function Sessions() {
 						<button onClick={() => navigate(`/sessions/${activeSession.id}`)} className="btn btn-primary flex-1">
 							{t('Resume Session')}
 						</button>
-						<button onClick={discardAndStartNew} className="btn btn-secondary flex-1">
-							{t('Start New')}
+						<button onClick={discardSession} className="btn btn-secondary flex-1 flex items-center justify-center gap-2 text-error" style={{ color: 'var(--error)', borderColor: 'var(--error)' }}>
+							<Trash2 size={16} />
+							{t('Discard')}
+
 						</button>
 					</div>
 				</div>
@@ -214,17 +215,7 @@ export default function Sessions() {
 		}
 	}
 
-	// Navigate expanded session
-	const currentExpandedIndex = filteredSessions.findIndex((s: any) => s.id === expandedSessionId);
-	const canGoUp = currentExpandedIndex > 0;
-	const canGoDown = currentExpandedIndex < filteredSessions.length - 1 && currentExpandedIndex >= 0;
-
-	const goToPrev = () => {
-		if (canGoUp) setExpandedSessionId(filteredSessions[currentExpandedIndex - 1].id!);
-	};
-	const goToNext = () => {
-		if (canGoDown) setExpandedSessionId(filteredSessions[currentExpandedIndex + 1].id!);
-	};
+	// Navigation for Sessions has been moved to routing.
 
 	return (
 		<div className="container" style={{ paddingBottom: '80px' }}>
@@ -365,25 +356,25 @@ export default function Sessions() {
 									return (
 										<button
 											key={session.id}
-											onClick={() => setExpandedSessionId(isExpanded ? null : session.id!)}
+											onClick={() => navigate(`/sessions/${session.id}`)}
 											style={{
 												padding: '10px 6px',
 												borderRadius: '10px',
-												border: isExpanded ? '2px solid var(--primary)' : '1px solid var(--overlay-medium)',
-												background: isExpanded ? 'var(--primary-glow)' : baseBg,
+												border: '1px solid var(--overlay-medium)',
+												background: baseBg,
 												cursor: 'pointer',
 												textAlign: 'center',
 												transition: 'all 0.15s ease',
 											}}
 										>
-											<div style={{ fontSize: '16px', fontWeight: 700, color: isExpanded ? 'var(--primary)' : 'var(--text-primary)' }}>
+											<div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
 												{dayNum}
 											</div>
 											<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
 												{monthShort}
 											</div>
 											<div style={{
-												fontSize: '10px', color: isExpanded ? 'var(--primary)' : 'var(--text-secondary)',
+												fontSize: '10px', color: 'var(--text-secondary)',
 												marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
 											}}>
 												{dayName}
@@ -392,109 +383,6 @@ export default function Sessions() {
 									);
 								})}
 							</div>
-
-							{/* Expanded Session Detail */}
-							{expandedSessionId && (() => {
-								const session = filteredSessions.find((s: any) => s.id === expandedSessionId);
-								if (!session) return null;
-								const routine = routines.find((r: any) => r.id === session.routine_id);
-								const dayName = demoMode
-									? (session.day_name || t('Unknown Day'))
-									: (routine?.days[session.day_index || 0]?.day_name || t('Unknown Day'));
-								const dateStr = new Date(session.completed_at!).toLocaleDateString(undefined, {
-									weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
-								});
-								const duration = session.started_at && session.completed_at
-									? Math.round((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 60000)
-									: 0;
-
-								return (
-									<div ref={expandedRef} className="card" style={{
-										border: '1px solid var(--primary-border)',
-										background: 'linear-gradient(to bottom, var(--primary-glow), transparent)',
-									}}>
-										{/* Nav arrows */}
-										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-											<button
-												onClick={goToPrev}
-												disabled={!canGoUp}
-												style={{
-													background: 'none', border: 'none', cursor: canGoUp ? 'pointer' : 'default',
-													color: canGoUp ? 'var(--text-primary)' : 'var(--text-tertiary)', padding: '4px',
-													opacity: canGoUp ? 1 : 0.3
-												}}
-											>
-												<ChevronUp size={20} />
-											</button>
-											<span className="text-xs text-tertiary">
-												{currentExpandedIndex + 1} / {filteredSessions.length}
-											</span>
-											<button
-												onClick={goToNext}
-												disabled={!canGoDown}
-												style={{
-													background: 'none', border: 'none', cursor: canGoDown ? 'pointer' : 'default',
-													color: canGoDown ? 'var(--text-primary)' : 'var(--text-tertiary)', padding: '4px',
-													opacity: canGoDown ? 1 : 0.3
-												}}
-											>
-												<ChevronDown size={20} />
-											</button>
-										</div>
-
-										{/* Session info */}
-										<div style={{ marginBottom: '12px' }}>
-											<div className="text-lg font-bold">{demoMode ? (session.routine_name || 'Demo Routine') : (routine?.name || t('Unknown Routine'))}</div>
-											<div className="text-sm text-secondary">{dayName}</div>
-										</div>
-										<div className="flex gap-4 mb-4" style={{ flexWrap: 'wrap' }}>
-											<div className="flex items-center gap-1.5 text-xs text-secondary">
-												<Calendar size={13} /> {dateStr}
-											</div>
-											{duration > 0 && (
-												<div className="flex items-center gap-1.5 text-xs text-secondary">
-													<Clock size={13} /> {duration} min
-												</div>
-											)}
-										</div>
-
-										{/* Sets summary */}
-										{(demoMode ? session.set_count > 0 : expandedSets && expandedSets.length > 0) && (
-											<div style={{
-												background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px 12px',
-												marginBottom: '12px', fontSize: '12px', color: 'var(--text-secondary)'
-											}}>
-												<strong style={{ color: 'var(--text-primary)' }}>{demoMode ? session.set_count : expandedSets!.length} {t('sets')}</strong>
-											</div>
-										)}
-
-										{/* Action buttons */}
-										{!demoMode && (
-											<div className="flex gap-2">
-												<button
-													onClick={() => navigate(`/sessions/${session.id}`)}
-													className="btn btn-secondary flex-1"
-													style={{ fontSize: '13px' }}
-												>
-													{t('View Details')}
-												</button>
-												<button
-													onClick={() => deleteSession(session.id!)}
-													className="btn flex items-center justify-center gap-1"
-													style={{
-														fontSize: '13px', background: 'transparent',
-														border: '1px solid var(--error)', color: 'var(--error)',
-														padding: '8px 12px'
-													}}
-												>
-													<Trash2 size={14} />
-													{t('Delete')}
-												</button>
-											</div>
-										)}
-									</div>
-								);
-							})()}
 						</>
 					)}
 				</>

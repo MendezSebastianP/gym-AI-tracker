@@ -1,6 +1,6 @@
 """
 Tests for the stats endpoint:
-  GET /stats/weekly
+  GET /api/stats/weekly
 """
 import pytest
 from datetime import datetime, timezone, timedelta
@@ -42,7 +42,7 @@ class TestWeeklyStats:
     def test_stats_empty_user(self, client):
         """A fresh user with no sessions returns zero stats."""
         headers = register_and_login(client)
-        r = client.get("/stats/weekly", headers=headers)
+        r = client.get("/api/stats/weekly", headers=headers)
         assert r.status_code == 200
         data = r.json()
         assert data["sessions"] == 0
@@ -56,7 +56,7 @@ class TestWeeklyStats:
         headers = register_and_login(client)
         self._create_completed_session(client, headers)
         self._create_completed_session(client, headers)
-        r = client.get("/stats/weekly", headers=headers)
+        r = client.get("/api/stats/weekly", headers=headers)
         assert r.status_code == 200
         assert r.json()["sessions"] == 2
 
@@ -66,7 +66,7 @@ class TestWeeklyStats:
         session = self._create_completed_session(client, headers)
         self._add_set_to_session(client, headers, session["id"], weight=100.0, reps=10)  # 1000 kg
         self._add_set_to_session(client, headers, session["id"], weight=50.0, reps=8)   # 400 kg
-        r = client.get("/stats/weekly", headers=headers)
+        r = client.get("/api/stats/weekly", headers=headers)
         assert r.status_code == 200
         assert r.json()["volume"] == 1400
 
@@ -74,7 +74,7 @@ class TestWeeklyStats:
         """Having a session this week starts a streak of 1."""
         headers = register_and_login(client)
         self._create_completed_session(client, headers, started_offset_days=0)
-        r = client.get("/stats/weekly", headers=headers)
+        r = client.get("/api/stats/weekly", headers=headers)
         assert r.json()["streak_weeks"] >= 1
 
     def test_stats_multi_week_streak(self, client):
@@ -84,7 +84,7 @@ class TestWeeklyStats:
         self._create_completed_session(client, headers, started_offset_days=7)
         self._create_completed_session(client, headers, started_offset_days=14)
         
-        r = client.get("/stats/weekly", headers=headers)
+        r = client.get("/api/stats/weekly", headers=headers)
         assert r.json()["streak_weeks"] >= 3
 
     def test_stats_user_isolation(self, client):
@@ -93,11 +93,11 @@ class TestWeeklyStats:
         headers_b = register_and_login(client, "b@example.com")
         self._create_completed_session(client, headers_b)
 
-        r = client.get("/stats/weekly", headers=headers_a)
+        r = client.get("/api/stats/weekly", headers=headers_a)
         assert r.json()["sessions"] == 0
 
     def test_stats_unauthenticated(self, client):
-        r = client.get("/stats/weekly")
+        r = client.get("/api/stats/weekly")
         assert r.status_code == 401
 
     def test_only_completed_sessions_count(self, client):
@@ -105,5 +105,5 @@ class TestWeeklyStats:
         headers = register_and_login(client)
         # Incomplete session (no completed_at)
         client.post("/api/sessions/", json={"started_at": _iso(_now())}, headers=headers)
-        r = client.get("/stats/weekly", headers=headers)
+        r = client.get("/api/stats/weekly", headers=headers)
         assert r.json()["sessions"] == 0
