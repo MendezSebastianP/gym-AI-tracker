@@ -12,6 +12,7 @@ class Session(Base):
     day_index = Column(Integer, nullable=True) # Which day of the routine (0-based)
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    bodyweight_kg = Column(Float, nullable=True) # Snapshot of user weight at completion
     notes = Column(Text, nullable=True)
     locked_exercises = Column(JSON, default=[])
 

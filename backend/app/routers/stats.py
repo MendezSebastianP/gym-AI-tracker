@@ -164,6 +164,9 @@ def _compute_progress(db, user_id: int, muscle_group: str = None, muscle: str = 
 
     result = []
     for idx, session in enumerate(sessions):
+        # Override the base user_bw with the snapshot from the session, if it exists
+        session_bw = float(session.bodyweight_kg) if session.bodyweight_kg else user_bw
+
         # Get sets for this session
         sets_query = db.query(SetModel).filter(SetModel.session_id == session.id, SetModel.reps > 0)
 
@@ -193,13 +196,33 @@ def _compute_progress(db, user_id: int, muscle_group: str = None, muscle: str = 
 
             eff_reps = min(s.reps, 30)
 
+            weight = s.weight_kg or 0
+
             if ex.is_bodyweight:
                 bw_ratio = ex.bw_ratio or 0.65
-                effective_weight = user_bw * bw_ratio
+                
+                if 'Assisted' in ex.name:
+                    if weight == 0:
+                        # Logged at 0kg assistance - treat as unassisted
+                        bw_ratio = 0.85 if 'Dip' in ex.name else 1.0
+                        effective_weight = session_bw * bw_ratio
+                    elif weight > 0:
+                        # Logged with assistance > 0. Weight represents reduction.
+                        effective_weight = max(0, session_bw - weight) * bw_ratio
+                    else:
+                        # Logged with negative weight (unusual for Assisted class, but theoretically reduced)
+                        effective_weight = max(0, session_bw + weight) * bw_ratio
+                else:
+                    if weight < 0:
+                        # Normal exercise, but negative weight implies band/assistance
+                        effective_weight = max(0, session_bw + weight) * bw_ratio
+                    else:
+                        # Normal exercise with pos weight = extra weighted plates
+                        effective_weight = (session_bw * bw_ratio) + weight
+
                 est_1rm = effective_weight * (1 + eff_reps / 30.0)
                 session_nss += est_1rm
             else:
-                weight = s.weight_kg or 0
                 if weight <= 0:
                     continue
                 df = ex.difficulty_factor or 1.0

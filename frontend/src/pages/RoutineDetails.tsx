@@ -125,6 +125,29 @@ export default function RoutineDetails() {
 		setEditedDays(newDays);
 	};
 
+	const addDay = () => {
+		if (!editedDays) return;
+		const newDays = JSON.parse(JSON.stringify(editedDays));
+		newDays.push({
+			day_name: `Day ${newDays.length + 1}`,
+			exercises: []
+		});
+		setEditedDays(newDays);
+	};
+
+	const removeDay = (dayIndex: number) => {
+		if (!editedDays) return;
+		if (editedDays.length <= 1) {
+			alert(t('Cannot remove the last day of the routine.'));
+			return;
+		}
+		if (window.confirm(t('Are you sure you want to remove this entire day?'))) {
+			const newDays = JSON.parse(JSON.stringify(editedDays));
+			newDays.splice(dayIndex, 1);
+			setEditedDays(newDays);
+		}
+	};
+
 	const handleDragEnd = (event: any, dayIndex: number) => {
 		const { active, over } = event;
 		if (over && active.id !== over.id && editedDays) {
@@ -227,17 +250,27 @@ export default function RoutineDetails() {
 					<div key={dIndex} className="card" style={{ marginBottom: 0 }}>
 						<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
 							{editMode ? (
-								<input
-									type="text"
-									className="input"
-									value={day.day_name || ''}
-									onChange={(e) => {
-										const newDays = JSON.parse(JSON.stringify(editedDays));
-										newDays[dIndex].day_name = e.target.value;
-										setEditedDays(newDays);
-									}}
-									style={{ fontWeight: 'bold', fontSize: '18px', padding: '4px 8px', maxWidth: '200px' }}
-								/>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+									<input
+										type="text"
+										className="input"
+										value={day.day_name || ''}
+										onChange={(e) => {
+											const newDays = JSON.parse(JSON.stringify(editedDays));
+											newDays[dIndex].day_name = e.target.value;
+											setEditedDays(newDays);
+										}}
+										style={{ fontWeight: 'bold', fontSize: '18px', padding: '4px 8px', maxWidth: '200px' }}
+									/>
+									<button
+										className="btn btn-ghost p-2"
+										onClick={() => removeDay(dIndex)}
+										title={t('Remove Day')}
+										style={{ color: 'var(--error)' }}
+									>
+										<Trash2 size={18} />
+									</button>
+								</div>
 							) : (
 								<h3 style={{ margin: 0 }}>{day.day_name}</h3>
 							)}
@@ -341,6 +374,15 @@ export default function RoutineDetails() {
 						</div>
 					</div>
 				))}
+				{editMode && (
+					<button
+						className="btn btn-secondary fade-in"
+						onClick={addDay}
+						style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', marginTop: '8px' }}
+					>
+						<Plus size={18} /> {t('Add New Day')}
+					</button>
+				)}
 			</div>
 
 			{

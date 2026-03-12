@@ -107,3 +107,98 @@ class TestWeeklyStats:
         client.post("/api/sessions/", json={"started_at": _iso(_now())}, headers=headers)
         r = client.get("/api/stats/weekly", headers=headers)
         assert r.json()["sessions"] == 0
+
+class TestNSSAlgorithms:
+    def _create_session_with_exercise(self, client, headers, ex_name: str, weight: float, reps: int):
+        # Create session
+        r = client.post("/api/sessions/", json={"started_at": _iso(_now())}, headers=headers)
+        session_id = r.json()["id"]
+
+        # Provide defaults for bodyweight flags
+        is_bw = True if ("Pull Up" in ex_name or "Dip" in ex_name) else False
+
+        # Create exercise dynamically since test DB is empty
+        r = client.post("/api/exercises", json={
+            "name": ex_name,
+            "muscle": "Back",
+            "equipment": "Bodyweight" if is_bw else "Barbell",
+            "type": "bodyweight" if is_bw else "weighted",
+            "is_bodyweight": is_bw,
+            "difficulty_factor": 1.0, # Will be ignored/overwritten by stats engine for NSS logic
+            "bw_ratio": 1.0 if not "Assisted" in ex_name else 0.50
+        }, headers=headers)
+        ex_id = r.json().get("id")
+        
+        # If exercise creation fails because admin endpoint requires logic, fallback to pure db logic instead
+        # Wait, the POST /api/exercises endpoint is standard for custom exercises.
+        assert ex_id is not None, f"Failed to create exercise {ex_name}: {r.json()}"
+
+        # add set
+        client.post("/api/sets/", json={
+            "session_id": session_id,
+            "exercise_id": ex_id,
+            "set_number": 1,
+            "weight_kg": weight,
+            "reps": reps,
+            "completed_at": _iso(_now()),
+        }, headers=headers)
+
+        # Complete session via bulk
+        client.post(f"/api/sessions/{session_id}/complete_bulk", json={
+            "completed_at": _iso(_now()),
+            "notes": "",
+            "sets": [{
+                "exercise_id": ex_id,
+                "set_number": 1,
+                "weight_kg": weight,
+                "reps": reps,
+                "duration_sec": 30,
+                "rpe": 8,
+                "completed_at": _iso(_now())
+            }]
+        }, headers=headers)
+
+        return session_id
+
+    def test_nss_historical_bodyweight_snapshot(self, client):
+        headers = register_and_login(client, "snapshot@example.com")
+        
+        # User is default weight (e.g. 65kg) inside _compute_progress if not set, let's explicitly set it to 50kg
+        client.put("/api/auth/profile", json={"weight": 50.0}, headers=headers)
+        
+        # Log a pure Pull Up (bw_ratio = 1.0)
+        self._create_session_with_exercise(client, headers, "Pull Up", weight=0.0, reps=10)
+        
+        # Assert NSS at 50kg -> (50 * 1.0) * (1 + 10/30) = 50 * 1.333 = ~66.7
+        r = client.get("/api/stats/progress?muscle=Back", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 1
+        assert 66.0 <= data[0]["nss"] <= 67.0
+        
+        # Now User BULKS to 100kg
+        client.put("/api/auth/profile", json={"weight": 100.0}, headers=headers)
+        
+        # Historical progress should REMAIN at ~66.7, NOT shoot up to 133.3 (100 * 1.333)
+        r = client.get("/api/stats/progress?muscle=Back", headers=headers)
+        assert 66.0 <= r.json()[0]["nss"] <= 67.0
+
+    def test_nss_assisted_pull_up_overrides(self, client):
+        headers = register_and_login(client, "assisted@example.com")
+        client.put("/api/auth/profile", json={"weight": 80.0}, headers=headers)
+        
+        # 1. Standard Assisted Reps (e.g. 20kg assistance) -> BW = 80 - 20 = 60kg. Ratio = 0.50 -> 30kg eff * 1.333
+        self._create_session_with_exercise(client, headers, "Assisted Pull Up", weight=20.0, reps=10)
+        r = client.get("/api/stats/progress", headers=headers)
+        assert r.status_code == 200
+        assisted_nss = r.json()[0]["nss"]
+        # 30 * 1.333 = ~40.0
+        assert 39.0 <= assisted_nss <= 41.0
+        
+        # 2. Drop Set Pure Reps (0kg assistance) -> Drops ratio 0.50 back to 1.00. 80kg eff * 1.333
+        self._create_session_with_exercise(client, headers, "Assisted Pull Up", weight=0.0, reps=10)
+        r = client.get("/api/stats/progress", headers=headers)
+        pure_override_nss = r.json()[1]["nss"]
+        # 80 * 1.333 = ~106.7
+        assert 106.0 <= pure_override_nss <= 107.0
+        assert pure_override_nss > assisted_nss
