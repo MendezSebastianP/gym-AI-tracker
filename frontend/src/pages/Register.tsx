@@ -53,9 +53,11 @@ export default function Register() {
 
 	return (
 		<div className="container" style={{ justifyContent: 'center', position: 'relative' }}>
+			{/* Temporarily hide language switcher
 			<div style={{ position: 'absolute', top: '16px', right: '16px' }}>
 				<LanguageSwitcher />
 			</div>
+			*/}
 			<div style={{ marginTop: '40px' }}></div>
 			<h1 className="fade-in" style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary)' }}>Join Gym AI</h1>
 			<p className="fade-in" style={{ marginBottom: '32px', color: 'var(--text-secondary)' }}>Start your journey today.</p>

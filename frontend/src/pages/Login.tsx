@@ -50,9 +50,11 @@ export default function Login() {
 
 	return (
 		<div className="container" style={{ justifyContent: 'center', position: 'relative' }}>
+			{/* Temporarily hide language switcher 
 			<div style={{ position: 'absolute', top: '16px', right: '16px' }}>
 				<LanguageSwitcher />
 			</div>
+			*/}
 			<div style={{ marginTop: '40px' }}></div>
 
 			<h1 className="fade-in" style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary)' }}>Gym AI</h1>
