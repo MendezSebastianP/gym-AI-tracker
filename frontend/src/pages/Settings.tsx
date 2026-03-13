@@ -294,7 +294,7 @@ export default function Settings() {
 				</div>
 			</Link>
 
-			{/* Language */}
+			{/* Language (Temporarily Hidden)
 			<div className="card mb-4 p-4 flex flex-col gap-4">
 				<div className="flex items-center gap-2 font-bold">
 					<Globe size={18} className="text-secondary" />
@@ -323,6 +323,7 @@ export default function Settings() {
 					))}
 				</div>
 			</div>
+			*/}
 
 			{/* Timer Mode */}
 			<div className="card mb-4 p-4 flex flex-col gap-4">
