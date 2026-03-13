@@ -294,7 +294,7 @@ export default function Settings() {
 				</div>
 			</Link>
 
-			{/* Language (Temporarily Hidden)
+			{/* Language */}
 			<div className="card mb-4 p-4 flex flex-col gap-4">
 				<div className="flex items-center gap-2 font-bold">
 					<Globe size={18} className="text-secondary" />
@@ -305,6 +305,7 @@ export default function Settings() {
 						<button
 							key={lng}
 							onClick={() => changeLanguage(lng)}
+							disabled={lng !== 'en'}
 							className="text-sm"
 							style={{
 								flex: 1,
@@ -314,16 +315,22 @@ export default function Settings() {
 								background: i18n.language === lng ? 'var(--bg-secondary)' : 'transparent',
 								color: i18n.language === lng ? 'var(--primary)' : 'var(--text-secondary)',
 								border: 'none',
-								cursor: 'pointer',
-								boxShadow: i18n.language === lng ? '0 2px 4px rgba(0,0,0,0.2)' : 'none'
+								cursor: lng === 'en' ? 'pointer' : 'not-allowed',
+								boxShadow: i18n.language === lng ? '0 2px 4px rgba(0,0,0,0.2)' : 'none',
+								opacity: lng === 'en' ? 1 : 0.5,
+								display: 'flex',
+								flexDirection: 'column',
+								alignItems: 'center',
+								gap: '2px'
 							}}
+							title={lng !== 'en' ? 'Coming soon' : undefined}
 						>
-							{lng === 'en' ? 'English' : lng === 'es' ? 'Español' : 'Français'}
+							<span>{lng === 'en' ? 'English' : lng === 'es' ? 'Español' : 'Français'}</span>
+							{lng !== 'en' && <span style={{ fontSize: '10px', opacity: 0.7 }}>(Soon)</span>}
 						</button>
 					))}
 				</div>
 			</div>
-			*/}
 
 			{/* Timer Mode */}
 			<div className="card mb-4 p-4 flex flex-col gap-4">
