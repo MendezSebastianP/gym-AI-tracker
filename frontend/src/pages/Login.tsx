@@ -56,7 +56,7 @@ export default function Login() {
 			<div style={{ marginTop: '40px' }}></div>
 
 			<h1 className="fade-in" style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary)' }}>Gym AI</h1>
-			<p className="fade-in" style={{ marginBottom: '32px', color: 'var(--text-secondary)' }}>Track your progress, offline first.</p>
+			<p className="fade-in" style={{ marginBottom: '32px', color: 'var(--text-secondary)' }}>Track your progress</p>
 
 			{error && (
 				<div style={{
