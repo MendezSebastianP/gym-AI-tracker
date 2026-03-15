@@ -8,7 +8,7 @@
 				{
 					"match": {
 						"type": "payload-hmac-sha256",
-						"secret": "env:WEBHOOK_SECRET",
+						"secret": "bde09e9665081b85c66985d2505afe60c9e63394e81c67aa5eae18c5031827f1",
 						"parameter": {
 							"source": "header",
 							"name": "X-Hub-Signature-256"
