@@ -72,6 +72,7 @@ coverage.xml
 *.sqlite3
 *.db
 pgdata/
+backups/
 
 # Docker
 .docker/
