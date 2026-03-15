@@ -460,7 +460,7 @@ export default function ActiveSession() {
 									if (session.server_id) {
 										await api.delete(`/sessions/${session.server_id}`);
 									}
-								} catch (e) { }
+								} catch (e) { /* intentionally swallow - offline, will retry on next sync */ }
 								await db.sets.where('session_id').equals(sessionId).delete();
 								await db.sessions.delete(sessionId);
 								navigate('/sessions');

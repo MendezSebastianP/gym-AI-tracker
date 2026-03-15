@@ -36,7 +36,7 @@ export const processSyncQueue = async () => {
 				// Update with server ID (routines use server id as local id, so we need to replace)
 				await db.routines.delete(id);
 				await db.routines.put({ ...res.data, syncStatus: 'synced' });
-			} catch (e) { }
+			} catch (e) { /* intentionally swallow - offline, will retry */ }
 		}
 
 		// Opportunistically upload any un-synced sessions

@@ -211,7 +211,7 @@ export default function RoutineQuestionnaire() {
                         ])}
                     </div>
                 );
-            case 4:
+            case 4: {
                 const equipmentOpts = [
                     'Full Commercial Gym (Cable machines, racks, variety of machines)',
                     'Dumbbells',
@@ -249,6 +249,7 @@ export default function RoutineQuestionnaire() {
                         </div>
                     </div>
                 );
+            }
             case 5:
                 return (
                     <div className="fade-in">
@@ -298,7 +299,7 @@ export default function RoutineQuestionnaire() {
                         </div>
                     </div>
                 );
-            case 7:
+            case 7: {
                 const injuryOpts = ['Lower Back', 'Shoulders', 'Knees', 'Wrists'];
                 return (
                     <div className="fade-in">
@@ -354,6 +355,7 @@ export default function RoutineQuestionnaire() {
                         )}
                     </div>
                 );
+            }
             case 8:
                 return (
                     <div className="fade-in">
