@@ -1,7 +1,7 @@
 # Gym AI Tracker
 
 Offline-first Progressive Web App (PWA) for tracking gym routines and sessions.
-dummy2
+dummy3
 ## Features
 - **Offline First**: Works without internet using IndexedDB & Service Worker.
 - **Auto Sync**: Syncs with server when online.
