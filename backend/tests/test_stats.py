@@ -125,7 +125,7 @@ class TestNSSAlgorithms:
             "type": "bodyweight" if is_bw else "weighted",
             "is_bodyweight": is_bw,
             "difficulty_factor": 1.0, # Will be ignored/overwritten by stats engine for NSS logic
-            "bw_ratio": 1.0 if not "Assisted" in ex_name else 0.50
+            "bw_ratio": 1.0 if "Assisted" not in ex_name else 0.50
         }, headers=headers)
         ex_id = r.json().get("id")
         

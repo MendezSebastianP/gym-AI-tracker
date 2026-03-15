@@ -3,7 +3,7 @@
 max-line-length = 150
 
 # Global ignores to avoid blocking CI on minor formatting quirks or SQLAlchemy syntax exceptions
-extend-ignore = W293, W391, E261, E302, E303, E501, F401, F841, E711, W291, E701, E305, E402, F403, E231, E221, E712
+extend-ignore = W293, W391, E261, E302, E303, E501, F401, F841, E711, W291, E701, E305, E402, F403, E231, E221, E712, E713
 
 exclude =
     .git,
