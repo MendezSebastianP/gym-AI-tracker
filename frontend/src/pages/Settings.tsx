@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore';
 import { db } from '../db/schema';
 import { api } from '../api/client';
 import { useState, useEffect } from 'react';
-import { Clock, Timer, Zap, User, Edit3, Save, X, Database, Globe, LogOut, ClipboardList } from 'lucide-react';
+import { Clock, Timer, Zap, User, Edit3, Save, X, Database, Globe, LogOut, ClipboardList, Hourglass } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Settings() {
@@ -13,6 +13,7 @@ export default function Settings() {
 	const [message, setMessage] = useState('');
 	const [timerMode, setTimerMode] = useState<'stopwatch' | 'timer'>('stopwatch');
 	const [saving, setSaving] = useState(false);
+	const [trackTime, setTrackTime] = useState(false);
 	const [editingProfile, setEditingProfile] = useState(false);
 	const [profileData, setProfileData] = useState({
 		weight: user?.weight || '',
@@ -25,6 +26,9 @@ export default function Settings() {
 	useEffect(() => {
 		if (user?.settings?.timer_mode) {
 			setTimerMode(user.settings.timer_mode);
+		}
+		if (user?.settings?.track_time !== undefined) {
+			setTrackTime(user.settings.track_time);
 		}
 	}, [user]);
 
@@ -74,6 +78,20 @@ export default function Settings() {
 		setTimerMode(mode);
 		try {
 			const newSettings = { ...user?.settings, timer_mode: mode };
+			await api.put('/auth/me', { settings: newSettings });
+			updateUser({ settings: newSettings });
+		} catch (e: any) {
+			console.error(e);
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const saveTrackTime = async (enabled: boolean) => {
+		setSaving(true);
+		setTrackTime(enabled);
+		try {
+			const newSettings = { ...user?.settings, track_time: enabled };
 			await api.put('/auth/me', { settings: newSettings });
 			updateUser({ settings: newSettings });
 		} catch (e: any) {
@@ -381,6 +399,34 @@ export default function Settings() {
 						</div>
 					</div>
 				</div>
+			</div>
+
+			{/* Track Session Time */}
+			<div className="card mb-4 p-4 flex flex-col gap-4">
+				<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+					<div className="flex items-center gap-2 font-bold">
+						<Hourglass size={18} className="text-secondary" />
+						{t('Track Session Time')}
+					</div>
+					<div
+						onClick={() => saveTrackTime(!trackTime)}
+						style={{
+							width: '44px', height: '24px', borderRadius: '12px',
+							backgroundColor: trackTime ? 'var(--primary)' : 'rgba(255,255,255,0.15)',
+							cursor: 'pointer', position: 'relative', transition: 'background-color 0.2s',
+						}}
+					>
+						<div style={{
+							width: '20px', height: '20px', borderRadius: '50%',
+							backgroundColor: '#fff', position: 'absolute', top: '2px',
+							left: trackTime ? '22px' : '2px', transition: 'left 0.2s',
+							boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+						}} />
+					</div>
+				</div>
+				<p className="text-xs text-secondary" style={{ opacity: 0.7, margin: 0 }}>
+					{t('When enabled, a timer will count how long your session takes. Duration will appear in stats and can be edited afterwards.')}
+				</p>
 			</div>
 
 			{/* System Section Hidden Temporarily 

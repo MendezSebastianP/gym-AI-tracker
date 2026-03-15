@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Minus, Plus } from 'lucide-react';
 import WorkoutTimer from '../components/WorkoutTimer';
+import SessionElapsedTimer from '../components/SessionElapsedTimer';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
 import SessionFeed from './SessionFeed';
@@ -309,10 +310,15 @@ export default function ActiveSession() {
 		if (!session) return;
 		const end = new Date().toISOString();
 		const newSyncStatus = session.server_id ? 'updated' : 'created';
-		await db.sessions.update(sessionId, {
+		const updates: any = {
 			completed_at: end,
 			syncStatus: newSyncStatus
-		});
+		};
+		// Save duration when track_time is enabled
+		if (user?.settings?.track_time && session.started_at) {
+			updates.duration_seconds = Math.floor((Date.now() - new Date(session.started_at).getTime()) / 1000);
+		}
+		await db.sessions.update(sessionId, updates);
 
 		try {
 			const { processSyncQueue } = await import('../db/sync');
@@ -359,6 +365,9 @@ export default function ActiveSession() {
 	const isEditable = !isCompleted || editMode;
 
 	const getSessionDuration = () => {
+		if ((session as any)?.duration_seconds && (session as any).duration_seconds > 0) {
+			return Math.round((session as any).duration_seconds / 60);
+		}
 		if (!session?.started_at || !session?.completed_at) return null;
 		const start = new Date(session.started_at).getTime();
 		const end = new Date(session.completed_at).getTime();
@@ -386,6 +395,26 @@ export default function ActiveSession() {
 						>
 							{t('Done')}
 						</button>
+					</div>
+
+					{/* Duration editor */}
+					<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
+						<label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{t('Duration (minutes)')}</label>
+						<input
+							type="number"
+							value={(session as any).duration_seconds ? Math.round((session as any).duration_seconds / 60) : ''}
+							placeholder={t('Not tracked')}
+							onChange={async (e) => {
+								const mins = parseInt(e.target.value);
+								const seconds = isNaN(mins) ? null : mins * 60;
+								await db.sessions.update(sessionId, {
+									duration_seconds: seconds,
+									syncStatus: 'updated'
+								} as any);
+							}}
+							className="input"
+							style={{ width: '100%', fontSize: '14px', padding: '12px' }}
+						/>
 					</div>
 
 					<div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -427,8 +456,11 @@ export default function ActiveSession() {
 							{routine?.name || t('Session')}
 						</h2>
 						{!isCompleted && startTime && (
-							<div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+							<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
 								<WorkoutTimer mode={timerMode} startTime={startTime} />
+								{user?.settings?.track_time && (
+									<SessionElapsedTimer startTime={session.started_at} />
+								)}
 							</div>
 						)}
 						{isCompleted && (

@@ -14,6 +14,7 @@ class Session(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     bodyweight_kg = Column(Float, nullable=True) # Snapshot of user weight at completion
     notes = Column(Text, nullable=True)
+    duration_seconds = Column(Integer, nullable=True)  # Tracked session duration (user-editable)
     locked_exercises = Column(JSON, default=[])
 
     user = relationship("User")

@@ -85,12 +85,25 @@ def get_weekly_stats(
                 continue
             break
 
+    # 7. Duration stats
+    duration_sessions = db.query(SessionModel).filter(
+        SessionModel.user_id == current_user.id,
+        SessionModel.completed_at.isnot(None),
+        SessionModel.duration_seconds.isnot(None),
+        SessionModel.duration_seconds > 0
+    ).all()
+    total_duration = sum(s.duration_seconds for s in duration_sessions)
+    avg_duration = int(total_duration / len(duration_sessions)) if duration_sessions else 0
+
     return {
         "sessions": total_sessions,
         "volume": int(total_volume),
         "weekly_sessions": weekly_counts,
         "daily_sessions": daily_counts,
-        "streak_weeks": streak_weeks
+        "streak_weeks": streak_weeks,
+        "total_duration_seconds": total_duration,
+        "avg_duration_seconds": avg_duration,
+        "tracked_duration_sessions": len(duration_sessions)
     }
 
 @router.get("/muscles")

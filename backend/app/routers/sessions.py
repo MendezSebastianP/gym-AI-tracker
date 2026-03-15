@@ -113,6 +113,8 @@ def complete_session_bulk(
     db_session.completed_at = bulk_data.completed_at
     if bulk_data.notes is not None:
         db_session.notes = bulk_data.notes
+    if bulk_data.duration_seconds is not None:
+        db_session.duration_seconds = bulk_data.duration_seconds
 
     if not was_completed and db_session.completed_at is not None:
         db_session.bodyweight_kg = current_user.weight
@@ -207,6 +209,7 @@ def get_demo_sessions(
             "routine_name": routine_name,
             "day_name": day_name,
             "day_index": s.day_index,
+            "duration_seconds": s.duration_seconds,
             "set_count": len(sets),
         })
     return result

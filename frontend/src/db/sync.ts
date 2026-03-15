@@ -126,6 +126,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 			const bulkPayload = {
 				completed_at: session.completed_at,
 				notes: session.notes,
+				duration_seconds: session.duration_seconds || null,
 				sets: sessionSets.map((s: any) => ({
 					exercise_id: s.exercise_id,
 					set_number: s.set_number,
@@ -172,6 +173,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 					completed_at: session.completed_at,
 					notes: session.notes,
 					locked_exercises: session.locked_exercises || [],
+					duration_seconds: session.duration_seconds || null,
 				});
 				await db.sessions.update(session.id!, { syncStatus: 'synced' });
 

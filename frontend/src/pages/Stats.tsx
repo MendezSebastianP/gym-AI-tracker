@@ -4,10 +4,11 @@ import { Link } from 'react-router-dom';
 import { db } from '../db/schema';
 import { useTranslation } from 'react-i18next';
 import {
-	PlusCircle, Activity, TrendingUp, Dumbbell, Star, Coins,
+	PlusCircle, Activity, TrendingUp, Dumbbell, Star, Coins, Clock,
 	Target, Trophy, Rocket, Medal, Crown, Repeat, Zap, Mountain, Sparkles,
 	ShoppingBag, Palette, Check, Gift, User as UserIcon
 } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ export default function Stats() {
 	const [promoCode, setPromoCode] = useState('');
 	const [promoMsg, setPromoMsg] = useState<{ text: string; ok: boolean } | null>(null);
 	const { t } = useTranslation();
+	const { user } = useAuthStore();
 	const [isDemo, setIsDemo] = useState(false);
 
 	// ── Fetch gamification stats ──────────────────────────────────────────────
@@ -269,12 +271,20 @@ export default function Stats() {
 			}
 		}
 
+		// Duration stats
+		const durationSessions = completedSessions.filter(s => (s as any).duration_seconds && (s as any).duration_seconds > 0);
+		const totalDuration = durationSessions.reduce((sum, s) => sum + ((s as any).duration_seconds || 0), 0);
+		const avgDuration = durationSessions.length > 0 ? Math.round(totalDuration / durationSessions.length) : 0;
+
 		return {
 			sessions: weeklyTotalSessions,
 			volume: totalVolume,
 			weekly_sessions: weeklyCounts,
 			daily_sessions: dailyCounts,
-			streak_weeks: streak
+			streak_weeks: streak,
+			total_duration_seconds: totalDuration,
+			avg_duration_seconds: avgDuration,
+			tracked_duration_sessions: durationSessions.length
 		};
 	}, []);
 
@@ -413,6 +423,31 @@ export default function Stats() {
 					</div>
 					<div className="text-secondary text-sm">{t('Sessions')} <span style={{ fontSize: '10px' }}>({t('This Week')})</span></div>
 				</div>
+
+				{user?.settings?.track_time && stats.avg_duration_seconds > 0 && (
+					<div className="card text-center p-4" style={{ marginBottom: 0 }}>
+						<div className="text-3xl font-bold mb-1" style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+							<Clock size={20} />
+							{Math.round(stats.avg_duration_seconds / 60)}
+							<span className="text-sm font-normal text-tertiary">min</span>
+						</div>
+						<div className="text-secondary text-sm">{t('Avg Duration')}</div>
+					</div>
+				)}
+
+				{user?.settings?.track_time && stats.total_duration_seconds > 0 && (
+					<div className="card text-center p-4" style={{ marginBottom: 0 }}>
+						<div className="text-3xl font-bold mb-1" style={{ color: 'var(--accent)' }}>
+							{stats.total_duration_seconds >= 3600
+								? `${(stats.total_duration_seconds / 3600).toFixed(1)}`
+								: Math.round(stats.total_duration_seconds / 60)}
+							<span className="text-sm font-normal text-tertiary" style={{ marginLeft: '4px' }}>
+								{stats.total_duration_seconds >= 3600 ? 'hrs' : 'min'}
+							</span>
+						</div>
+						<div className="text-secondary text-sm">{t('Total Time')}</div>
+					</div>
+				)}
 
 				<div className="card text-center p-4" style={{ marginBottom: 0 }}>
 					<div className="text-3xl font-bold text-accent mb-1">

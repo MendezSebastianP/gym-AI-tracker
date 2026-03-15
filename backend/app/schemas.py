@@ -107,6 +107,7 @@ class SessionCreate(SessionBase):
     day_index: Optional[int] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
 
 class CompleteSetItem(BaseModel):
     exercise_id: int
@@ -120,11 +121,13 @@ class CompleteSetItem(BaseModel):
 class SessionCompleteBulk(BaseModel):
     completed_at: datetime
     notes: Optional[str] = None
+    duration_seconds: Optional[int] = None
     sets: List[CompleteSetItem] = []
 
 class SessionUpdate(SessionBase):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
 
 class SessionResponse(SessionBase):
     id: int
@@ -133,6 +136,7 @@ class SessionResponse(SessionBase):
     day_index: Optional[int] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
     sets: List[SetResponse] = []
     model_config = ConfigDict(from_attributes=True)
 

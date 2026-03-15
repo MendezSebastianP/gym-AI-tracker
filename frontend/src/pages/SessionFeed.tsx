@@ -57,9 +57,11 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
     const dateStr = new Date(session.started_at).toLocaleDateString(undefined, {
         weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
     });
-    const duration = session.started_at && session.completed_at
-        ? Math.round((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 60000)
-        : 0;
+    const duration = (session as any).duration_seconds != null && (session as any).duration_seconds > 0
+        ? Math.round((session as any).duration_seconds / 60)
+        : (session.started_at && session.completed_at
+            ? Math.round((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 60000)
+            : 0);
 
     // Group sets by exercise
     const setsByExercise = new Map<number, any[]>();

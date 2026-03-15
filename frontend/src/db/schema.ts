@@ -65,6 +65,7 @@ export interface Session {
 	day_index?: number;
 	started_at: string; // ISO string
 	completed_at?: string;
+	duration_seconds?: number;
 	notes?: string;
 	locked_exercises?: number[]; // IDs of exercises that are locked/collapsed
 	syncStatus?: 'synced' | 'created' | 'updated' | 'deleted';
@@ -110,6 +111,8 @@ class GymDatabase extends Dexie {
 			sets: '++id, server_id, session_id, exercise_id, syncStatus',
 			syncQueue: '++id, processed'
 		});
+		// v2: added duration_seconds to sessions (no index change needed)
+		this.version(2).stores({});
 	}
 }
 
