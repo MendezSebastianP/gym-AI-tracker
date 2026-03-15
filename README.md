@@ -2,6 +2,7 @@
 
 Offline-first Progressive Web App (PWA) for tracking gym routines and sessions.
 
+
 ## Features
 - **Offline First**: Works without internet using IndexedDB & Service Worker.
 - **Auto Sync**: Syncs with server when online.
