@@ -164,7 +164,7 @@ class TestNSSAlgorithms:
         headers = register_and_login(client, "snapshot@example.com")
         
         # User is default weight (e.g. 65kg) inside _compute_progress if not set, let's explicitly set it to 50kg
-        client.put("/api/auth/profile", json={"weight": 50.0}, headers=headers)
+        client.put("/api/auth/me", json={"weight": 50.0}, headers=headers)
         
         # Log a pure Pull Up (bw_ratio = 1.0)
         self._create_session_with_exercise(client, headers, "Pull Up", weight=0.0, reps=10)
@@ -177,7 +177,7 @@ class TestNSSAlgorithms:
         assert 66.0 <= data[0]["nss"] <= 67.0
         
         # Now User BULKS to 100kg
-        client.put("/api/auth/profile", json={"weight": 100.0}, headers=headers)
+        client.put("/api/auth/me", json={"weight": 100.0}, headers=headers)
         
         # Historical progress should REMAIN at ~66.7, NOT shoot up to 133.3 (100 * 1.333)
         r = client.get("/api/stats/progress?muscle=Back", headers=headers)
@@ -185,7 +185,7 @@ class TestNSSAlgorithms:
 
     def test_nss_assisted_pull_up_overrides(self, client):
         headers = register_and_login(client, "assisted@example.com")
-        client.put("/api/auth/profile", json={"weight": 80.0}, headers=headers)
+        client.put("/api/auth/me", json={"weight": 80.0}, headers=headers)
         
         # 1. Standard Assisted Reps (e.g. 20kg assistance) -> BW = 80 - 20 = 60kg. Ratio = 0.50 -> 30kg eff * 1.333
         self._create_session_with_exercise(client, headers, "Assisted Pull Up", weight=20.0, reps=10)

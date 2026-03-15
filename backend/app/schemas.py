@@ -54,6 +54,8 @@ class ExerciseBase(BaseModel):
     is_bodyweight: bool = False
     default_weight_kg: Optional[float] = None
     name_translations: Optional[Dict[str, str]] = None
+    difficulty_factor: float = 1.0
+    bw_ratio: Optional[float] = None
 
 class ExerciseCreate(ExerciseBase):
     pass
@@ -79,9 +81,14 @@ class SetCreate(SetBase):
     session_id: int
     exercise_id: int
 
-class SetUpdate(SetBase):
+class SetUpdate(BaseModel):
     exercise_id: Optional[int] = None
     set_number: Optional[int] = None
+    weight_kg: Optional[float] = None
+    reps: Optional[int] = None
+    duration_sec: Optional[int] = None
+    rpe: Optional[float] = None
+    completed_at: Optional[datetime] = None
 
 class SetResponse(SetBase):
     id: int
