@@ -16,4 +16,4 @@ export GIT_CONFIG_GLOBAL=/tmp/.gc
 git config --global --add safe.directory /app
 git fetch https://github.com/MendezSebastianP/gym-AI-tracker.git main
 git reset --hard FETCH_HEAD
-exec /bin/bash /scripts/redeploy.sh --post-pull
+exec /bin/bash /app/deploy/redeploy.sh --post-pull
