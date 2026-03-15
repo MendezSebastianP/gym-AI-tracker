@@ -56,7 +56,10 @@ services:
       - agent_net
 
   webhook:
-    image: almir/webhook:2.8.1
+    image: gym-ai-tracker-webhook
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.webhook
     restart: always
     depends_on:
       - dockerproxy
@@ -67,7 +70,7 @@ services:
       # Docker socket removed — routed through restricted dockerproxy instead
       - .:/app
     working_dir: /app
-    command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload", "-template"]
+    command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload"]
     environment:
       - WEBHOOK_SECRET=${WEBHOOK_SECRET}
       - DOCKER_HOST=tcp://dockerproxy:2375

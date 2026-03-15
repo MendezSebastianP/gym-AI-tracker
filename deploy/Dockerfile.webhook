@@ -1,0 +1,9 @@
+FROM alpine:3.19
+
+# Install bash, docker CLI (with compose plugin), and git
+RUN apk add --no-cache bash docker-cli docker-cli-compose git
+
+# Install webhook from Alpine community repo (musl-compatible)
+RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community webhook
+
+ENTRYPOINT ["/usr/bin/webhook"]
