@@ -27,6 +27,11 @@ class Exercise(Base):
     # For bodyweight exercises: fraction of bodyweight engaged per rep
     # Anchored at Pull-up = 1.0
     bw_ratio = Column(Float, nullable=True)
+
+    # AI Difficulty Level (1-10): used to filter the exercise catalog sent to OpenAI.
+    # 1 = universally accessible (e.g., curls, pushups)
+    # 10 = elite-level (e.g., planche, muscle-up)
+    difficulty_level = Column(Integer, default=1, nullable=False, server_default="1")
     
     # User ownership for custom exercises (if null, it's a system exercise)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

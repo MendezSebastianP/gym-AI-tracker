@@ -5,3 +5,4 @@ from .session import Session, Set
 from .sync import SyncEvent
 from .quest import Quest, UserQuest
 from .user_preference import UserPreference
+from .ai_usage_log import AIUsageLog

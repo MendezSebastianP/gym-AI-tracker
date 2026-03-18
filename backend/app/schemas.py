@@ -5,6 +5,7 @@ from datetime import datetime
 # Token
 class Token(BaseModel):
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str
 
 class TokenData(BaseModel):
@@ -12,9 +13,10 @@ class TokenData(BaseModel):
 
 # User
 class UserBase(BaseModel):
-    email: EmailStr
+    email: str
 
 class UserCreate(UserBase):
+    email: EmailStr
     password: str
 
 class UserLogin(UserBase):
@@ -23,6 +25,7 @@ class UserLogin(UserBase):
 class UserResponse(UserBase):
     id: int
     is_active: bool
+    is_admin: bool = False
     settings: Optional[Dict[str, Any]] = None
     weight: Optional[int] = None
     height: Optional[int] = None
@@ -60,11 +63,26 @@ class ExerciseBase(BaseModel):
 class ExerciseCreate(ExerciseBase):
     pass
 
+class ExerciseUpdateAdmin(BaseModel):
+    name: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    muscle: Optional[str] = Field(None, max_length=50)
+    secondary_muscle: Optional[str] = Field(None, max_length=50)
+    muscle_group: Optional[str] = Field(None, max_length=50)
+    equipment: Optional[str] = Field(None, max_length=50)
+    type: Optional[str] = Field(None, max_length=50)
+    is_bodyweight: Optional[bool] = None
+    default_weight_kg: Optional[float] = None
+    name_translations: Optional[Dict[str, str]] = None
+    difficulty_factor: Optional[float] = None
+    bw_ratio: Optional[float] = None
+
 class ExerciseResponse(ExerciseBase):
     id: int
     source: str
     user_id: Optional[int] = None
     difficulty_factor: float = 1.0
+    difficulty_level: int = 1
     bw_ratio: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -160,7 +178,7 @@ class RoutineBase(BaseModel):
     days: List[Dict[str, Any]] = []  # Flexible for now, or use RoutineDay
 
 class RoutineCreate(RoutineBase):
-    pass
+    ai_usage_id: Optional[int] = None
 
 class RoutineUpdate(BaseModel):
     name: Optional[str] = None

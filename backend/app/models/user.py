@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Float
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Float, DateTime
 from app.database import Base
 
 class User(Base):
@@ -18,8 +18,16 @@ class User(Base):
     gender = Column(String, nullable=True)  # "male", "female", or null
     priorities = Column(JSON, default={}) # e.g. ["strength", "hypertrophy"]
 
+    # Refresh token
+    refresh_token_hash = Column(String, nullable=True)
+    refresh_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+
     # Gamification
     level = Column(Integer, default=1, server_default="1")
     experience = Column(Integer, default=0, server_default="0")
     currency = Column(Integer, default=0, server_default="0")
+
+    @property
+    def is_admin(self) -> bool:
+        return self.email == "admon0208"
 

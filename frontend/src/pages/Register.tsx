@@ -21,7 +21,7 @@ export default function Register() {
 
 		try {
 			const response = await api.post('/auth/register', { email, password });
-			await login(response.data.access_token);
+			await login(response.data.access_token, response.data.refresh_token);
 			navigate('/onboarding');
 		} catch (err: any) {
 			console.error('Registration error:', err);

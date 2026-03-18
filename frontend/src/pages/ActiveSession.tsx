@@ -214,11 +214,12 @@ export default function ActiveSession() {
 				const prevExSets = previousSets.filter((s: any) => s.exercise_id === ex.exercise_id);
 				const detail = detailsMap.get(ex.exercise_id);
 				const defaultWeightDb = (detail as any)?.default_weight_kg || 0;
+				const isTime = detail?.type === 'Time';
 
 				if (isLocked) {
 					const numSets = ex.sets || 3;
-					const defaultReps = typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10;
-					const defaultWeight = ex.weight_kg || defaultWeightDb || 0;
+					const defaultReps = isTime ? 0 : (typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10);
+					const defaultWeight = isTime ? 0 : (ex.weight_kg || defaultWeightDb || 0);
 
 					for (let i = 1; i <= numSets; i++) {
 						newSets.push({
@@ -227,6 +228,7 @@ export default function ActiveSession() {
 							set_number: i,
 							weight_kg: defaultWeight,
 							reps: defaultReps,
+							duration_sec: isTime ? 30 : undefined,
 							completed_at: new Date().toISOString(),
 							syncStatus: 'created'
 						});
@@ -239,14 +241,15 @@ export default function ActiveSession() {
 							set_number: idx + 1,
 							weight_kg: prevSet.weight_kg || 0,
 							reps: prevSet.reps || 0,
+							duration_sec: isTime ? (prevSet.duration_sec || 30) : undefined,
 							completed_at: new Date().toISOString(),
 							syncStatus: 'created'
 						});
 					});
 				} else {
 					const numSets = ex.sets || 3;
-					const defaultReps = typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10;
-					const defaultWeight = ex.weight_kg || defaultWeightDb || 0;
+					const defaultReps = isTime ? 0 : (typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10);
+					const defaultWeight = isTime ? 0 : (ex.weight_kg || defaultWeightDb || 0);
 
 					for (let i = 1; i <= numSets; i++) {
 						newSets.push({
@@ -255,6 +258,7 @@ export default function ActiveSession() {
 							set_number: i,
 							weight_kg: defaultWeight,
 							reps: defaultReps,
+							duration_sec: isTime ? 30 : undefined,
 							completed_at: new Date().toISOString(),
 							syncStatus: 'created'
 						});
@@ -288,15 +292,18 @@ export default function ActiveSession() {
 				const ids = day.exercises.map((e: any) => e.exercise_id);
 				db.exercises.bulkGet(ids).then(exerciseDetails => {
 					const currentLang = i18n.language.split('-')[0];
+					const detailsMap = new Map<number, any>();
+					exerciseDetails.forEach((d: any) => { if (d) detailsMap.set(d.id, d); });
 
-					const enriched = day.exercises.map((e: any, i: number) => {
-						const detail = exerciseDetails[i];
-						const translatedName = (detail as any)?.name_translations?.[currentLang] || detail?.name || e.name || 'Unknown';
+					const enriched = day.exercises.map((e: any) => {
+						const detail = detailsMap.get(e.exercise_id);
+						const translatedName = detail?.name_translations?.[currentLang] || detail?.name || e.name || 'Unknown';
 
 						return {
 							...e,
 							name: translatedName,
 							is_bodyweight: detail?.is_bodyweight || false,
+							type: detail?.type || 'Strength',
 						};
 					});
 					setExercises(enriched);
@@ -341,12 +348,15 @@ export default function ActiveSession() {
 	const addSet = async (exerciseId: number) => {
 		const existingSets = sets?.filter((s: any) => s.exercise_id === exerciseId) || [];
 		const nextSetNumber = existingSets.length + 1;
+		const ex = exercises.find((e: any) => e.exercise_id === exerciseId);
+		const isTime = ex?.type === 'Time';
 		await db.sets.add({
 			session_id: sessionId,
 			exercise_id: exerciseId,
 			set_number: nextSetNumber,
-			weight_kg: 0,
-			reps: 10,
+			weight_kg: isTime ? 0 : 0,
+			reps: isTime ? 0 : 10,
+			duration_sec: isTime ? 30 : undefined,
 			completed_at: new Date().toISOString(),
 			syncStatus: 'created'
 		});
@@ -488,11 +498,19 @@ export default function ActiveSession() {
 							className="btn btn-ghost"
 							onClick={async () => {
 								if (!confirm(t('Are you sure you want to delete this active session?'))) return;
-								try {
-									if (session.server_id) {
+								if (session.server_id) {
+									try {
 										await api.delete(`/sessions/${session.server_id}`);
+									} catch (e) {
+										// Queue delete for retry when back online
+										await db.syncQueue.add({
+											event_type: 'delete_session',
+											payload: { server_id: session.server_id },
+											client_timestamp: new Date().toISOString(),
+											processed: false,
+										});
 									}
-								} catch (e) { /* intentionally swallow - offline, will retry on next sync */ }
+								}
 								await db.sets.where('session_id').equals(sessionId).delete();
 								await db.sessions.delete(sessionId);
 								navigate('/sessions');
@@ -588,8 +606,14 @@ export default function ActiveSession() {
 								<>
 									<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-tertiary)', padding: '0 8px', gap: '8px' }}>
 										<span style={{ width: '30px' }}>{t('SET')}</span>
-										<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{ex.is_bodyweight ? '+KG' : 'KG'}</span>
-										<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{t('REPS')}</span>
+										{ex.type === 'Time' ? (
+											<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{t('SECONDS')}</span>
+										) : (
+											<>
+												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{ex.is_bodyweight ? '+KG' : 'KG'}</span>
+												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{t('REPS')}</span>
+											</>
+										)}
 										<span style={{ width: '40px' }}></span>
 									</div>
 
@@ -599,20 +623,33 @@ export default function ActiveSession() {
 
 											{isEditable ? (
 												<>
-													<NumberStepper
-														value={s.weight_kg || 0}
-														onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
-														step={ex.is_bodyweight ? 1 : 2.5}
-														inputId={`set-${s.id}-weight`}
-														onNext={() => focusNext(s.id!, 'weight')}
-													/>
-													<NumberStepper
-														value={s.reps || 0}
-														onChange={(v) => updateSet(s.id!, 'reps', v)}
-														step={1}
-														inputId={`set-${s.id}-reps`}
-														onNext={() => focusNext(s.id!, 'reps')}
-													/>
+													{ex.type === 'Time' ? (
+														<NumberStepper
+															value={s.duration_sec || 0}
+															onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
+															step={5}
+															min={0}
+															inputId={`set-${s.id}-duration`}
+															onNext={() => focusNext(s.id!, 'reps')}
+														/>
+													) : (
+														<>
+															<NumberStepper
+																value={s.weight_kg || 0}
+																onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
+																step={ex.is_bodyweight ? 1 : 2.5}
+																inputId={`set-${s.id}-weight`}
+																onNext={() => focusNext(s.id!, 'weight')}
+															/>
+															<NumberStepper
+																value={s.reps || 0}
+																onChange={(v) => updateSet(s.id!, 'reps', v)}
+																step={1}
+																inputId={`set-${s.id}-reps`}
+																onNext={() => focusNext(s.id!, 'reps')}
+															/>
+														</>
+													)}
 													<button
 														className="btn btn-ghost"
 														onClick={() => deleteSet(s.id!)}
@@ -623,8 +660,14 @@ export default function ActiveSession() {
 												</>
 											) : (
 												<>
-													<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.weight_kg}</span>
-													<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.reps}</span>
+													{ex.type === 'Time' ? (
+														<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.duration_sec || 0}s</span>
+													) : (
+														<>
+															<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.weight_kg}</span>
+															<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.reps}</span>
+														</>
+													)}
 													<span style={{ width: '40px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
 														<CheckCircle size={16} color="var(--success)" />
 													</span>

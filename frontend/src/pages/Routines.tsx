@@ -13,6 +13,9 @@ export default function Routines() {
 	const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 	const [showHelp, setShowHelp] = useState(false);
 
+	const draftName = localStorage.getItem('draftRoutineName');
+	const draftMode = localStorage.getItem('draftRoutineMode');
+
 	useEffect(() => {
 		if (navigator.onLine) {
 			api.get('/routines?include_archived=true').then(res => {
@@ -208,6 +211,44 @@ export default function Routines() {
 						</div>
 					</Link>
 				))}
+
+				{draftName && (
+					<Link
+						to="/routines/new"
+						className="card"
+						style={{
+							display: 'flex',
+							justifyContent: 'space-between',
+							alignItems: 'center',
+							textDecoration: 'none',
+							color: 'inherit',
+							border: '1px dashed var(--border)',
+							position: 'relative',
+							overflow: 'hidden',
+							opacity: 0.8,
+							backgroundColor: 'var(--bg-secondary)',
+							marginTop: '4px'
+						}}
+					>
+						<div style={{ paddingLeft: '0', flex: 1 }}>
+							<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+								<h3 style={{ margin: 0, fontSize: '16px', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+									{draftName || t('Untitled Draft')}
+								</h3>
+								<span style={{
+									fontSize: '10px', background: 'var(--bg-tertiary)',
+									color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: '4px',
+									fontWeight: 'bold', textTransform: 'uppercase'
+								}}>
+									{draftMode === 'ai' ? t('AI Draft') : t('Draft')}
+								</span>
+							</div>
+							<p style={{ color: 'var(--text-tertiary)', marginTop: '4px', fontSize: '13px' }}>
+								{t('Tap to resume editing')}
+							</p>
+						</div>
+					</Link>
+				)}
 			</div>
 
 			{/* Archive Section */}

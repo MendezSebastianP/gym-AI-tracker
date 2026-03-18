@@ -18,6 +18,8 @@ export const processSyncQueue = async () => {
 				try {
 					if (event.event_type === 'create_routine') {
 						await api.post('/routines', event.payload);
+					} else if (event.event_type === 'delete_session') {
+						await api.delete(`/sessions/${event.payload.server_id}`);
 					}
 					// Always delete to unblock queue
 					if (event.id) await db.syncQueue.delete(event.id);
@@ -79,6 +81,7 @@ export const processSyncQueue = async () => {
 					await api.put(`/sets/${set.server_id}`, {
 						weight_kg: set.weight_kg,
 						reps: set.reps,
+						duration_sec: set.duration_sec,
 						set_number: set.set_number,
 					});
 					await db.sets.update(set.id!, { syncStatus: 'synced' });
@@ -280,6 +283,7 @@ export const syncAllDataBeforeLogout = async () => {
 					await api.put(`/sets/${set.server_id}`, {
 						weight_kg: set.weight_kg,
 						reps: set.reps,
+						duration_sec: set.duration_sec,
 						set_number: set.set_number,
 					});
 					await db.sets.update(set.id!, { syncStatus: 'synced' });
@@ -293,6 +297,21 @@ export const syncAllDataBeforeLogout = async () => {
 	} catch (e) {
 		console.error("Failed to sync all data before logout", e);
 	}
+};
+
+/**
+ * Returns server IDs of sessions that are pending deletion in the sync queue.
+ * Used by syncUserData to avoid re-creating sessions the user already deleted.
+ */
+export const getPendingDeleteServerIds = async (): Promise<Set<number>> => {
+	const allEvents = await db.syncQueue.toArray();
+	const ids = new Set<number>();
+	for (const e of allEvents) {
+		if (e.event_type === 'delete_session' && e.payload?.server_id) {
+			ids.add(e.payload.server_id);
+		}
+	}
+	return ids;
 };
 
 // Setup interval

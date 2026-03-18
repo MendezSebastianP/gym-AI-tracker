@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, History, HelpCircle, User, Trash2 } from 'lucide-react';
+import { Play, History, HelpCircle, User, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
@@ -90,12 +90,18 @@ export default function Sessions() {
 
 			const discardSession = async () => {
 				if (!confirm(t("Are you sure you want to discard your in-progress session?"))) return;
-				try {
-					if (activeSession.server_id) {
+				if (activeSession.server_id) {
+					try {
 						await api.delete(`/sessions/${activeSession.server_id}`);
+					} catch (e) {
+						// Queue delete for retry when back online
+						await db.syncQueue.add({
+							event_type: 'delete_session',
+							payload: { server_id: activeSession.server_id },
+							client_timestamp: new Date().toISOString(),
+							processed: false,
+						});
 					}
-				} catch (e) {
-					console.error("Failed to delete active session on server", e);
 				}
 				await db.sets.where('session_id').equals(activeSession.id!).delete();
 				await db.sessions.delete(activeSession.id!);

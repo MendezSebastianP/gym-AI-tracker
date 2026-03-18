@@ -33,12 +33,16 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
         const ids = day.exercises.map((e: any) => e.exercise_id);
         db.exercises.bulkGet(ids).then(details => {
             const currentLang = i18n.language.split('-')[0];
-            const enriched = day.exercises.map((e: any, i: number) => {
-                const detail = details[i];
+            const detailsMap = new Map<number, any>();
+            details.forEach((d: any) => { if (d) detailsMap.set(d.id, d); });
+
+            const enriched = day.exercises.map((e: any) => {
+                const detail = detailsMap.get(e.exercise_id);
                 return {
                     ...e,
-                    name: (detail as any)?.name_translations?.[currentLang] || detail?.name || e.name || 'Unknown',
+                    name: detail?.name_translations?.[currentLang] || detail?.name || e.name || 'Unknown',
                     is_bodyweight: detail?.is_bodyweight || false,
+                    type: detail?.type || 'Strength',
                 };
             });
             setExercises(enriched);
@@ -73,12 +77,17 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 
     const handleDelete = async () => {
         if (!confirm(t('Are you sure you want to delete this session? This cannot be undone.'))) return;
-        try {
-            if (session.server_id) {
+        if (session.server_id) {
+            try {
                 await api.delete(`/sessions/${session.server_id}`);
+            } catch (e) {
+                await db.syncQueue.add({
+                    event_type: 'delete_session',
+                    payload: { server_id: session.server_id },
+                    client_timestamp: new Date().toISOString(),
+                    processed: false,
+                });
             }
-        } catch (e) {
-            console.error("Failed to delete from server", e);
         }
         await db.sets.where('session_id').equals(sessionId).delete();
         await db.sessions.delete(sessionId);
@@ -163,8 +172,14 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
                                         padding: '2px 0'
                                     }}>
                                         <CheckCircle size={12} color="var(--success)" style={{ flexShrink: 0 }} />
-                                        <span style={{ minWidth: '50px' }}>{s.weight_kg} kg</span>
-                                        <span>× {s.reps} reps</span>
+                                        {ex.type === 'Time' ? (
+                                            <span>{s.duration_sec || 0}s</span>
+                                        ) : (
+                                            <>
+                                                <span style={{ minWidth: '50px' }}>{s.weight_kg} kg</span>
+                                                <span>× {s.reps} reps</span>
+                                            </>
+                                        )}
                                     </div>
                                 ))}
                             </div>

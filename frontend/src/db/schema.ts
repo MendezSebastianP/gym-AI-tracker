@@ -1,4 +1,5 @@
-import Dexie, { Table } from 'dexie';
+import Dexie from 'dexie';
+import type { Table } from 'dexie';
 
 export interface User {
 	id: number;
@@ -12,6 +13,7 @@ export interface User {
 	height?: number;
 	age?: number;
 	priorities?: any;
+	is_admin?: boolean;
 }
 
 export interface Exercise {
@@ -25,6 +27,7 @@ export interface Exercise {
 	type?: string;
 	is_bodyweight?: boolean;
 	default_weight_kg?: number;
+	difficulty_level?: number;
 	source: string;
 	user_id?: number;
 	name_translations?: Record<string, string>;

@@ -15,15 +15,22 @@ import Onboarding from './pages/Onboarding';
 import Quests from './pages/Quests';
 import RoutineQuestionnaire from './pages/RoutineQuestionnaire';
 
+import { AdminRoute } from './components/AdminRoute';
+import AdminLayout from './components/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminExercises from './pages/admin/AdminExercises';
+import AdminSettings from './pages/admin/AdminSettings';
+
 import { useEffect } from 'react';
 import { api } from './api/client';
 import { db } from './db/schema';
 import { useAuthStore } from './store/authStore';
-import { startSyncService, stopSyncService } from './db/sync';
+import { startSyncService, stopSyncService, getPendingDeleteServerIds } from './db/sync';
 import i18n from './i18n';
 
 function App() {
-	const { isAuthenticated, user } = useAuthStore();
+	const { isAuthenticated, isAdmin, user } = useAuthStore();
 
 	useEffect(() => {
 		if (isAuthenticated) {
@@ -93,9 +100,13 @@ function App() {
 				const activeServerSessionIds = new Set<number>();
 				const activeServerSetIds = new Set<number>();
 
+				// Skip sessions the user has deleted locally but server hasn't processed yet
+				const pendingDeletes = await getPendingDeleteServerIds();
+
 				// Merge / Upsert server sessions
 				for (const s of serverSessions) {
 					const { sets: serverSets, id: serverId, ...sessionData } = s;
+					if (pendingDeletes.has(serverId)) continue; // Skip — pending deletion
 					activeServerSessionIds.add(serverId);
 
 					let localSessionId: number;
@@ -174,7 +185,7 @@ function App() {
 			<Route element={<ProtectedRoute />}>
 				<Route path="/onboarding" element={<Onboarding />} />
 				<Route element={<Layout />}>
-					<Route path="/" element={<Stats />} />
+					<Route path="/" element={isAdmin ? <Navigate to="/admin" replace /> : <Stats />} />
 					<Route path="/dashboard" element={<Dashboard />} />
 					<Route path="/sessions" element={<Sessions />} />
 					<Route path="/sessions/:id" element={<ActiveSession />} />
@@ -187,6 +198,16 @@ function App() {
 
 					<Route path="/settings" element={<Settings />} />
 					<Route path="/settings/questionnaire" element={<RoutineQuestionnaire />} />
+				</Route>
+			</Route>
+
+			{/* Admin Routes */}
+			<Route element={<AdminRoute />}>
+				<Route element={<AdminLayout />}>
+					<Route path="/admin" element={<AdminDashboard />} />
+					<Route path="/admin/users" element={<AdminUsers />} />
+					<Route path="/admin/exercises" element={<AdminExercises />} />
+					<Route path="/admin/settings" element={<AdminSettings />} />
 				</Route>
 			</Route>
 

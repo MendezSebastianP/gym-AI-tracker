@@ -21,7 +21,7 @@ export default function Login() {
 
 		try {
 			const response = await api.post('/auth/login', { email, password });
-			await login(response.data.access_token);
+			await login(response.data.access_token, response.data.refresh_token);
 			navigate('/');
 		} catch (err: any) {
 			console.error('Login error:', err);
@@ -73,9 +73,9 @@ export default function Login() {
 
 			<form onSubmit={handleSubmit} className="fade-in">
 				<div className="input-group">
-					<label className="label">{t("Email")}</label>
+					<label className="label">{t("Email or Username")}</label>
 					<input
-						type="email"
+						type="text"
 						className="input"
 						value={email}
 						onChange={(e) => setEmail(e.target.value)}

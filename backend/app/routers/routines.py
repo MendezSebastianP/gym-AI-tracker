@@ -7,6 +7,8 @@ from app.models.routine import Routine
 from app.schemas import RoutineResponse, RoutineCreate, RoutineUpdate
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.models.ai_usage_log import AIUsageLog
+from sqlalchemy.sql import func
 
 router = APIRouter(
     prefix="/api/routines",
@@ -30,10 +32,46 @@ def create_routine(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    db_routine = Routine(**routine.model_dump(), user_id=current_user.id)
+    routine_dict = routine.model_dump()
+    ai_usage_id = routine_dict.pop('ai_usage_id', None)
+    db_routine = Routine(**routine_dict, user_id=current_user.id)
     db.add(db_routine)
     db.commit()
     db.refresh(db_routine)
+    
+    # Handle AI conversion tracking
+    if hasattr(routine, 'ai_usage_id') and routine.ai_usage_id:
+        log = db.query(AIUsageLog).filter_by(id=routine.ai_usage_id, user_id=current_user.id).first()
+        if log and log.status == "generated":
+            # calculate retention
+            ai_exercises = []
+            if log.suggested_routine and 'days' in log.suggested_routine:
+                for day in log.suggested_routine['days']:
+                    for ex in day.get('exercises', []):
+                        eid = ex.get('exercise_id')
+                        if eid:
+                            ai_exercises.append(eid)
+            
+            saved_exercises = []
+            if db_routine.days:
+                for day in db_routine.days:
+                    for ex in day.get('exercises', []):
+                        eid = ex.get('exercise_id')
+                        if eid:
+                            saved_exercises.append(eid)
+            
+            if len(ai_exercises) > 0:
+                kept = sum(1 for ex_id in saved_exercises if ex_id in ai_exercises)
+                retention = (kept / len(ai_exercises)) * 100
+                log.retention_percentage = round(retention, 2)
+            else:
+                log.retention_percentage = 0.0
+                
+            log.status = "saved"
+            log.saved_routine_id = db_routine.id
+            log.saved_at = func.now()
+            db.commit()
+
     return db_routine
 
 @router.get("/{routine_id}", response_model=RoutineResponse)
