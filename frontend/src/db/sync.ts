@@ -71,6 +71,9 @@ export const processSyncQueue = async () => {
 						reps: set.reps,
 						duration_sec: set.duration_sec,
 						rpe: set.rpe,
+						distance_km: set.distance_km,
+						avg_pace: set.avg_pace,
+						incline: set.incline,
 						completed_at: set.completed_at,
 					});
 					await db.sets.update(set.id!, {
@@ -83,6 +86,9 @@ export const processSyncQueue = async () => {
 						reps: set.reps,
 						duration_sec: set.duration_sec,
 						set_number: set.set_number,
+						distance_km: set.distance_km,
+						avg_pace: set.avg_pace,
+						incline: set.incline,
 					});
 					await db.sets.update(set.id!, { syncStatus: 'synced' });
 				}
@@ -124,7 +130,19 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 
 		const serverId = session.server_id;
 
-		if (session.completed_at) {
+		if (session.completed_at && session.syncStatus === 'updated') {
+			// Already-completed session was edited (e.g. date change) — just PUT the metadata
+			await api.put(`/sessions/${serverId}`, {
+				started_at: session.started_at,
+				completed_at: session.completed_at,
+				notes: session.notes,
+				duration_seconds: session.duration_seconds || null,
+				locked_exercises: session.locked_exercises || [],
+				bodyweight_kg: session.bodyweight_kg || null,
+			});
+			await db.sessions.update(session.id!, { syncStatus: 'synced' });
+			return serverId;
+		} else if (session.completed_at) {
 			// Bulk sync and complete
 			const bulkPayload = {
 				completed_at: session.completed_at,
@@ -137,6 +155,9 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 					reps: s.reps,
 					duration_sec: s.duration_sec,
 					rpe: s.rpe,
+					distance_km: s.distance_km,
+					avg_pace: s.avg_pace,
+					incline: s.incline,
 					completed_at: s.completed_at || session.completed_at
 				}))
 			};
@@ -177,6 +198,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 					notes: session.notes,
 					locked_exercises: session.locked_exercises || [],
 					duration_seconds: session.duration_seconds || null,
+					bodyweight_kg: session.bodyweight_kg || null,
 				});
 				await db.sessions.update(session.id!, { syncStatus: 'synced' });
 
@@ -200,6 +222,9 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 								reps: set.reps,
 								duration_sec: set.duration_sec,
 								rpe: set.rpe,
+								distance_km: set.distance_km,
+								avg_pace: set.avg_pace,
+								incline: set.incline,
 								completed_at: set.completed_at,
 							});
 							await db.sets.update(set.id!, {
@@ -211,6 +236,9 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 								weight_kg: set.weight_kg,
 								reps: set.reps,
 								set_number: set.set_number,
+								distance_km: set.distance_km,
+								avg_pace: set.avg_pace,
+								incline: set.incline,
 							});
 							await db.sets.update(set.id!, { syncStatus: 'synced' });
 						}
@@ -273,6 +301,9 @@ export const syncAllDataBeforeLogout = async () => {
 						reps: set.reps,
 						duration_sec: set.duration_sec,
 						rpe: set.rpe,
+						distance_km: set.distance_km,
+						avg_pace: set.avg_pace,
+						incline: set.incline,
 						completed_at: set.completed_at,
 					});
 					await db.sets.update(set.id!, {
@@ -285,6 +316,9 @@ export const syncAllDataBeforeLogout = async () => {
 						reps: set.reps,
 						duration_sec: set.duration_sec,
 						set_number: set.set_number,
+						distance_km: set.distance_km,
+						avg_pace: set.avg_pace,
+						incline: set.incline,
 					});
 					await db.sets.update(set.id!, { syncStatus: 'synced' });
 				}

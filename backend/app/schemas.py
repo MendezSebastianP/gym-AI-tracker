@@ -93,6 +93,9 @@ class SetBase(BaseModel):
     reps: Optional[int] = None
     duration_sec: Optional[int] = None
     rpe: Optional[float] = None
+    distance_km: Optional[float] = None
+    avg_pace: Optional[float] = None
+    incline: Optional[float] = None
     completed_at: Optional[datetime] = None
 
 class SetCreate(SetBase):
@@ -106,6 +109,9 @@ class SetUpdate(BaseModel):
     reps: Optional[int] = None
     duration_sec: Optional[int] = None
     rpe: Optional[float] = None
+    distance_km: Optional[float] = None
+    avg_pace: Optional[float] = None
+    incline: Optional[float] = None
     completed_at: Optional[datetime] = None
 
 class SetResponse(SetBase):
@@ -134,6 +140,9 @@ class CompleteSetItem(BaseModel):
     reps: Optional[int] = None
     duration_sec: Optional[int] = None
     rpe: Optional[float] = None
+    distance_km: Optional[float] = None
+    avg_pace: Optional[float] = None
+    incline: Optional[float] = None
     completed_at: Optional[datetime] = None
 
 class SessionCompleteBulk(BaseModel):
@@ -146,6 +155,7 @@ class SessionUpdate(SessionBase):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
+    bodyweight_kg: Optional[float] = None
 
 class SessionResponse(SessionBase):
     id: int
@@ -155,6 +165,7 @@ class SessionResponse(SessionBase):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
+    bodyweight_kg: Optional[float] = None
     sets: List[SetResponse] = []
     model_config = ConfigDict(from_attributes=True)
 
@@ -191,6 +202,18 @@ class RoutineResponse(RoutineBase):
     id: int
     user_id: int
     archived_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+# Weight Log
+class WeightLogCreate(BaseModel):
+    weight_kg: float
+    measured_at: Optional[datetime] = None
+
+class WeightLogResponse(BaseModel):
+    id: int
+    weight_kg: float
+    measured_at: datetime
+    source: str
     model_config = ConfigDict(from_attributes=True)
 
 # Sync

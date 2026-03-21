@@ -4,7 +4,7 @@ import { db } from '../db/schema';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
     BarChart2, Flame, Dumbbell, Calendar, TrendingUp,
-    ChevronRight, Star, HelpCircle, X, User as UserIcon
+    ChevronRight, Star, HelpCircle, X, User as UserIcon, Scale, Activity
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -22,6 +22,13 @@ interface ProgressPoint {
 type FilterLevel = 'total' | 'muscle_group' | 'muscle' | 'exercise';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+function formatPace(secondsPerKm: number): string {
+    if (!secondsPerKm || !isFinite(secondsPerKm)) return '--:--';
+    const m = Math.floor(secondsPerKm / 60);
+    const s = Math.round(secondsPerKm % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 function fmtKg(v: number): string {
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
     if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
@@ -42,6 +49,13 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [demoMode, setDemoMode] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
+    const [weightData, setWeightData] = useState<{ date: string; kg: number }[]>([]);
+    const [weightCurrent, setWeightCurrent] = useState<number | null>(null);
+    const [weightChange30d, setWeightChange30d] = useState<number | null>(null);
+    const [cardioExercises, setCardioExercises] = useState<{exercise_id: number; name: string; session_count: number}[]>([]);
+    const [activeCardioTab, setActiveCardioTab] = useState<number | 'other' | null>(null);
+    const [otherExerciseId, setOtherExerciseId] = useState<number | null>(null);
+    const [cardioByExercise, setCardioByExercise] = useState<Record<number, any>>({});
 
     // Filters
     const [filterLevel, setFilterLevel] = useState<FilterLevel>('total');
@@ -118,6 +132,54 @@ export default function Dashboard() {
                 setProgressData([]); setLoading(false);
             });
     }, [demoMode, filterLevel, selectedGroup, selectedMuscle, selectedExerciseId]);
+
+    // Fetch weight data
+    useEffect(() => {
+        const weightUrl = demoMode ? '/weight/demo?days=90' : '/weight?days=90';
+        const weightStatsUrl = demoMode ? '/weight/stats/demo' : '/weight/stats';
+        api.get(weightUrl).then(res => {
+            const sorted = [...res.data].sort((a: any, b: any) => new Date(a.measured_at).getTime() - new Date(b.measured_at).getTime());
+            // One point per calendar day — latest reading wins
+            const byDay = new Map<string, number>();
+            for (const l of sorted) {
+                const dateKey = new Date(l.measured_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                byDay.set(dateKey, l.weight_kg);
+            }
+            setWeightData(Array.from(byDay.entries()).map(([date, kg]) => ({ date, kg })));
+        }).catch(() => {});
+        api.get(weightStatsUrl).then(res => {
+            setWeightCurrent(res.data.current ?? null);
+            setWeightChange30d(res.data.change_30d ?? null);
+        }).catch(() => {});
+    }, [demoMode]);
+
+    // Fetch cardio exercise list
+    useEffect(() => {
+        const endpoint = demoMode ? '/stats/cardio/exercises/demo?days=100' : '/stats/cardio/exercises?days=100';
+        api.get(endpoint).then(res => {
+            const list: {exercise_id: number; name: string; session_count: number}[] = res.data || [];
+            setCardioExercises(list);
+            setCardioByExercise({});
+            if (list.length > 0) {
+                setActiveCardioTab(list[0].exercise_id);
+                if (list.length >= 4) setOtherExerciseId(list[3].exercise_id);
+            } else {
+                setActiveCardioTab(null);
+            }
+        }).catch(() => {});
+    }, [demoMode]);
+
+    // Fetch cardio stats per active tab
+    useEffect(() => {
+        if (activeCardioTab === null) return;
+        const exId = activeCardioTab === 'other' ? otherExerciseId : activeCardioTab;
+        if (exId === null) return;
+        if (cardioByExercise[exId]) return;
+        const base = demoMode ? '/stats/cardio/demo' : '/stats/cardio';
+        api.get(`${base}?days=90&exercise_id=${exId}`).then(res => {
+            setCardioByExercise(prev => ({ ...prev, [exId]: res.data }));
+        }).catch(() => {});
+    }, [activeCardioTab, otherExerciseId, demoMode]);
 
     const lineColor = demoMode ? '#FFB347' : 'var(--primary)';
     const hasData = progressData.length > 0;
@@ -391,7 +453,149 @@ export default function Dashboard() {
                 )}
             </div>
 
-            {/* Custom layout ended here, links removed */}
+            {/* Body Weight Chart */}
+            <div className="card" style={{ marginTop: '20px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <Scale size={18} color="var(--primary)" />
+                    <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Body Weight</h3>
+                </div>
+                {weightData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={weightData}>
+                            <XAxis dataKey="date" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                            <YAxis domain={['auto', 'auto']} tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
+                            <Tooltip
+                                contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }}
+                                labelStyle={{ color: 'var(--text-secondary)' }}
+                            />
+                            <Line type="monotone" dataKey="kg" stroke="#CCFF00" strokeWidth={2} dot={false} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <p style={{ fontSize: '13px', color: 'var(--text-tertiary)', margin: '8px 0 12px' }}>
+                        Log your body weight during workouts to track your progress here.
+                    </p>
+                )}
+                <div style={{ marginTop: weightData.length > 0 ? '8px' : '0', fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', gap: '16px' }}>
+                    {weightCurrent && <span>{weightCurrent} kg</span>}
+                    {weightChange30d !== null && (
+                        <span style={{ color: weightChange30d < 0 ? '#4ade80' : weightChange30d > 0 ? '#f87171' : 'var(--text-secondary)' }}>
+                            {weightChange30d > 0 ? '+' : ''}{weightChange30d} kg / 30d
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* Cardio Stats */}
+            {cardioExercises.length > 0 && (() => {
+                const tabExercises = cardioExercises.slice(0, 3);
+                const otherExercises = cardioExercises.slice(3);
+                const hasOther = otherExercises.length > 0;
+                const activeExId = activeCardioTab === 'other' ? otherExerciseId : activeCardioTab;
+                const activeData = activeExId ? cardioByExercise[activeExId] : null;
+
+                return (
+                    <div className="card" style={{ marginTop: '20px', padding: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                            <Activity size={18} color="var(--primary)" />
+                            <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Cardio</h3>
+                        </div>
+
+                        {/* Tab bar */}
+                        <div style={{ display: 'flex', gap: '4px', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '0' }}>
+                            {tabExercises.map(ex => (
+                                <button
+                                    key={ex.exercise_id}
+                                    onClick={() => setActiveCardioTab(ex.exercise_id)}
+                                    style={{
+                                        padding: '6px 12px', fontSize: '13px', fontWeight: activeCardioTab === ex.exercise_id ? 600 : 400,
+                                        color: activeCardioTab === ex.exercise_id ? 'var(--accent, #6366f1)' : 'var(--text-secondary)',
+                                        background: 'none', border: 'none', borderBottom: activeCardioTab === ex.exercise_id ? '2px solid var(--accent, #6366f1)' : '2px solid transparent',
+                                        cursor: 'pointer', whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    {ex.name}
+                                </button>
+                            ))}
+                            {hasOther && (
+                                <button
+                                    onClick={() => setActiveCardioTab('other')}
+                                    style={{
+                                        padding: '6px 12px', fontSize: '13px', fontWeight: activeCardioTab === 'other' ? 600 : 400,
+                                        color: activeCardioTab === 'other' ? 'var(--accent, #6366f1)' : 'var(--text-secondary)',
+                                        background: 'none', border: 'none', borderBottom: activeCardioTab === 'other' ? '2px solid var(--accent, #6366f1)' : '2px solid transparent',
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    Other ▾
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Other tab: exercise picker */}
+                        {activeCardioTab === 'other' && (
+                            <div style={{ marginBottom: '12px' }}>
+                                <select
+                                    className="input"
+                                    style={{ fontSize: '13px', padding: '8px' }}
+                                    value={otherExerciseId ?? ''}
+                                    onChange={e => {
+                                        const id = parseInt(e.target.value);
+                                        setOtherExerciseId(id);
+                                        if (!cardioByExercise[id]) {
+                                            const base = demoMode ? '/stats/cardio/demo' : '/stats/cardio';
+                                            api.get(`${base}?days=90&exercise_id=${id}`).then(res => {
+                                                setCardioByExercise(prev => ({ ...prev, [id]: res.data }));
+                                            }).catch(() => {});
+                                        }
+                                    }}
+                                >
+                                    {otherExercises.map(ex => (
+                                        <option key={ex.exercise_id} value={ex.exercise_id}>{ex.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {/* Charts for active tab */}
+                        {activeData && activeData.distance_trend.length > 0 && (
+                            <>
+                                <div style={{ marginBottom: '16px' }}>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>Distance (km)</div>
+                                    <ResponsiveContainer width="100%" height={140}>
+                                        <LineChart data={activeData.distance_trend}>
+                                            <XAxis dataKey="date" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                                            <YAxis domain={['auto', 'auto']} tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
+                                            <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }} labelStyle={{ color: 'var(--text-secondary)' }} />
+                                            <Line type="monotone" dataKey="distance_km" stroke="#60a5fa" strokeWidth={2} dot={false} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {activeData.pace_trend.length > 0 && (
+                                    <div style={{ marginBottom: '12px' }}>
+                                        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>Pace (min/km)</div>
+                                        <ResponsiveContainer width="100%" height={140}>
+                                            <LineChart data={activeData.pace_trend}>
+                                                <XAxis dataKey="date" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                                                <YAxis reversed domain={['auto', 'auto']} tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
+                                                <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }} labelStyle={{ color: 'var(--text-secondary)' }} formatter={(value: number) => [formatPace(value), 'Pace']} />
+                                                <Line type="monotone" dataKey="avg_pace" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                )}
+
+                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                                    <span>{activeData.total_distance_km} km total</span>
+                                    {activeData.avg_pace && <span>{formatPace(activeData.avg_pace)} /km avg</span>}
+                                    <span>{activeData.total_sessions} sessions</span>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                );
+            })()}
 
             {/* Help modal */}
             {showHelp && (

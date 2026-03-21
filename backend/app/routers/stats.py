@@ -263,6 +263,134 @@ def get_progress(
     return _compute_progress(db, current_user.id, muscle_group, muscle, exercise_id)
 
 
+@router.get("/cardio")
+def get_cardio_stats(
+    days: int = 90,
+    exercise_id: int = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns cardio statistics: totals and trends for distance/pace."""
+    return _compute_cardio_stats(db, current_user.id, days, exercise_id)
+
+
+def _compute_cardio_exercises(db, user_id: int, days: int = 100):
+    """Returns [{exercise_id, name, session_count}] for a user sorted by session_count desc."""
+    from app.models.exercise import Exercise
+    from sqlalchemy import func as sqlfunc
+
+    cutoff = datetime.now() - timedelta(days=days)
+    rows = (
+        db.query(
+            Exercise.id.label("exercise_id"),
+            Exercise.name.label("name"),
+            sqlfunc.count(sqlfunc.distinct(SessionModel.id)).label("session_count"),
+        )
+        .join(SetModel, SetModel.exercise_id == Exercise.id)
+        .join(SessionModel, SetModel.session_id == SessionModel.id)
+        .filter(
+            SessionModel.user_id == user_id,
+            SessionModel.completed_at.isnot(None),
+            SessionModel.completed_at >= cutoff,
+            SetModel.distance_km.isnot(None),
+            SetModel.distance_km > 0,
+        )
+        .group_by(Exercise.id, Exercise.name)
+        .order_by(sqlfunc.count(sqlfunc.distinct(SessionModel.id)).desc())
+        .all()
+    )
+    return [{"exercise_id": r.exercise_id, "name": r.name, "session_count": r.session_count} for r in rows]
+
+
+def _compute_cardio_stats(db, user_id: int, days: int = 90, exercise_id: int = None):
+    """Reusable cardio stats computation for any user."""
+    from app.models.exercise import Exercise
+
+    cutoff = datetime.now() - timedelta(days=days)
+    query = (
+        db.query(
+            SetModel.distance_km,
+            SetModel.duration_sec,
+            SetModel.avg_pace,
+            SessionModel.completed_at,
+            Exercise.name.label("exercise_name"),
+        )
+        .join(SessionModel, SetModel.session_id == SessionModel.id)
+        .join(Exercise, SetModel.exercise_id == Exercise.id)
+        .filter(
+            SessionModel.user_id == user_id,
+            SessionModel.completed_at.isnot(None),
+            SessionModel.completed_at >= cutoff,
+            SetModel.distance_km.isnot(None),
+            SetModel.distance_km > 0,
+        )
+    )
+    if exercise_id:
+        query = query.filter(Exercise.id == exercise_id)
+    query = query.order_by(SessionModel.completed_at.asc())
+    rows = query.all()
+
+    total_distance = 0.0
+    total_duration = 0
+    total_sessions_set = set()
+    distance_trend = []
+    pace_trend = []
+
+    for row in rows:
+        total_distance += row.distance_km
+        total_duration += row.duration_sec or 0
+        session_date = row.completed_at.date().isoformat() if row.completed_at else None
+        total_sessions_set.add(session_date)
+        distance_trend.append({"date": session_date, "distance_km": round(row.distance_km, 2), "exercise": row.exercise_name})
+        pace = row.avg_pace
+        if not pace and row.duration_sec and row.distance_km > 0:
+            pace = row.duration_sec / row.distance_km
+        if pace:
+            pace_trend.append({"date": session_date, "avg_pace": round(pace, 1), "exercise": row.exercise_name})
+
+    avg_pace = round(total_duration / total_distance, 1) if total_distance > 0 else None
+    return {
+        "total_distance_km": round(total_distance, 2),
+        "total_duration_sec": total_duration,
+        "total_sessions": len(total_sessions_set),
+        "avg_pace": avg_pace,
+        "distance_trend": distance_trend,
+        "pace_trend": pace_trend,
+    }
+
+
+@router.get("/cardio/exercises")
+def get_cardio_exercises(
+    days: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns exercises the user has logged cardio sets for, sorted by session count."""
+    return _compute_cardio_exercises(db, current_user.id, days)
+
+
+@router.get("/cardio/exercises/demo")
+def get_cardio_exercises_demo(days: int = 100, db: Session = Depends(get_db)):
+    """Returns cardio exercises for the demo user (no auth required)."""
+    demo_user = db.query(User).filter(User.email == "demo@gymtracker.app").first()
+    if not demo_user:
+        return []
+    return _compute_cardio_exercises(db, demo_user.id, days)
+
+
+@router.get("/cardio/demo")
+def get_cardio_stats_demo(
+    days: int = 90,
+    exercise_id: int = None,
+    db: Session = Depends(get_db),
+):
+    """Returns cardio stats for the demo user (no auth required)."""
+    demo_user = db.query(User).filter(User.email == "demo@gymtracker.app").first()
+    if not demo_user:
+        return {"total_distance_km": 0, "total_duration_sec": 0, "total_sessions": 0, "avg_pace": None, "distance_trend": [], "pace_trend": []}
+    return _compute_cardio_stats(db, demo_user.id, days, exercise_id)
+
+
 @router.get("/progress/demo")
 def get_progress_demo(
     muscle_group: str = None,

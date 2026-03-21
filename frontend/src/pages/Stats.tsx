@@ -10,6 +10,14 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+function formatPace(secondsPerKm: number): string {
+	if (!secondsPerKm || !isFinite(secondsPerKm)) return '--:--';
+	const m = Math.floor(secondsPerKm / 60);
+	const s = Math.round(secondsPerKm % 60);
+	return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -583,6 +591,7 @@ export default function Stats() {
 					<span className="text-white font-bold" style={{ fontSize: '16px' }}>{streakWeeks} {t('weeks')}</span>
 				</div>
 			</div>
+
 
 			{/* ─── Quests Section (max 3 on home) ──────────────────────────── */}
 			{quests.length > 0 && (

@@ -8,9 +8,10 @@ import { api } from '../api/client';
 interface ExercisePickerProps {
 	onSelect: (exercise: any) => void;
 	onClose: () => void;
+	cardioMode?: boolean;
 }
 
-export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProps) {
+export default function ExercisePicker({ onSelect, onClose, cardioMode = false }: ExercisePickerProps) {
 	const [search, setSearch] = useState('');
 	const { t, i18n } = useTranslation();
 	const [filters, setFilters] = useState({
@@ -83,6 +84,13 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 	const filteredExercises = useMemo(() => {
 		if (!exercises) return [];
 		return exercises.filter(ex => {
+			// cardioMode: only show Cardio exercises; regular mode: exclude Cardio
+			if (cardioMode) {
+				if (ex.type !== 'Cardio') return false;
+			} else {
+				if (ex.type === 'Cardio') return false;
+			}
+
 			if (search) {
 				const s = search.toLowerCase();
 				const matchName = ex._displayName.toLowerCase().includes(s);
@@ -128,7 +136,7 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 
 			return 0;
 		}).slice(0, 100);
-	}, [exercises, search, filters, t]);
+	}, [exercises, search, filters, t, cardioMode]);
 
 	const toggleFilter = (type: 'muscle' | 'group' | 'equipment', value: string) => {
 		setFilters(prev => ({ ...prev, [type]: prev[type] === value ? '' : value }));
@@ -232,25 +240,27 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 					<input
 						autoFocus
 						className="input"
-						placeholder={t("Search exercises...")}
+						placeholder={cardioMode ? t("Search cardio exercises...") : t("Search exercises...")}
 						value={search}
 						onChange={e => setSearch(e.target.value)}
 						style={{ width: '100%', paddingLeft: '36px' }}
 					/>
 				</div>
-				<button
-					className={`btn ${showFilters || Object.values(filters).some(Boolean) ? 'btn-primary' : 'btn-secondary'}`}
-					onClick={() => setShowFilters(!showFilters)}
-					style={{ padding: '10px' }}
-				>
-					<Filter size={20} />
-				</button>
+				{!cardioMode && (
+					<button
+						className={`btn ${showFilters || Object.values(filters).some(Boolean) ? 'btn-primary' : 'btn-secondary'}`}
+						onClick={() => setShowFilters(!showFilters)}
+						style={{ padding: '10px' }}
+					>
+						<Filter size={20} />
+					</button>
+				)}
 				<button className="btn btn-ghost" onClick={onClose} style={{ padding: '8px' }}>
 					<X size={24} />
 				</button>
 			</div>
 
-			{showFilters && (
+			{!cardioMode && showFilters && (
 				<div className="mb-4 p-3 bg-secondary rounded-lg fade-in">
 					<div className="flex justify-between items-center mb-2">
 						<h3 className="text-xs font-bold text-secondary">{t('Filters')}</h3>
@@ -309,20 +319,22 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 			)}
 
 			<div style={{ flex: 1, overflowY: 'auto' }}>
-				{/* Always show Create Custom as first option */}
-				<div
-					onClick={() => {
-						setCustomName(search); // pre-fill with search term
-						setIsCreating(true);
-					}}
-					style={{ padding: '12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--accent)' }}
-					className="hover:bg-white/5"
-				>
-					<div style={{ background: 'rgba(99, 102, 241, 0.15)', padding: '8px', borderRadius: '8px' }}>
-						<Plus size={16} />
+				{/* Create Custom option only in regular mode */}
+				{!cardioMode && (
+					<div
+						onClick={() => {
+							setCustomName(search); // pre-fill with search term
+							setIsCreating(true);
+						}}
+						style={{ padding: '12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--accent)' }}
+						className="hover:bg-white/5"
+					>
+						<div style={{ background: 'rgba(99, 102, 241, 0.15)', padding: '8px', borderRadius: '8px' }}>
+							<Plus size={16} />
+						</div>
+						<div style={{ fontWeight: 'bold', fontSize: '15px' }}>{t('Create Custom Exercise')}</div>
 					</div>
-					<div style={{ fontWeight: 'bold', fontSize: '15px' }}>{t('Create Custom Exercise')}</div>
-				</div>
+				)}
 
 				{filteredExercises?.map(ex => (
 					<div
@@ -342,7 +354,7 @@ export default function ExercisePicker({ onSelect, onClose }: ExercisePickerProp
 
 				{filteredExercises?.length === 0 && (
 					<div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-tertiary)' }}>
-						<p>{t('No exercises found.')}</p>
+						<p>{cardioMode ? t('No cardio exercises found.') : t('No exercises found.')}</p>
 					</div>
 				)}
 			</div>

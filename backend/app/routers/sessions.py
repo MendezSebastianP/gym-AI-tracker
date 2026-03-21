@@ -132,6 +132,9 @@ def complete_session_bulk(
             reps=s.reps,
             duration_sec=s.duration_sec,
             rpe=s.rpe,
+            distance_km=s.distance_km,
+            avg_pace=s.avg_pace,
+            incline=s.incline,
             completed_at=s.completed_at or bulk_data.completed_at
         )
         db.add(new_set)

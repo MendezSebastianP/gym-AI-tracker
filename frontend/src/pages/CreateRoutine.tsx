@@ -26,7 +26,7 @@ export default function CreateRoutine() {
 		const saved = localStorage.getItem('draftRoutineAiUsageId');
 		return saved ? parseInt(saved, 10) : null;
 	});
-	const [showPicker, setShowPicker] = useState<{ dayIndex: number } | null>(null);
+	const [showPicker, setShowPicker] = useState<{ dayIndex: number; cardioMode?: boolean } | null>(null);
 	const [nameInitialized, setNameInitialized] = useState(false);
 
 	// AI State
@@ -40,6 +40,17 @@ export default function CreateRoutine() {
 	const [aiCoachMessage, setAiCoachMessage] = useState(() => {
 		return localStorage.getItem('draftRoutineCoachMsg') || '';
 	});
+
+	// Training context check
+	const [hasContext, setHasContext] = useState<boolean | null>(null);
+	useEffect(() => {
+		if (mode === 'ai') {
+			api.get('/preferences').then(res => {
+				const p = res.data;
+				setHasContext(!!(p.primary_goal || p.experience_level));
+			}).catch(() => setHasContext(null));
+		}
+	}, [mode]);
 
 	// Interactive AI Refinement state
 	const [selectedForReplace, setSelectedForReplace] = useState<Set<string>>(new Set());
@@ -312,15 +323,16 @@ export default function CreateRoutine() {
 
 	const addExercise = (dayIndex: number, exercise: any) => {
 		const newDays = [...days];
+		const isCardio = exercise.type === 'Cardio';
 		newDays[dayIndex].exercises.push({
 			_id: Math.random().toString(36).substring(7),
 			exercise_id: exercise.id,
 			name: exercise.name, // cache name for display
 			muscle_group: exercise.muscle || exercise.muscle_group || null,
 			equipment: exercise.equipment || null,
-			sets: 3,
-			reps: '10',
-			rest: 60
+			sets: isCardio ? 1 : 3,
+			reps: isCardio ? '20 min' : '10',
+			rest: isCardio ? 0 : 60
 		});
 		setDays(newDays);
 		setShowPicker(null);
@@ -413,6 +425,12 @@ export default function CreateRoutine() {
 					<p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '16px', lineHeight: '1.5' }}>
 						{t('We\'ll use your profile and training context to generate a routine. Optionally add specific instructions below.')}
 					</p>
+					{hasContext === false && (
+						<div style={{ background: 'rgba(204, 255, 0, 0.08)', border: '1px solid rgba(204, 255, 0, 0.2)', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+							{t('Your Training Context isn\'t configured yet. The AI will generate a generic routine.')}{' '}
+							<a href="/settings/questionnaire" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>{t('Configure')}</a>
+						</div>
+					)}
 					<div className="input-group">
 						<label className="label">{t('Additional instructions (optional)')}</label>
 						<textarea
@@ -570,13 +588,22 @@ export default function CreateRoutine() {
 									</SortableContext>
 								</DndContext>
 
-								<button
-									className="btn btn-secondary"
-									style={{ width: '100%', marginTop: '8px', fontSize: '14px', padding: '8px' }}
-									onClick={() => setShowPicker({ dayIndex: dIndex })}
-								>
-									<Plus size={16} style={{ marginRight: '4px' }} /> Add Exercise
-								</button>
+								<div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+									<button
+										className="btn btn-secondary"
+										style={{ flex: 2, fontSize: '14px', padding: '8px' }}
+										onClick={() => setShowPicker({ dayIndex: dIndex })}
+									>
+										<Plus size={16} style={{ marginRight: '4px' }} /> Add Exercise
+									</button>
+									<button
+										className="btn btn-secondary"
+										style={{ flex: 1, fontSize: '14px', padding: '8px' }}
+										onClick={() => setShowPicker({ dayIndex: dIndex, cardioMode: true })}
+									>
+										<Plus size={16} style={{ marginRight: '4px' }} /> Cardio
+									</button>
+								</div>
 							</div>
 						))}
 
@@ -629,6 +656,7 @@ export default function CreateRoutine() {
 				<ExercisePicker
 					onSelect={(ex) => addExercise(showPicker.dayIndex, ex)}
 					onClose={() => setShowPicker(null)}
+					cardioMode={showPicker.cardioMode ?? false}
 				/>
 			)}
 		</div>

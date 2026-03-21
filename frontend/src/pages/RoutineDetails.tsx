@@ -30,7 +30,7 @@ export default function RoutineDetails() {
 	const [editMode, setEditMode] = useState(false);
 	const [editedDays, setEditedDays] = useState<any[] | null>(null);
 	const [saving, setSaving] = useState(false);
-	const [showPicker, setShowPicker] = useState<{ dayIndex: number } | null>(null);
+	const [showPicker, setShowPicker] = useState<{ dayIndex: number; cardioMode?: boolean } | null>(null);
 	const [showLockHelp, setShowLockHelp] = useState(false);
 	const [editedDescription, setEditedDescription] = useState<string>('');
 
@@ -166,13 +166,14 @@ export default function RoutineDetails() {
 	const addExerciseToDay = (dayIndex: number, exercise: any) => {
 		if (!editedDays) return;
 		const newDays = JSON.parse(JSON.stringify(editedDays));
+		const isCardio = exercise.type === 'Cardio';
 		newDays[dayIndex].exercises.push({
 			_id: Math.random().toString(36).substring(7),
 			exercise_id: exercise.id,
 			name: exercise.name, // Store canonical name
-			sets: 3,
-			reps: '10',
-			rest: 60,
+			sets: isCardio ? 1 : 3,
+			reps: isCardio ? '20 min' : '10',
+			rest: isCardio ? 0 : 60,
 			weight_kg: 0,
 			locked: false
 		});
@@ -343,13 +344,22 @@ export default function RoutineDetails() {
 									</DndContext>
 
 
-									<button
-										className="btn btn-secondary"
-										style={{ width: '100%', marginTop: '4px', fontSize: '13px', padding: '8px' }}
-										onClick={() => setShowPicker({ dayIndex: dIndex })}
-									>
-										<Plus size={14} style={{ marginRight: '4px' }} /> {t('Add Exercise')}
-									</button>
+									<div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+										<button
+											className="btn btn-secondary"
+											style={{ flex: 2, fontSize: '13px', padding: '8px' }}
+											onClick={() => setShowPicker({ dayIndex: dIndex })}
+										>
+											<Plus size={14} style={{ marginRight: '4px' }} /> {t('Add Exercise')}
+										</button>
+										<button
+											className="btn btn-secondary"
+											style={{ flex: 1, fontSize: '13px', padding: '8px' }}
+											onClick={() => setShowPicker({ dayIndex: dIndex, cardioMode: true })}
+										>
+											<Plus size={14} style={{ marginRight: '4px' }} /> {t('Cardio')}
+										</button>
+									</div>
 								</>
 							) : (
 								// Read-only view
@@ -390,6 +400,7 @@ export default function RoutineDetails() {
 					<ExercisePicker
 						onSelect={(ex) => addExerciseToDay(showPicker.dayIndex, ex)}
 						onClose={() => setShowPicker(null)}
+						cardioMode={showPicker.cardioMode ?? false}
 					/>
 				)
 			}

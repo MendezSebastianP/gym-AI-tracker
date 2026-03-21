@@ -72,6 +72,23 @@ class TestSessions:
         assert r.status_code == 200
         assert r.json()["completed_at"] is not None
 
+    def test_session_bodyweight_kg_persists(self, client):
+        headers = register_and_login(client)
+        session = self._create_session(client, headers)
+        r = client.put(f"/api/sessions/{session['id']}", json={"bodyweight_kg": 82.5}, headers=headers)
+        assert r.status_code == 200
+        # Verify the value is returned by GET
+        r2 = client.get(f"/api/sessions/{session['id']}", headers=headers)
+        assert r2.status_code == 200
+        assert r2.json()["bodyweight_kg"] == 82.5
+
+    def test_session_bodyweight_kg_default_null(self, client):
+        headers = register_and_login(client)
+        session = self._create_session(client, headers)
+        r = client.get(f"/api/sessions/{session['id']}", headers=headers)
+        assert r.status_code == 200
+        assert r.json().get("bodyweight_kg") is None
+
     def test_delete_session(self, client):
         headers = register_and_login(client)
         session = self._create_session(client, headers)

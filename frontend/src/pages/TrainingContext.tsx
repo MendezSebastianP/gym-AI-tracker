@@ -65,6 +65,10 @@ export default function TrainingContext() {
 					setPrefs((prev: any) => ({ ...prev, ...res.data }));
 					if (res.data.context_level) {
 						setContextLevel(res.data.context_level);
+						// If key fields are already filled, show summary instead of re-entering questions
+						if (res.data.primary_goal && res.data.experience_level) {
+							setShowConfirmation(true);
+						}
 					}
 				}
 			} catch (e) {
@@ -658,6 +662,13 @@ export default function TrainingContext() {
 			</p>
 			<button className="btn btn-primary w-full" onClick={saveAndComplete} disabled={submitting}>
 				{submitting ? t('Saving...') : isOnboarding ? t('Start your first routine') : t('Return to Settings')}
+			</button>
+			<button
+				className="btn btn-secondary w-full"
+				style={{ marginTop: '12px' }}
+				onClick={() => { setShowConfirmation(false); setStepIndex(0); }}
+			>
+				{t('Edit Answers')}
 			</button>
 		</div>
 	);

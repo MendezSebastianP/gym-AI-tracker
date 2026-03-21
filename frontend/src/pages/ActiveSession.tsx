@@ -2,12 +2,28 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
-import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Minus, Plus, Scale, ChevronDown, ChevronUp } from 'lucide-react';
+import { api } from '../api/client';
 import WorkoutTimer from '../components/WorkoutTimer';
 import SessionElapsedTimer from '../components/SessionElapsedTimer';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
 import SessionFeed from './SessionFeed';
+
+// ─── Cardio helpers ─────────────────────────────────────────────────
+function formatPace(secondsPerKm: number): string {
+	if (!secondsPerKm || !isFinite(secondsPerKm)) return '--:--';
+	const m = Math.floor(secondsPerKm / 60);
+	const s = Math.round(secondsPerKm % 60);
+	return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatDurationMMSS(totalSec: number): string {
+	if (!totalSec) return '0:00';
+	const m = Math.floor(totalSec / 60);
+	const s = totalSec % 60;
+	return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 // ─── Inline Number Stepper (mobile-friendly) ────────────────────────
 // Replaces raw <input type="number"> with tap-to-increment/decrement buttons + editable center
@@ -148,6 +164,50 @@ export default function ActiveSession() {
 	const [timerMode, setTimerMode] = useState<'stopwatch' | 'timer'>('stopwatch');
 	const prefillDone = useRef(false);
 
+	// Body weight tracking
+	const [bwOpen, setBwOpen] = useState(false);
+	const [bwValue, setBwValue] = useState<number>(0);
+	const bwInitialized = useRef(false);
+	const bwTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	useEffect(() => {
+		if (bwInitialized.current || !user) return;
+		bwInitialized.current = true;
+		// Load last weight or user profile weight
+		api.get('/weight?days=7').then(res => {
+			if (res.data.length > 0) {
+				setBwValue(res.data[0].weight_kg);
+				// Already logged today? Keep collapsed
+				const today = new Date().toDateString();
+				const lastDate = new Date(res.data[0].measured_at).toDateString();
+				setBwOpen(lastDate !== today);
+			} else {
+				setBwValue(user.weight || 70);
+				setBwOpen(true);
+			}
+		}).catch(() => {
+			setBwValue(user.weight || 70);
+		});
+	}, [user]);
+
+	const saveBw = (val: number) => {
+		setBwValue(val);
+		if (bwTimeout.current) clearTimeout(bwTimeout.current);
+		bwTimeout.current = setTimeout(async () => {
+			try {
+				const res = await api.post('/weight', {
+					weight_kg: val,
+					measured_at: session?.started_at,
+				});
+				await db.sessions.update(sessionId, {
+					bodyweight_kg: val,
+					weight_log_id: res.data.id,
+					syncStatus: 'updated' as any,
+				});
+			} catch { /* offline — weight log skipped */ }
+		}, 1000);
+	};
+
 	// ─── Auto-advance helper ──────────────────────────────────────
 	// Each input gets an id like "set-{setId}-weight" or "set-{setId}-reps"
 	// After editing weight → focus reps of same set
@@ -215,11 +275,12 @@ export default function ActiveSession() {
 				const detail = detailsMap.get(ex.exercise_id);
 				const defaultWeightDb = (detail as any)?.default_weight_kg || 0;
 				const isTime = detail?.type === 'Time';
+				const isCardio = detail?.type === 'Cardio';
 
 				if (isLocked) {
-					const numSets = ex.sets || 3;
-					const defaultReps = isTime ? 0 : (typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10);
-					const defaultWeight = isTime ? 0 : (ex.weight_kg || defaultWeightDb || 0);
+					const numSets = isCardio ? 1 : (ex.sets || 3);
+					const defaultReps = (isTime || isCardio) ? 0 : (typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10);
+					const defaultWeight = (isTime || isCardio) ? 0 : (ex.weight_kg || defaultWeightDb || 0);
 
 					for (let i = 1; i <= numSets; i++) {
 						newSets.push({
@@ -228,7 +289,10 @@ export default function ActiveSession() {
 							set_number: i,
 							weight_kg: defaultWeight,
 							reps: defaultReps,
-							duration_sec: isTime ? 30 : undefined,
+							duration_sec: (isTime || isCardio) ? 0 : undefined,
+							distance_km: isCardio ? 0 : undefined,
+							avg_pace: undefined,
+							incline: isCardio ? undefined : undefined,
 							completed_at: new Date().toISOString(),
 							syncStatus: 'created'
 						});
@@ -241,15 +305,18 @@ export default function ActiveSession() {
 							set_number: idx + 1,
 							weight_kg: prevSet.weight_kg || 0,
 							reps: prevSet.reps || 0,
-							duration_sec: isTime ? (prevSet.duration_sec || 30) : undefined,
+							duration_sec: (isTime || isCardio) ? (prevSet.duration_sec || 0) : undefined,
+							distance_km: isCardio ? (prevSet.distance_km || 0) : undefined,
+							avg_pace: isCardio ? (prevSet.avg_pace || undefined) : undefined,
+							incline: isCardio ? (prevSet.incline || undefined) : undefined,
 							completed_at: new Date().toISOString(),
 							syncStatus: 'created'
 						});
 					});
 				} else {
-					const numSets = ex.sets || 3;
-					const defaultReps = isTime ? 0 : (typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10);
-					const defaultWeight = isTime ? 0 : (ex.weight_kg || defaultWeightDb || 0);
+					const numSets = isCardio ? 1 : (ex.sets || 3);
+					const defaultReps = (isTime || isCardio) ? 0 : (typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10);
+					const defaultWeight = (isTime || isCardio) ? 0 : (ex.weight_kg || defaultWeightDb || 0);
 
 					for (let i = 1; i <= numSets; i++) {
 						newSets.push({
@@ -258,7 +325,10 @@ export default function ActiveSession() {
 							set_number: i,
 							weight_kg: defaultWeight,
 							reps: defaultReps,
-							duration_sec: isTime ? 30 : undefined,
+							duration_sec: (isTime || isCardio) ? 0 : undefined,
+							distance_km: isCardio ? 0 : undefined,
+							avg_pace: undefined,
+							incline: isCardio ? undefined : undefined,
 							completed_at: new Date().toISOString(),
 							syncStatus: 'created'
 						});
@@ -338,7 +408,17 @@ export default function ActiveSession() {
 	};
 
 	const updateSet = async (setId: number, field: string, value: any) => {
-		await db.sets.update(setId, { [field]: value, syncStatus: 'updated' });
+		const updates: any = { [field]: value, syncStatus: 'updated' };
+		// Auto-calculate pace for cardio when distance or duration changes
+		if (field === 'distance_km' || field === 'duration_sec') {
+			const currentSet = await db.sets.get(setId);
+			if (currentSet) {
+				const dist = field === 'distance_km' ? value : (currentSet.distance_km || 0);
+				const dur = field === 'duration_sec' ? value : (currentSet.duration_sec || 0);
+				updates.avg_pace = dist > 0 ? Math.round(dur / dist) : undefined;
+			}
+		}
+		await db.sets.update(setId, updates);
 	};
 
 	const deleteSet = async (setId: number) => {
@@ -350,13 +430,15 @@ export default function ActiveSession() {
 		const nextSetNumber = existingSets.length + 1;
 		const ex = exercises.find((e: any) => e.exercise_id === exerciseId);
 		const isTime = ex?.type === 'Time';
+		const isCardio = ex?.type === 'Cardio';
 		await db.sets.add({
 			session_id: sessionId,
 			exercise_id: exerciseId,
 			set_number: nextSetNumber,
-			weight_kg: isTime ? 0 : 0,
-			reps: isTime ? 0 : 10,
-			duration_sec: isTime ? 30 : undefined,
+			weight_kg: (isTime || isCardio) ? 0 : 0,
+			reps: (isTime || isCardio) ? 0 : 10,
+			duration_sec: (isTime || isCardio) ? 0 : undefined,
+			distance_km: isCardio ? 0 : undefined,
 			completed_at: new Date().toISOString(),
 			syncStatus: 'created'
 		});
@@ -448,6 +530,14 @@ export default function ActiveSession() {
 									completed_at: newEndIso,
 									syncStatus: 'updated'
 								});
+								// Keep weight log date in sync when session date changes
+								const updatedSession = await db.sessions.get(sessionId);
+								if (updatedSession?.weight_log_id) {
+									api.put(`/weight/${updatedSession.weight_log_id}`, {
+										weight_kg: updatedSession.bodyweight_kg,
+										measured_at: newStartIso,
+									}).catch(() => {});
+								}
 							}}
 							className="input"
 							style={{ width: '100%', fontSize: '14px', padding: '12px' }}
@@ -606,7 +696,13 @@ export default function ActiveSession() {
 								<>
 									<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-tertiary)', padding: '0 8px', gap: '8px' }}>
 										<span style={{ width: '30px' }}>{t('SET')}</span>
-										{ex.type === 'Time' ? (
+										{ex.type === 'Cardio' ? (
+											<>
+												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>DIST (km)</span>
+												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>TIME</span>
+												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>INCLINE</span>
+											</>
+										) : ex.type === 'Time' ? (
 											<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{t('SECONDS')}</span>
 										) : (
 											<>
@@ -618,60 +714,97 @@ export default function ActiveSession() {
 									</div>
 
 									{exerciseSets.map((s: any) => (
-										<div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: '4px', gap: '4px' }}>
-											<span style={{ width: '30px', fontWeight: 'bold', fontSize: '14px' }}>{s.set_number}</span>
+										<div key={s.id}>
+											<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 ? '0' : '4px', gap: '4px' }}>
+												<span style={{ width: '30px', fontWeight: 'bold', fontSize: '14px' }}>{s.set_number}</span>
 
-											{isEditable ? (
-												<>
-													{ex.type === 'Time' ? (
-														<NumberStepper
-															value={s.duration_sec || 0}
-															onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
-															step={5}
-															min={0}
-															inputId={`set-${s.id}-duration`}
-															onNext={() => focusNext(s.id!, 'reps')}
-														/>
-													) : (
-														<>
+												{isEditable ? (
+													<>
+														{ex.type === 'Cardio' ? (
+															<>
+																<NumberStepper
+																	value={s.distance_km || 0}
+																	onChange={(v) => updateSet(s.id!, 'distance_km', v)}
+																	step={0.1}
+																	min={0}
+																	inputId={`set-${s.id}-distance`}
+																/>
+																<NumberStepper
+																	value={s.duration_sec || 0}
+																	onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
+																	step={30}
+																	min={0}
+																	inputId={`set-${s.id}-duration`}
+																/>
+																<NumberStepper
+																	value={s.incline || 0}
+																	onChange={(v) => updateSet(s.id!, 'incline', v)}
+																	step={0.5}
+																	min={0}
+																	inputId={`set-${s.id}-incline`}
+																/>
+															</>
+														) : ex.type === 'Time' ? (
 															<NumberStepper
-																value={s.weight_kg || 0}
-																onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
-																step={ex.is_bodyweight ? 1 : 2.5}
-																inputId={`set-${s.id}-weight`}
-																onNext={() => focusNext(s.id!, 'weight')}
-															/>
-															<NumberStepper
-																value={s.reps || 0}
-																onChange={(v) => updateSet(s.id!, 'reps', v)}
-																step={1}
-																inputId={`set-${s.id}-reps`}
+																value={s.duration_sec || 0}
+																onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
+																step={5}
+																min={0}
+																inputId={`set-${s.id}-duration`}
 																onNext={() => focusNext(s.id!, 'reps')}
 															/>
-														</>
-													)}
-													<button
-														className="btn btn-ghost"
-														onClick={() => deleteSet(s.id!)}
-														style={{ minWidth: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-													>
-														<Trash2 size={20} style={{ color: 'var(--error)' }} />
-													</button>
-												</>
-											) : (
-												<>
-													{ex.type === 'Time' ? (
-														<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.duration_sec || 0}s</span>
-													) : (
-														<>
-															<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.weight_kg}</span>
-															<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.reps}</span>
-														</>
-													)}
-													<span style={{ width: '40px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-														<CheckCircle size={16} color="var(--success)" />
-													</span>
-												</>
+														) : (
+															<>
+																<NumberStepper
+																	value={s.weight_kg || 0}
+																	onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
+																	step={ex.is_bodyweight ? 1 : 2.5}
+																	inputId={`set-${s.id}-weight`}
+																	onNext={() => focusNext(s.id!, 'weight')}
+																/>
+																<NumberStepper
+																	value={s.reps || 0}
+																	onChange={(v) => updateSet(s.id!, 'reps', v)}
+																	step={1}
+																	inputId={`set-${s.id}-reps`}
+																	onNext={() => focusNext(s.id!, 'reps')}
+																/>
+															</>
+														)}
+														<button
+															className="btn btn-ghost"
+															onClick={() => deleteSet(s.id!)}
+															style={{ minWidth: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+														>
+															<Trash2 size={20} style={{ color: 'var(--error)' }} />
+														</button>
+													</>
+												) : (
+													<>
+														{ex.type === 'Cardio' ? (
+															<>
+																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.distance_km || 0}</span>
+																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{formatDurationMMSS(s.duration_sec || 0)}</span>
+																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.incline || '-'}</span>
+															</>
+														) : ex.type === 'Time' ? (
+															<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.duration_sec || 0}s</span>
+														) : (
+															<>
+																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.weight_kg}</span>
+																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.reps}</span>
+															</>
+														)}
+														<span style={{ width: '40px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+															<CheckCircle size={16} color="var(--success)" />
+														</span>
+													</>
+												)}
+											</div>
+											{ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 && (
+												<div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '2px 0 6px', marginBottom: '4px' }}>
+													Pace: {formatPace(s.duration_sec / s.distance_km)} /km
+												</div>
 											)}
 										</div>
 									))}
@@ -682,7 +815,7 @@ export default function ActiveSession() {
 											onClick={() => addSet(ex.exercise_id)}
 											style={{ width: '100%', marginTop: '8px', fontSize: '14px', padding: '8px' }}
 										>
-											+ {t('Add Set')}
+											+ {ex.type === 'Cardio' ? t('Add Interval') : t('Add Set')}
 										</button>
 									)}
 								</>
@@ -697,6 +830,49 @@ export default function ActiveSession() {
 					);
 				})}
 			</div>
+
+			{/* Body Weight — read-only display for completed sessions */}
+			{isCompleted && (session as any)?.bodyweight_kg && (
+				<div className="card" style={{ marginTop: '16px', padding: '10px 16px' }}>
+					<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+						<Scale size={16} style={{ color: 'var(--text-secondary)' }} />
+						<span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+							{t('Body Weight')}{' '}
+							<span style={{ color: 'var(--text-primary)' }}>· {(session as any).bodyweight_kg} kg</span>
+						</span>
+					</div>
+				</div>
+			)}
+
+			{/* Body Weight (optional) */}
+			{isEditable && !isCompleted && (
+				<div
+					className="card"
+					style={{ marginTop: '16px', padding: bwOpen ? '12px 16px' : '10px 16px', cursor: 'pointer' }}
+					onClick={() => !bwOpen && setBwOpen(true)}
+				>
+					<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} onClick={(e) => { e.stopPropagation(); setBwOpen(!bwOpen); }}>
+						<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+							<Scale size={16} style={{ color: 'var(--text-secondary)' }} />
+							<span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+								{t('Body Weight')} {!bwOpen && bwValue > 0 && <span style={{ color: 'var(--text-primary)' }}>· {bwValue} kg</span>}
+							</span>
+						</div>
+						{bwOpen ? <ChevronUp size={14} style={{ color: 'var(--text-tertiary)' }} /> : <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />}
+					</div>
+					{bwOpen && (
+						<div style={{ marginTop: '10px' }} onClick={(e) => e.stopPropagation()}>
+							<NumberStepper
+								value={bwValue}
+								onChange={saveBw}
+								step={0.1}
+								min={0}
+								inputId="bw-input"
+							/>
+						</div>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

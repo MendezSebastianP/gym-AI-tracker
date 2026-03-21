@@ -71,6 +71,8 @@ export interface Session {
 	duration_seconds?: number;
 	notes?: string;
 	locked_exercises?: number[]; // IDs of exercises that are locked/collapsed
+	bodyweight_kg?: number; // Body weight snapshot for this session
+	weight_log_id?: number; // Local-only: links to the weight log entry for date sync
 	syncStatus?: 'synced' | 'created' | 'updated' | 'deleted';
 }
 
@@ -84,6 +86,9 @@ export interface Set {
 	reps?: number;
 	duration_sec?: number;
 	rpe?: number;
+	distance_km?: number;
+	avg_pace?: number;
+	incline?: number;
 	completed_at: string;
 	syncStatus?: 'synced' | 'created' | 'updated' | 'deleted';
 }

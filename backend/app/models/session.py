@@ -32,6 +32,9 @@ class Set(Base):
     reps = Column(Integer, nullable=True)
     duration_sec = Column(Integer, nullable=True)
     rpe = Column(Float, nullable=True) # 1-10
+    distance_km = Column(Float, nullable=True)
+    avg_pace = Column(Float, nullable=True)       # seconds per km
+    incline = Column(Float, nullable=True)        # incline % or resistance level
     completed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     session = relationship("Session", back_populates="sets")

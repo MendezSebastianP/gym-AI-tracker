@@ -26,7 +26,7 @@ import { useEffect } from 'react';
 import { api } from './api/client';
 import { db } from './db/schema';
 import { useAuthStore } from './store/authStore';
-import { startSyncService, stopSyncService, getPendingDeleteServerIds } from './db/sync';
+import { startSyncService, stopSyncService, getPendingDeleteServerIds, processSyncQueue } from './db/sync';
 import i18n from './i18n';
 
 function App() {
@@ -66,6 +66,9 @@ function App() {
 
 			isSyncingUserData = true;
 			try {
+				// Push any pending local changes before pulling from server
+				await processSyncQueue();
+
 				// Sync Exercises
 				const resEx = await api.get('/exercises');
 				await db.exercises.bulkPut(resEx.data);
@@ -113,11 +116,16 @@ function App() {
 					if (serverIdToLocalSession.has(serverId)) {
 						localSessionId = serverIdToLocalSession.get(serverId)!;
 						const existing = existingSessions.find(x => x.id === localSessionId);
-						await db.sessions.update(localSessionId, {
-							...sessionData,
-							server_id: serverId,
-							syncStatus: existing?.syncStatus === 'updated' ? 'updated' : 'synced'
-						});
+						if (existing?.syncStatus === 'updated') {
+							// Local has unsent edits — preserve local values, just ensure server_id is set
+							await db.sessions.update(localSessionId, { server_id: serverId });
+						} else {
+							await db.sessions.update(localSessionId, {
+								...sessionData,
+								server_id: serverId,
+								syncStatus: 'synced'
+							});
+						}
 					} else {
 						localSessionId = await db.sessions.add({
 							...sessionData,

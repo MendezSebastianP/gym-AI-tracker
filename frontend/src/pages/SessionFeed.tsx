@@ -6,6 +6,20 @@ import { api } from '../api/client';
 import { ArrowLeft, Calendar, Clock, Edit, CheckCircle, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+function formatPace(secondsPerKm: number): string {
+    if (!secondsPerKm || !isFinite(secondsPerKm)) return '--:--';
+    const m = Math.floor(secondsPerKm / 60);
+    const s = Math.round(secondsPerKm % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatDurationMMSS(totalSec: number): string {
+    if (!totalSec) return '0:00';
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 // ─── Single session card in the feed ─────────────────────────────────
 function FeedCard({ sessionId, isTarget, allRoutines }: {
     sessionId: number;
@@ -172,7 +186,9 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
                                         padding: '2px 0'
                                     }}>
                                         <CheckCircle size={12} color="var(--success)" style={{ flexShrink: 0 }} />
-                                        {ex.type === 'Time' ? (
+                                        {ex.type === 'Cardio' && s.distance_km ? (
+                                            <span>{s.distance_km} km in {formatDurationMMSS(s.duration_sec || 0)}{s.distance_km > 0 && s.duration_sec > 0 ? ` (${formatPace(s.duration_sec / s.distance_km)} /km)` : ''}</span>
+                                        ) : ex.type === 'Time' ? (
                                             <span>{s.duration_sec || 0}s</span>
                                         ) : (
                                             <>
