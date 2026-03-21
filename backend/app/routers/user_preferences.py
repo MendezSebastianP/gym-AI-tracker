@@ -24,6 +24,7 @@ class UserPreferenceUpdate(BaseModel):
     has_injuries: Optional[str] = None
     injured_areas: Optional[List[str]] = None
     other_information: Optional[str] = None
+    context_level: Optional[int] = None
 
 @router.get("")
 def get_preferences(
@@ -49,6 +50,7 @@ def get_preferences(
         "has_injuries": pref.has_injuries,
         "injured_areas": pref.injured_areas,
         "other_information": pref.other_information,
+        "context_level": pref.context_level,
     }
 
 @router.put("")

@@ -411,7 +411,7 @@ export default function CreateRoutine() {
 						<h3 style={{ fontSize: '16px', fontWeight: 'bold' }}>{t('AI Routine Generator')}</h3>
 					</div>
 					<p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '16px', lineHeight: '1.5' }}>
-						{t('We\'ll use your profile and questionnaire answers to generate a routine. Optionally add specific instructions below.')}
+						{t('We\'ll use your profile and training context to generate a routine. Optionally add specific instructions below.')}
 					</p>
 					<div className="input-group">
 						<label className="label">{t('Additional instructions (optional)')}</label>

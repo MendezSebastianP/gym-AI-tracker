@@ -20,5 +20,6 @@ class UserPreference(Base):
     has_injuries = Column(String, nullable=True)
     injured_areas = Column(JSON, default=[])
     other_information = Column(String, nullable=True)
+    context_level = Column(Integer, nullable=True)  # 1=Quick, 2=Standard, 3=Full
 
     user = relationship("User", backref="preferences")

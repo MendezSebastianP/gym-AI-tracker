@@ -13,7 +13,7 @@ import Settings from './pages/Settings';
 import Sessions from './pages/Sessions';
 import Onboarding from './pages/Onboarding';
 import Quests from './pages/Quests';
-import RoutineQuestionnaire from './pages/RoutineQuestionnaire';
+import TrainingContext from './pages/TrainingContext';
 
 import { AdminRoute } from './components/AdminRoute';
 import AdminLayout from './components/AdminLayout';
@@ -197,7 +197,7 @@ function App() {
 					<Route path="/quests" element={<Quests />} />
 
 					<Route path="/settings" element={<Settings />} />
-					<Route path="/settings/questionnaire" element={<RoutineQuestionnaire />} />
+					<Route path="/settings/questionnaire" element={<TrainingContext />} />
 				</Route>
 			</Route>
 

@@ -306,8 +306,8 @@ export default function Settings() {
 						<ClipboardList size={20} />
 					</div>
 					<div>
-						<div className="font-bold text-primary">{t('Routine Questionnaire')}</div>
-						<div className="text-xs text-secondary">{t('Update your data for personalized AI routines')}</div>
+						<div className="font-bold text-primary">{t('Training Context')}</div>
+						<div className="text-xs text-secondary">{t('Customize your AI training context')}</div>
 					</div>
 				</div>
 			</Link>
