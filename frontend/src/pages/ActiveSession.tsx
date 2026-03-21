@@ -3,6 +3,10 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Minus, Plus, Scale, ChevronDown, ChevronUp } from 'lucide-react';
+import CheckSuggestionsButton from '../components/CheckSuggestionsButton';
+import SuggestionBadge from '../components/SuggestionBadge';
+import { useProgressionSuggestions } from '../hooks/useProgressionSuggestions';
+import type { ProgressionSuggestion } from '../hooks/useProgressionSuggestions';
 import { api } from '../api/client';
 import WorkoutTimer from '../components/WorkoutTimer';
 import SessionElapsedTimer from '../components/SessionElapsedTimer';
@@ -163,6 +167,10 @@ export default function ActiveSession() {
 	const [collapsedExercises, setCollapsedExercises] = useState<number[]>([]);
 	const [timerMode, setTimerMode] = useState<'stopwatch' | 'timer'>('stopwatch');
 	const prefillDone = useRef(false);
+
+	// Progression suggestions
+	const progressionSuggestions = useProgressionSuggestions(routine?.id, session?.day_index);
+	const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
 
 	// Body weight tracking
 	const [bwOpen, setBwOpen] = useState(false);
@@ -642,6 +650,18 @@ export default function ActiveSession() {
 				</div>
 			)}
 
+			{/* Check Suggestions Button */}
+			{isEditable && !isCompleted && routine && (
+				<div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+					<CheckSuggestionsButton
+						loading={progressionSuggestions.loading}
+						fetched={progressionSuggestions.fetched}
+						suggestionsCount={progressionSuggestions.suggestions.size}
+						onClick={progressionSuggestions.fetch}
+					/>
+				</div>
+			)}
+
 			<div style={{ display: 'grid', gap: '24px' }}>
 				{exercises.map((ex: any, i: number) => {
 					const exerciseSets = sets?.filter((s: any) => s.exercise_id === ex.exercise_id).sort((a: any, b: any) => a.set_number - b.set_number) || [];
@@ -660,8 +680,61 @@ export default function ActiveSession() {
 								}}
 								onClick={() => isCollapsed && toggleCollapse(ex.exercise_id)}
 							>
-								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
 									<h3 style={{ margin: 0 }}>{ex.name}</h3>
+									{progressionSuggestions.fetched && progressionSuggestions.suggestions.has(ex.exercise_id) && !dismissedSuggestions.has(ex.exercise_id) && (
+										<SuggestionBadge
+											suggestion={progressionSuggestions.suggestions.get(ex.exercise_id)!}
+											onApply={(suggestion: ProgressionSuggestion) => {
+												// Apply suggested values to all sets of this exercise
+												const exerciseSetsForApply = sets?.filter((s: any) => s.exercise_id === ex.exercise_id) || [];
+												exerciseSetsForApply.forEach((s: any) => {
+													if (suggestion.suggested.weight !== undefined) {
+														db.sets.update(s.id!, { weight_kg: suggestion.suggested.weight, syncStatus: 'updated' as any });
+													}
+													if (suggestion.suggested.reps !== undefined) {
+														const repsVal = typeof suggestion.suggested.reps === 'string'
+															? parseInt(suggestion.suggested.reps.split('-')[0]) || 0
+															: suggestion.suggested.reps;
+														db.sets.update(s.id!, { reps: repsVal, syncStatus: 'updated' as any });
+													}
+												});
+												// Also update routine definition
+												if (routine && session?.day_index !== undefined) {
+													const updatedDays = JSON.parse(JSON.stringify(routine.days));
+													const dayExercises = updatedDays[session.day_index]?.exercises;
+													if (dayExercises) {
+														const routineEx = dayExercises.find((e: any) => e.exercise_id === ex.exercise_id);
+														if (routineEx) {
+															if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
+															if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
+															if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
+														}
+													}
+													db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
+													api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => {});
+												}
+												// Save feedback
+												api.post('/progression/feedback', {
+													exercise_id: ex.exercise_id,
+													suggestion_type: suggestion.type,
+													suggested_value: suggestion.suggested,
+													action: 'accepted',
+													applied_value: suggestion.suggested,
+												}).catch(() => {});
+												setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+											}}
+											onDismiss={() => {
+												api.post('/progression/feedback', {
+													exercise_id: ex.exercise_id,
+													suggestion_type: progressionSuggestions.suggestions.get(ex.exercise_id)!.type,
+													suggested_value: progressionSuggestions.suggestions.get(ex.exercise_id)!.suggested,
+													action: 'rejected',
+												}).catch(() => {});
+												setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+											}}
+										/>
+									)}
 									{ex.is_bodyweight && <span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-secondary)' }}>{t('Bodyweight')}</span>}
 									{isExerciseLocked && (
 										<span style={{

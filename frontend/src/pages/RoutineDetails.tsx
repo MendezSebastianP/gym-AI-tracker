@@ -1,7 +1,12 @@
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
-import { Play, ArrowLeft, Edit, Save, X, Lock, Unlock, Plus, Trash2, HelpCircle, GripVertical } from 'lucide-react';
+import { Play, ArrowLeft, Edit, Save, X, Lock, Unlock, Plus, Trash2, HelpCircle, GripVertical, FileText } from 'lucide-react';
+import CheckSuggestionsButton from '../components/CheckSuggestionsButton';
+import SuggestionBadge from '../components/SuggestionBadge';
+import { useProgressionSuggestions } from '../hooks/useProgressionSuggestions';
+import type { ProgressionSuggestion } from '../hooks/useProgressionSuggestions';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -9,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { useState } from 'react';
 import ExercisePicker from '../components/ExercisePicker';
+import CoachChat from '../components/CoachChat';
 
 export default function RoutineDetails() {
 	const { id } = useParams();
@@ -27,17 +33,29 @@ export default function RoutineDetails() {
 		})
 	);
 
+	const routine = useLiveQuery(async () => {
+		if (!id) return null;
+		return await db.routines.get(parseInt(id));
+	}, [id]);
+
 	const [editMode, setEditMode] = useState(false);
 	const [editedDays, setEditedDays] = useState<any[] | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [showPicker, setShowPicker] = useState<{ dayIndex: number; cardioMode?: boolean } | null>(null);
 	const [showLockHelp, setShowLockHelp] = useState(false);
 	const [editedDescription, setEditedDescription] = useState<string>('');
+	const [suggestionDayIndex, setSuggestionDayIndex] = useState<number | undefined>(undefined);
+	const [pendingFetchDay, setPendingFetchDay] = useState<number | undefined>(undefined);
+	const progressionSuggestions = useProgressionSuggestions(routine?.id ? Number(routine.id) : undefined, suggestionDayIndex);
+	const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
 
-	const routine = useLiveQuery(async () => {
-		if (!id) return null;
-		return await db.routines.get(parseInt(id));
-	}, [id]);
+	// Trigger fetch when day index changes
+	React.useEffect(() => {
+		if (pendingFetchDay !== undefined && suggestionDayIndex === pendingFetchDay) {
+			progressionSuggestions.fetch();
+			setPendingFetchDay(undefined);
+		}
+	}, [suggestionDayIndex, pendingFetchDay]);
 
 	// Fetch all exercises to map IDs to translated names
 	const exercisesMap = useLiveQuery(async () => {
@@ -211,9 +229,19 @@ export default function RoutineDetails() {
 					<h1 style={{ marginBottom: 0 }}>{routine.name}</h1>
 				</div>
 				{!editMode ? (
-					<button className="btn btn-secondary" onClick={startEdit} style={{ padding: '8px 16px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-						<Edit size={16} /> {t('Edit')}
-					</button>
+					<div style={{ display: 'flex', gap: '8px' }}>
+						<button
+							className="btn btn-ghost"
+							onClick={() => navigate(`/routines/${id}/report`)}
+							style={{ padding: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}
+							title="Progression Report"
+						>
+							<FileText size={16} />
+						</button>
+						<button className="btn btn-secondary" onClick={startEdit} style={{ padding: '8px 16px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+							<Edit size={16} /> {t('Edit')}
+						</button>
+					</div>
 				) : (
 					<div style={{ display: 'flex', gap: '8px' }}>
 						<button className="btn btn-ghost" onClick={cancelEdit} style={{ padding: '8px', fontSize: '14px' }}>
@@ -276,13 +304,28 @@ export default function RoutineDetails() {
 								<h3 style={{ margin: 0 }}>{day.day_name}</h3>
 							)}
 							{!editMode && (
-								<button
-									className="btn btn-primary"
-									style={{ padding: '8px 16px', fontSize: '14px' }}
-									onClick={() => startSession(dIndex)}
-								>
-									<Play size={16} fill="black" style={{ marginRight: '6px' }} /> {t('Start Workout')}
-								</button>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+									<CheckSuggestionsButton
+										loading={progressionSuggestions.loading && suggestionDayIndex === dIndex}
+										fetched={progressionSuggestions.fetched && suggestionDayIndex === dIndex}
+										suggestionsCount={suggestionDayIndex === dIndex ? progressionSuggestions.suggestions.size : 0}
+										onClick={() => {
+											if (suggestionDayIndex === dIndex) {
+												progressionSuggestions.fetch();
+											} else {
+												setSuggestionDayIndex(dIndex);
+												setPendingFetchDay(dIndex);
+											}
+										}}
+									/>
+									<button
+										className="btn btn-primary"
+										style={{ padding: '8px 16px', fontSize: '14px' }}
+										onClick={() => startSession(dIndex)}
+									>
+										<Play size={16} fill="black" style={{ marginRight: '6px' }} /> {t('Start Workout')}
+									</button>
+								</div>
 							)}
 						</div>
 
@@ -364,9 +407,50 @@ export default function RoutineDetails() {
 							) : (
 								// Read-only view
 								day.exercises.map((ex: any, i: number) => (
-									<div key={i} style={{ display: 'flex', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '8px' }}>
+									<div key={i} style={{ display: 'flex', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '8px', position: 'relative' }}>
 										<span style={{ width: '24px', color: 'var(--text-tertiary)' }}>{i + 1}</span>
-										<span style={{ flex: 1, color: 'var(--text-primary)' }}>{getExerciseName(ex)}</span>
+										<span style={{ flex: 1, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+											{getExerciseName(ex)}
+											{suggestionDayIndex === dIndex && progressionSuggestions.fetched && progressionSuggestions.suggestions.has(ex.exercise_id) && !dismissedSuggestions.has(ex.exercise_id) && (
+												<SuggestionBadge
+													suggestion={progressionSuggestions.suggestions.get(ex.exercise_id)!}
+													onApply={(suggestion: ProgressionSuggestion) => {
+														// Update routine definition
+														if (routine) {
+															const updatedDays = JSON.parse(JSON.stringify(routine.days));
+															const dayExercises = updatedDays[dIndex]?.exercises;
+															if (dayExercises) {
+																const routineEx = dayExercises.find((e: any) => e.exercise_id === ex.exercise_id);
+																if (routineEx) {
+																	if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
+																	if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
+																	if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
+																}
+															}
+															db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
+															api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => {});
+														}
+														api.post('/progression/feedback', {
+															exercise_id: ex.exercise_id,
+															suggestion_type: suggestion.type,
+															suggested_value: suggestion.suggested,
+															action: 'accepted',
+															applied_value: suggestion.suggested,
+														}).catch(() => {});
+														setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+													}}
+													onDismiss={() => {
+														api.post('/progression/feedback', {
+															exercise_id: ex.exercise_id,
+															suggestion_type: progressionSuggestions.suggestions.get(ex.exercise_id)!.type,
+															suggested_value: progressionSuggestions.suggestions.get(ex.exercise_id)!.suggested,
+															action: 'rejected',
+														}).catch(() => {});
+														setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+													}}
+												/>
+											)}
+										</span>
 										<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
 											{ex.locked && (
 												<Lock size={12} style={{ color: 'var(--accent, #6366f1)' }} />
@@ -394,6 +478,11 @@ export default function RoutineDetails() {
 					</button>
 				)}
 			</div>
+
+			{/* AI Coach Chat */}
+			{!editMode && routine && (
+				<CoachChat routineId={routine.id!} routineDays={routine.days || []} />
+			)}
 
 			{
 				showPicker && (

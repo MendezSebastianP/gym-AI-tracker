@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Routines from './pages/Routines';
@@ -14,6 +15,7 @@ import Sessions from './pages/Sessions';
 import Onboarding from './pages/Onboarding';
 import Quests from './pages/Quests';
 import TrainingContext from './pages/TrainingContext';
+import ProgressionReport from './pages/ProgressionReport';
 
 import { AdminRoute } from './components/AdminRoute';
 import AdminLayout from './components/AdminLayout';
@@ -187,13 +189,13 @@ function App() {
 
 	return (
 		<Routes>
+			<Route path="/" element={isAuthenticated ? (isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/stats" replace />) : <Landing />} />
 			<Route path="/login" element={<Login />} />
 			<Route path="/register" element={<Register />} />
 
 			<Route element={<ProtectedRoute />}>
 				<Route path="/onboarding" element={<Onboarding />} />
 				<Route element={<Layout />}>
-					<Route path="/" element={isAdmin ? <Navigate to="/admin" replace /> : <Stats />} />
 					<Route path="/dashboard" element={<Dashboard />} />
 					<Route path="/sessions" element={<Sessions />} />
 					<Route path="/sessions/:id" element={<ActiveSession />} />
@@ -201,6 +203,7 @@ function App() {
 					<Route path="/routines" element={<Routines />} />
 					<Route path="/routines/new" element={<CreateRoutine />} />
 					<Route path="/routines/:id" element={<RoutineDetails />} />
+					<Route path="/routines/:id/report" element={<ProgressionReport />} />
 					<Route path="/stats" element={<Stats />} />
 					<Route path="/quests" element={<Quests />} />
 
