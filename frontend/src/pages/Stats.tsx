@@ -358,7 +358,9 @@ export default function Stats() {
 		adjustedDayLabels.push(baseLabels[day]);
 	}
 
-	const activeQuests = quests.filter(q => !q.claimed);
+	const activeQuests = quests
+		.filter(q => !q.claimed)
+		.sort((a, b) => (b.completed ? 1 : 0) - (a.completed ? 1 : 0));
 
 	// ── Render ────────────────────────────────────────────────────────────────
 	return (

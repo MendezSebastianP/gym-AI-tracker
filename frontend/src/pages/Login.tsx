@@ -55,7 +55,7 @@ export default function Login() {
 			</div>
 			<div style={{ marginTop: '40px' }}></div>
 
-			<h1 className="fade-in" style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary)' }}>Gym AI</h1>
+			<Link to="/" className="fade-in" style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary)', fontWeight: 800, display: 'block' }}>Gym AI</Link>
 			<p className="fade-in" style={{ marginBottom: '32px', color: 'var(--text-secondary)' }}>Track your gym progress</p>
 
 			{error && (

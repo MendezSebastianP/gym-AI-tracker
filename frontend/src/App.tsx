@@ -189,7 +189,7 @@ function App() {
 
 	return (
 		<Routes>
-			<Route path="/" element={isAuthenticated ? (isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/stats" replace />) : <Landing />} />
+			<Route path="/" element={isAuthenticated ? (isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/home" replace />) : <Landing />} />
 			<Route path="/login" element={<Login />} />
 			<Route path="/register" element={<Register />} />
 
@@ -204,11 +204,12 @@ function App() {
 					<Route path="/routines/new" element={<CreateRoutine />} />
 					<Route path="/routines/:id" element={<RoutineDetails />} />
 					<Route path="/routines/:id/report" element={<ProgressionReport />} />
-					<Route path="/stats" element={<Stats />} />
+					<Route path="/home" element={<Stats />} />
 					<Route path="/quests" element={<Quests />} />
 
 					<Route path="/settings" element={<Settings />} />
 					<Route path="/settings/questionnaire" element={<TrainingContext />} />
+
 				</Route>
 			</Route>
 

@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore';
 import { db } from '../db/schema';
 import { api } from '../api/client';
 import { useState, useEffect } from 'react';
-import { Clock, Timer, Zap, User, Edit3, Save, X, Database, Globe, LogOut, ClipboardList, Hourglass } from 'lucide-react';
+import { User, Edit3, Save, X, Database, Globe, LogOut, ClipboardList } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Settings() {
@@ -11,9 +11,7 @@ export default function Settings() {
 	const { user, logout, updateUser } = useAuthStore();
 	const [syncing, setSyncing] = useState(false);
 	const [message, setMessage] = useState('');
-	const [timerMode, setTimerMode] = useState<'stopwatch' | 'timer'>('stopwatch');
 	const [saving, setSaving] = useState(false);
-	const [trackTime, setTrackTime] = useState(false);
 	const [editingProfile, setEditingProfile] = useState(false);
 	const [profileData, setProfileData] = useState({
 		weight: user?.weight || '',
@@ -22,15 +20,6 @@ export default function Settings() {
 		gender: user?.gender || '',
 		priorities: (user?.priorities as any)?.selected || []
 	});
-
-	useEffect(() => {
-		if (user?.settings?.timer_mode) {
-			setTimerMode(user.settings.timer_mode);
-		}
-		if (user?.settings?.track_time !== undefined) {
-			setTrackTime(user.settings.track_time);
-		}
-	}, [user]);
 
 	useEffect(() => {
 		if (user) {
@@ -73,34 +62,6 @@ export default function Settings() {
 		}
 	};
 
-	const saveTimerMode = async (mode: 'stopwatch' | 'timer') => {
-		setSaving(true);
-		setTimerMode(mode);
-		try {
-			const newSettings = { ...user?.settings, timer_mode: mode };
-			await api.put('/auth/me', { settings: newSettings });
-			updateUser({ settings: newSettings });
-		} catch (e: any) {
-			console.error(e);
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	const saveTrackTime = async (enabled: boolean) => {
-		setSaving(true);
-		setTrackTime(enabled);
-		try {
-			const newSettings = { ...user?.settings, track_time: enabled };
-			await api.put('/auth/me', { settings: newSettings });
-			updateUser({ settings: newSettings });
-		} catch (e: any) {
-			console.error(e);
-		} finally {
-			setSaving(false);
-		}
-	};
-
 	const saveProfile = async () => {
 		setSaving(true);
 		try {
@@ -133,9 +94,9 @@ export default function Settings() {
 		}));
 	};
 
-	const handleLogout = () => {
-		logout();
-		window.location.href = '/login';
+	const handleLogout = async () => {
+		await logout();
+		window.location.href = '/';
 	};
 
 	const priorityOptions = ['strength', 'hypertrophy', 'endurance', 'flexibility'];
@@ -350,85 +311,7 @@ export default function Settings() {
 				</div>
 			</div>
 
-			{/* Timer Mode */}
-			<div className="card mb-4 p-4 flex flex-col gap-4">
-				<div className="flex items-center gap-2 font-bold">
-					<Timer size={18} className="text-secondary" />
-					{t('Workout Timer Mode')}
-				</div>
-				<div className="grid grid-cols-2 gap-4">
-					<div
-						onClick={() => saveTimerMode('stopwatch')}
-						style={{
-							cursor: 'pointer',
-							padding: '12px',
-							borderRadius: '8px',
-							border: timerMode === 'stopwatch' ? '1px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)',
-							backgroundColor: timerMode === 'stopwatch' ? 'rgba(204, 255, 0, 0.1)' : 'transparent',
-							display: 'flex',
-							alignItems: 'center',
-							gap: '12px',
-							color: timerMode === 'stopwatch' ? 'var(--primary)' : 'var(--text-secondary)'
-						}}
-					>
-						<Clock size={18} />
-						<div className="flex flex-col">
-							<span className="text-sm font-bold">{t('Stopwatch')}</span>
-							<span className="text-xs opacity-70">{t('Count up')}</span>
-						</div>
-					</div>
-
-					<div
-						onClick={() => saveTimerMode('timer')}
-						style={{
-							cursor: 'pointer',
-							padding: '12px',
-							borderRadius: '8px',
-							border: timerMode === 'timer' ? '1px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)',
-							backgroundColor: timerMode === 'timer' ? 'rgba(204, 255, 0, 0.1)' : 'transparent',
-							display: 'flex',
-							alignItems: 'center',
-							gap: '12px',
-							color: timerMode === 'timer' ? 'var(--primary)' : 'var(--text-secondary)'
-						}}
-					>
-						<Zap size={18} />
-						<div className="flex flex-col">
-							<span className="text-sm font-bold">{t('Timer')}</span>
-							<span className="text-xs opacity-70">{t('Countdown')}</span>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			{/* Track Session Time */}
-			<div className="card mb-4 p-4 flex flex-col gap-4">
-				<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-					<div className="flex items-center gap-2 font-bold">
-						<Hourglass size={18} className="text-secondary" />
-						{t('Track Session Time')}
-					</div>
-					<div
-						onClick={() => saveTrackTime(!trackTime)}
-						style={{
-							width: '44px', height: '24px', borderRadius: '12px',
-							backgroundColor: trackTime ? 'var(--primary)' : 'rgba(255,255,255,0.15)',
-							cursor: 'pointer', position: 'relative', transition: 'background-color 0.2s',
-						}}
-					>
-						<div style={{
-							width: '20px', height: '20px', borderRadius: '50%',
-							backgroundColor: '#fff', position: 'absolute', top: '2px',
-							left: trackTime ? '22px' : '2px', transition: 'left 0.2s',
-							boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-						}} />
-					</div>
-				</div>
-				<p className="text-xs text-secondary" style={{ opacity: 0.7, margin: 0 }}>
-					{t('When enabled, a timer will count how long your session takes. Duration will appear in stats and can be edited afterwards.')}
-				</p>
-			</div>
-
+	
 			{/* System Section Hidden Temporarily 
 			<h3 className="text-sm font-bold text-secondary mb-4 mt-8" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>{t('System')}</h3>
 

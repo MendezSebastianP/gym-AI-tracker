@@ -30,8 +30,8 @@ backend/
   tests/                   # Pytest test suite
 frontend/
   src/
-    pages/               # Route pages (Dashboard, ActiveSession, Stats, ProgressionReport, etc.)
-    components/          # Reusable UI (ExercisePicker, SetLogger, SuggestionBadge, CoachChat, etc.)
+    pages/               # Route pages (Dashboard, ActiveSession, Stats, ProgressionReport, Playground, etc.)
+    components/          # Reusable UI (ExercisePicker, HybridNumber, RestTimer, SuggestionBadge, CoachChat, etc.)
     hooks/               # Custom React hooks (useProgressionSuggestions, etc.)
     db/                  # Dexie schema + sync service for offline-first
     api/client.ts        # Axios wrapper with JWT auto-refresh
@@ -166,3 +166,11 @@ Three user-facing modes, all accessible from RoutineDetails:
 DB tables: `progression_reports`, `progression_feedback`, `exercise_progressions` (bodyweight chains).
 
 Key files: `progression_engine.py` (algorithms), `progression_chains.py` (12 BW chains), `progression_summary.py` (AI prompt builder), `routers/progression.py` (5 endpoints).
+
+## Session UX Components
+
+Three custom components integrated into ActiveSession for mobile-first input:
+
+- **HybridNumber** (`components/HybridNumber.tsx`): Three-in-one number input — drag up/down = swipe (adaptive speed), single tap = drum picker (iOS-style scroll wheel at 2/5 position), double-tap = keyboard edit (text selected for replacement). Uses non-passive touch listeners to block pull-to-refresh, timestamp-based double-tap detection, and off-screen input for synchronous mobile keyboard focus. Replaces NumberStepper for strength exercises (weight + reps).
+- **RestTimer** (`components/RestTimer.tsx`): Circular countdown timer with SVG progress ring, swipe-to-adjust time, play/pause/skip controls, vibration on completion. Collapsible in ActiveSession header area.
+- **Set Completion Marking**: Inline in ActiveSession — tappable circular checkmarks on each set row, per-exercise "All done" button. Completed exercises show green border + strikethrough name + progress counter.

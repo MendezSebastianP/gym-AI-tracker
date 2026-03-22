@@ -13,5 +13,5 @@ export const ProtectedRoute = () => {
 		return <div style={{ display: 'flex', justifyContent: 'center', marginTop: '50px' }}>Loading...</div>;
 	}
 
-	return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+	return isAuthenticated ? <Outlet /> : <Navigate to="/" replace />;
 };

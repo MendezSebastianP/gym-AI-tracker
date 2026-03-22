@@ -2,13 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
-import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Minus, Plus, Scale, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Minus, Plus, Scale, ChevronDown, ChevronUp, Check, Timer, Clock } from 'lucide-react';
+import HybridNumber from '../components/HybridNumber';
+import RestTimer from '../components/RestTimer';
+import Stopwatch from '../components/Stopwatch';
 import CheckSuggestionsButton from '../components/CheckSuggestionsButton';
 import SuggestionBadge from '../components/SuggestionBadge';
 import { useProgressionSuggestions } from '../hooks/useProgressionSuggestions';
 import type { ProgressionSuggestion } from '../hooks/useProgressionSuggestions';
 import { api } from '../api/client';
-import WorkoutTimer from '../components/WorkoutTimer';
 import SessionElapsedTimer from '../components/SessionElapsedTimer';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
@@ -165,7 +167,9 @@ export default function ActiveSession() {
 	const [exercises, setExercises] = useState<any[]>([]);
 	const [startTime, setStartTime] = useState<number | null>(null);
 	const [collapsedExercises, setCollapsedExercises] = useState<number[]>([]);
-	const [timerMode, setTimerMode] = useState<'stopwatch' | 'timer'>('stopwatch');
+	const [showRestTimer, setShowRestTimer] = useState(false);
+	const [showStopwatch, setShowStopwatch] = useState(false);
+	const [completedSets, setCompletedSets] = useState<Set<string>>(new Set());
 	const prefillDone = useRef(false);
 
 	// Progression suggestions
@@ -197,6 +201,17 @@ export default function ActiveSession() {
 			setBwValue(user.weight || 70);
 		});
 	}, [user]);
+
+	// Block pull-to-refresh on mobile (swipe gestures can trigger it)
+	useEffect(() => {
+		const prev = document.body.style.overscrollBehavior;
+		document.body.style.overscrollBehavior = 'none';
+		document.documentElement.style.overscrollBehavior = 'none';
+		return () => {
+			document.body.style.overscrollBehavior = prev;
+			document.documentElement.style.overscrollBehavior = '';
+		};
+	}, []);
 
 	const saveBw = (val: number) => {
 		setBwValue(val);
@@ -352,15 +367,12 @@ export default function ActiveSession() {
 		prefillSets();
 	}, [routine, session, sets, sessionId]);
 
-	// Load timer mode and collapsed exercises
+	// Load collapsed exercises
 	useEffect(() => {
 		if (session?.locked_exercises) {
 			setCollapsedExercises(session.locked_exercises);
 		}
-		if (user?.settings?.timer_mode) {
-			setTimerMode(user.settings.timer_mode);
-		}
-	}, [session, user]);
+	}, [session]);
 
 	// Fetch exercise details and resolve translations
 	useEffect(() => {
@@ -382,6 +394,8 @@ export default function ActiveSession() {
 							name: translatedName,
 							is_bodyweight: detail?.is_bodyweight || false,
 							type: detail?.type || 'Strength',
+							muscle: detail?.muscle || null,
+							muscle_group: detail?.muscle_group || null,
 						};
 					});
 					setExercises(enriched);
@@ -563,13 +577,8 @@ export default function ActiveSession() {
 						<h2 style={{ fontSize: '16px', margin: 0, fontWeight: 'bold' }}>
 							{routine?.name || t('Session')}
 						</h2>
-						{!isCompleted && startTime && (
-							<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-								<WorkoutTimer mode={timerMode} startTime={startTime} />
-								{user?.settings?.track_time && (
-									<SessionElapsedTimer startTime={session.started_at} />
-								)}
-							</div>
+						{!isCompleted && (
+							<SessionElapsedTimer startTime={session.started_at} />
 						)}
 						{isCompleted && (
 							<div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
@@ -643,45 +652,155 @@ export default function ActiveSession() {
 						<X size={14} />
 					</button>
 					<strong style={{ color: 'var(--text-primary)' }}>{t('How sessions work')}</strong><br />
-					{t('Each row is a set. Use the − / + buttons or tap the number to edit weight and reps.')}<br />
-					{t('After editing one field, press Enter to jump to the next.')}<br />
-					{t('Tap "Collapse" to hide completed exercises. Tap "Finish" when done.')}<br />
-					{t('"Add Set" adds an extra set to any exercise.')}
+					{t('Drag a number up/down to change it. Single tap opens a scroll wheel. Double-tap to type.')}<br />
+					{t('Tap the circle on each set to mark it done. Tap "All done" to complete an exercise.')}<br />
+					{t('Tap an exercise name to collapse/expand it.')}<br />
+					{t('"Rest" starts a countdown timer. "Stopwatch" counts up — both keep running if you navigate away.')}<br />
+					{t('Tap "Finish" when your workout is done.')}
 				</div>
 			)}
 
-			{/* Check Suggestions Button */}
-			{isEditable && !isCompleted && routine && (
-				<div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
-					<CheckSuggestionsButton
-						loading={progressionSuggestions.loading}
-						fetched={progressionSuggestions.fetched}
-						suggestionsCount={progressionSuggestions.suggestions.size}
-						onClick={progressionSuggestions.fetch}
-					/>
-				</div>
-			)}
+			{/* Toolbar: Rest Timer, Stopwatch, Suggestions, Collapse all, All done */}
+			{isEditable && !isCompleted && (() => {
+				const allExIds = exercises.map((e: any) => e.exercise_id);
+				const allCollapsed = allExIds.every((id: number) => collapsedExercises.includes(id));
+				const allSetKeys = sets?.map((s: any) => `${s.id}`) || [];
+				const globalAllDone = allSetKeys.length > 0 && allSetKeys.every((k: string) => completedSets.has(k));
+				const compactBtn: React.CSSProperties = {
+					padding: '6px 10px', borderRadius: 'var(--radius-sm)',
+					fontSize: 12, fontWeight: 600,
+					border: '1px solid var(--border)', background: 'var(--bg-tertiary)',
+					color: 'var(--text-secondary)', cursor: 'pointer',
+					display: 'flex', alignItems: 'center', gap: 4,
+					whiteSpace: 'nowrap',
+				};
 
-			<div style={{ display: 'grid', gap: '24px' }}>
+				return (
+					<div style={{ marginBottom: 10 }}>
+						<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+							<button
+								onClick={() => { setShowRestTimer(!showRestTimer); if (!showRestTimer) setShowStopwatch(false); }}
+								style={{
+									...compactBtn,
+									background: showRestTimer ? 'var(--primary-glow)' : 'var(--bg-tertiary)',
+									border: showRestTimer ? '1px solid var(--primary-border)' : '1px solid var(--border)',
+									color: showRestTimer ? 'var(--primary)' : 'var(--text-secondary)',
+								}}
+							>
+								<Timer size={13} />
+								{t('Rest')}
+							</button>
+							<button
+								onClick={() => { setShowStopwatch(!showStopwatch); if (!showStopwatch) setShowRestTimer(false); }}
+								style={{
+									...compactBtn,
+									background: showStopwatch ? 'var(--primary-glow)' : 'var(--bg-tertiary)',
+									border: showStopwatch ? '1px solid var(--primary-border)' : '1px solid var(--border)',
+									color: showStopwatch ? 'var(--primary)' : 'var(--text-secondary)',
+								}}
+							>
+								<Clock size={13} />
+								{t('Stopwatch')}
+							</button>
+							{routine && (() => {
+								const { loading, fetched, suggestions } = progressionSuggestions;
+								if (fetched && suggestions.size === 0) return null;
+								return (
+									<button
+										onClick={progressionSuggestions.fetch}
+										disabled={loading}
+										style={{
+											...compactBtn,
+											color: fetched ? 'var(--accent)' : 'var(--text-secondary)',
+											border: fetched ? '1px solid var(--accent)33' : '1px solid var(--border)',
+											opacity: loading ? 0.7 : 1,
+											cursor: loading ? 'wait' : 'pointer',
+										}}
+									>
+										{loading ? '...' : fetched ? `${suggestions.size}` : '💡'}
+										{loading ? t('Checking') : fetched ? (suggestions.size === 1 ? t('suggestion') : t('suggestions')) : t('Suggestions')}
+									</button>
+								);
+							})()}
+							{exercises.length > 1 && (
+								<button
+									onClick={() => {
+										if (allCollapsed) setCollapsedExercises([]);
+										else setCollapsedExercises(allExIds);
+									}}
+									style={compactBtn}
+								>
+									{allCollapsed ? t('Expand all') : t('Collapse all')}
+								</button>
+							)}
+							{exercises.length > 1 && (
+								<button
+									onClick={() => {
+										if (globalAllDone) {
+											setCompletedSets(new Set());
+										} else {
+											setCompletedSets(new Set(allSetKeys));
+										}
+									}}
+									style={{
+										...compactBtn,
+										border: globalAllDone ? '1px solid var(--success)' : '1px solid var(--border)',
+										background: globalAllDone ? 'var(--success)' : 'var(--bg-tertiary)',
+										color: globalAllDone ? 'white' : 'var(--text-secondary)',
+										transition: 'all 0.15s',
+									}}
+								>
+									{globalAllDone ? t('Undo') : t('All done')}
+								</button>
+							)}
+						</div>
+						{showRestTimer && (
+							<div style={{ marginTop: 8 }}>
+								<RestTimer defaultTime={90} />
+							</div>
+						)}
+						{showStopwatch && (
+							<div style={{ marginTop: 8 }}>
+								<Stopwatch />
+							</div>
+						)}
+					</div>
+				);
+			})()}
+
+			<div style={{ display: 'grid', gap: '8px' }}>
 				{exercises.map((ex: any, i: number) => {
 					const exerciseSets = sets?.filter((s: any) => s.exercise_id === ex.exercise_id).sort((a: any, b: any) => a.set_number - b.set_number) || [];
 					const isCollapsed = collapsedExercises.includes(ex.exercise_id);
 					const isExerciseLocked = ex.locked === true;
+					const exDoneCount = exerciseSets.filter((s: any) => completedSets.has(`${s.id}`)).length;
+					const isExAllDone = exerciseSets.length > 0 && exDoneCount === exerciseSets.length;
 
 					return (
-						<div key={i} className="card" style={{ overflow: 'hidden' }}>
+						<div key={i} className="card" style={{
+							overflow: 'hidden',
+							padding: '10px 16px',
+							borderColor: isExAllDone ? 'var(--success)' : undefined,
+							background: isExAllDone ? 'rgba(0,204,68,0.06)' : undefined,
+							transition: 'all 0.2s',
+						}}>
 							<div
 								style={{
 									display: 'flex',
 									justifyContent: 'space-between',
 									alignItems: 'center',
-									marginBottom: isCollapsed ? '0' : '12px',
-									cursor: isCollapsed ? 'pointer' : 'default',
+									marginBottom: isCollapsed ? '0' : '6px',
+									cursor: 'pointer',
 								}}
-								onClick={() => isCollapsed && toggleCollapse(ex.exercise_id)}
+								onClick={() => toggleCollapse(ex.exercise_id)}
 							>
 								<div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-									<h3 style={{ margin: 0 }}>{ex.name}</h3>
+									<h3 style={{ margin: 0, color: isExAllDone ? 'var(--success)' : undefined, textDecoration: isExAllDone ? 'line-through' : 'none' }}>{ex.name}</h3>
+									{exDoneCount > 0 && !isExAllDone && (
+										<span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>
+											{exDoneCount}/{exerciseSets.length}
+										</span>
+									)}
 									{progressionSuggestions.fetched && progressionSuggestions.suggestions.has(ex.exercise_id) && !dismissedSuggestions.has(ex.exercise_id) && (
 										<SuggestionBadge
 											suggestion={progressionSuggestions.suggestions.get(ex.exercise_id)!}
@@ -752,22 +871,51 @@ export default function ActiveSession() {
 									)}
 								</div>
 								{isEditable && (
-									<button
-										className="btn btn-ghost p-2"
-										onClick={(e: any) => {
-											e.stopPropagation();
-											toggleCollapse(ex.exercise_id);
-										}}
-										style={{ fontSize: '12px' }}
-									>
-										{isCollapsed ? <>{t('Expand')}</> : <>{t('Collapse')}</>}
-									</button>
+									<div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+										<button
+											onClick={(e: any) => {
+												e.stopPropagation();
+												setCompletedSets(prev => {
+													const next = new Set(prev);
+													if (isExAllDone) {
+														exerciseSets.forEach((s: any) => next.delete(`${s.id}`));
+													} else {
+														exerciseSets.forEach((s: any) => next.add(`${s.id}`));
+													}
+													return next;
+												});
+											}}
+											style={{
+												padding: '4px 10px',
+												borderRadius: 'var(--radius-full)',
+												border: isExAllDone ? '1px solid var(--success)' : '1px solid var(--border)',
+												background: isExAllDone ? 'var(--success)' : 'var(--bg-tertiary)',
+												color: isExAllDone ? 'white' : 'var(--text-secondary)',
+												fontSize: 11, fontWeight: 700, cursor: 'pointer',
+												display: 'flex', alignItems: 'center', gap: 4,
+												transition: 'all 0.15s',
+											}}
+										>
+											<Check size={12} />
+											{isExAllDone ? t('Done') : t('All done')}
+										</button>
+										<button
+											className="btn btn-ghost p-2"
+											onClick={(e: any) => {
+												e.stopPropagation();
+												toggleCollapse(ex.exercise_id);
+											}}
+											style={{ fontSize: '12px' }}
+										>
+											{isCollapsed ? <>{t('Expand')}</> : <>{t('Collapse')}</>}
+										</button>
+									</div>
 								)}
 							</div>
 
 							{!isCollapsed && (
 								<>
-									<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: 'var(--text-tertiary)', padding: '0 8px', gap: '8px' }}>
+									<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.5px', padding: '0 8px', gap: '8px' }}>
 										<span style={{ width: '30px' }}>{t('SET')}</span>
 										{ex.type === 'Cardio' ? (
 											<>
@@ -786,10 +934,32 @@ export default function ActiveSession() {
 										<span style={{ width: '40px' }}></span>
 									</div>
 
-									{exerciseSets.map((s: any) => (
+									{exerciseSets.map((s: any) => {
+										const setDone = completedSets.has(`${s.id}`);
+										return (
 										<div key={s.id}>
-											<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 ? '0' : '4px', gap: '4px' }}>
-												<span style={{ width: '30px', fontWeight: 'bold', fontSize: '14px' }}>{s.set_number}</span>
+											<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: setDone ? 'rgba(0,204,68,0.08)' : 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 ? '0' : '4px', gap: '4px', opacity: setDone ? 0.6 : 1, transition: 'all 0.15s' }}>
+												{isEditable ? (
+													<div
+														onClick={() => setCompletedSets(prev => {
+															const next = new Set(prev);
+															const key = `${s.id}`;
+															if (next.has(key)) next.delete(key); else next.add(key);
+															return next;
+														})}
+														style={{
+															width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+															border: setDone ? '2px solid var(--success)' : '2px solid var(--border)',
+															background: setDone ? 'var(--success)' : 'transparent',
+															display: 'flex', alignItems: 'center', justifyContent: 'center',
+															cursor: 'pointer', transition: 'all 0.15s',
+														}}
+													>
+														{setDone ? <Check size={12} style={{ color: 'white' }} /> : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)' }}>{s.set_number}</span>}
+													</div>
+												) : (
+													<span style={{ width: '30px', fontWeight: 'bold', fontSize: '14px' }}>{s.set_number}</span>
+												)}
 
 												{isEditable ? (
 													<>
@@ -828,19 +998,21 @@ export default function ActiveSession() {
 															/>
 														) : (
 															<>
-																<NumberStepper
+																<HybridNumber
 																	value={s.weight_kg || 0}
 																	onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
 																	step={ex.is_bodyweight ? 1 : 2.5}
-																	inputId={`set-${s.id}-weight`}
-																	onNext={() => focusNext(s.id!, 'weight')}
+																	min={0}
+																	max={500}
+																	sensitivity={14}
 																/>
-																<NumberStepper
+																<HybridNumber
 																	value={s.reps || 0}
 																	onChange={(v) => updateSet(s.id!, 'reps', v)}
 																	step={1}
-																	inputId={`set-${s.id}-reps`}
-																	onNext={() => focusNext(s.id!, 'reps')}
+																	min={0}
+																	max={100}
+																	sensitivity={28}
 																/>
 															</>
 														)}
@@ -880,7 +1052,7 @@ export default function ActiveSession() {
 												</div>
 											)}
 										</div>
-									))}
+									);})}
 
 									{isEditable && (
 										<button
@@ -894,51 +1066,96 @@ export default function ActiveSession() {
 								</>
 							)}
 
-							{isCollapsed && (
-								<div style={{ padding: '12px 0', fontSize: '14px', color: 'var(--text-secondary)', textAlign: 'center' }}>
-									{exerciseSets.length} {t('sets')} • {t('Click to expand')}
-								</div>
-							)}
+							{isCollapsed && exerciseSets.length > 0 && (() => {
+								const first = exerciseSets[0];
+								return (
+									<div style={{ padding: '6px 0 2px', fontSize: '13px', color: 'var(--text-tertiary)', display: 'flex', gap: 8, alignItems: 'center' }}>
+										<span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{exerciseSets.length} {t('sets')}</span>
+										{ex.type === 'Cardio' ? (
+											<span>{first.distance_km || 0} km · {first.duration_sec || 0}s</span>
+										) : ex.type === 'Time' ? (
+											<span>{first.duration_sec || 0}s</span>
+										) : (
+											<span>{first.weight_kg || 0} kg × {first.reps || 0}</span>
+										)}
+									</div>
+								);
+							})()}
 						</div>
 					);
 				})}
 			</div>
 
-			{/* Body Weight — read-only display for completed sessions */}
-			{isCompleted && (session as any)?.bodyweight_kg && (
-				<div className="card" style={{ marginTop: '16px', padding: '10px 16px' }}>
-					<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-						<Scale size={16} style={{ color: 'var(--text-secondary)' }} />
-						<span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-							{t('Body Weight')}{' '}
-							<span style={{ color: 'var(--text-primary)' }}>· {(session as any).bodyweight_kg} kg</span>
-						</span>
-					</div>
+			{/* Hint text at bottom of exercises */}
+			{isEditable && !isCompleted && exercises.some((e: any) => e.type !== 'Cardio' && e.type !== 'Time') && (
+				<div style={{ fontSize: 10, color: 'var(--text-tertiary)', textAlign: 'center', padding: '4px 0 0' }}>
+					drag &bull; tap=drum &bull; double-tap=type
 				</div>
 			)}
 
+			{/* Muscles + Body Weight — completed session summary */}
+			{isCompleted && (() => {
+				const muscleGroups = [...new Set(exercises.map((e: any) => e.muscle_group).filter(Boolean))];
+				const muscles = [...new Set(exercises.map((e: any) => e.muscle).filter(Boolean))];
+				const bw = (session as any)?.bodyweight_kg;
+				if (!bw && muscleGroups.length === 0 && muscles.length === 0) return null;
+				return (
+					<div className="card" style={{ marginTop: '12px', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+						{muscleGroups.length > 0 && (
+							<div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+								{muscleGroups.map((g: string) => (
+									<span key={g} style={{
+										fontSize: 11, fontWeight: 600, padding: '2px 8px',
+										borderRadius: 'var(--radius-full)', background: 'var(--bg-tertiary)',
+										color: 'var(--text-secondary)', border: '1px solid var(--border)',
+									}}>{g}</span>
+								))}
+								{muscles.filter((m: string) => !muscleGroups.includes(m)).map((m: string) => (
+									<span key={m} style={{
+										fontSize: 11, padding: '2px 8px',
+										borderRadius: 'var(--radius-full)', background: 'var(--bg-tertiary)',
+										color: 'var(--text-tertiary)', border: '1px solid var(--border)',
+									}}>{m}</span>
+								))}
+							</div>
+						)}
+						{bw && (
+							<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+								<Scale size={14} style={{ color: 'var(--text-secondary)' }} />
+								<span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+									{t('Body Weight')} <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>· {bw} kg</span>
+								</span>
+							</div>
+						)}
+					</div>
+				);
+			})()}
+
 			{/* Body Weight (optional) */}
 			{isEditable && !isCompleted && (
-				<div
-					className="card"
-					style={{ marginTop: '16px', padding: bwOpen ? '12px 16px' : '10px 16px', cursor: 'pointer' }}
-					onClick={() => !bwOpen && setBwOpen(true)}
-				>
-					<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} onClick={(e) => { e.stopPropagation(); setBwOpen(!bwOpen); }}>
-						<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-							<Scale size={16} style={{ color: 'var(--text-secondary)' }} />
-							<span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-								{t('Body Weight')} {!bwOpen && bwValue > 0 && <span style={{ color: 'var(--text-primary)' }}>· {bwValue} kg</span>}
-							</span>
-						</div>
-						{bwOpen ? <ChevronUp size={14} style={{ color: 'var(--text-tertiary)' }} /> : <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />}
-					</div>
+				<div style={{ marginTop: 8 }}>
+					<button
+						onClick={() => setBwOpen(!bwOpen)}
+						style={{
+							padding: '6px 10px', borderRadius: 'var(--radius-sm)',
+							fontSize: 12, fontWeight: 600,
+							border: bwOpen ? '1px solid var(--primary-border)' : '1px solid var(--border)',
+							background: bwOpen ? 'var(--primary-glow)' : 'var(--bg-tertiary)',
+							color: bwOpen ? 'var(--primary)' : 'var(--text-secondary)',
+							cursor: 'pointer',
+							display: 'flex', alignItems: 'center', gap: 4,
+							whiteSpace: 'nowrap',
+						}}
+					>
+						<Scale size={13} />
+						{t('Body Weight')}{!bwOpen && bwValue > 0 ? ` · ${bwValue} kg` : ''}
+					</button>
 					{bwOpen && (
-						<div style={{ marginTop: '10px' }} onClick={(e) => e.stopPropagation()}>
+						<div style={{ marginTop: 8, padding: '10px 16px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
 							<NumberStepper
 								value={bwValue}
 								onChange={saveBw}
-								step={0.1}
+								step={0.25}
 								min={0}
 								inputId="bw-input"
 							/>

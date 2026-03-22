@@ -87,7 +87,10 @@ export default function Quests() {
         }
     };
 
-    const activeQuests = quests.filter(q => !q.claimed);
+    // completed+unclaimed (claimable) always first
+    const activeQuests = quests
+        .filter(q => !q.claimed)
+        .sort((a, b) => (b.completed ? 1 : 0) - (a.completed ? 1 : 0));
     const completedQuests = quests.filter(q => q.claimed);
 
     if (loading) {

@@ -36,7 +36,7 @@ const Layout = () => {
 				backdropFilter: 'blur(10px)',
 				backgroundColor: 'var(--nav-bg)'
 			}}>
-				<NavItem to="/" icon={<Home size={24} />} label={t("Home")} active={isActive('/')} />
+				<NavItem to="/home" icon={<Home size={24} />} label={t("Home")} active={isActive('/home')} />
 				<NavItem to="/dashboard" icon={<BarChart2 size={24} />} label={t("Stats")} active={isActive('/dashboard')} />
 				<NavItem to="/sessions" icon={<Calendar size={24} />} label={t("Sessions")} active={isActive('/sessions')} />
 				<NavItem to="/routines" icon={<Dumbbell size={24} />} label={t("Routines")} active={isActive('/routines')} />
