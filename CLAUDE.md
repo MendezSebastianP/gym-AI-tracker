@@ -201,13 +201,3 @@ Rendered via `createPortal(…, document.body)` — required to escape CSS trans
 - **RestTimer** (`components/RestTimer.tsx`): Circular countdown timer with SVG progress ring, swipe-to-adjust, vibration on completion. Collapsible in ActiveSession.
 - **Set Completion Marking**: Tappable checkmarks per set row, "All done" per exercise. Completed exercises show green border + strikethrough.
 
-## Playground (`pages/Playground.tsx`)
-
-Experimental filling strategy UI — not integrated into the main routine creation flow yet, kept for future integration. Six strategy tabs:
-
-- **Day Templates** — One-tap preset exercise lists (Push/Pull/Leg/Upper/Lower/Full Body) built from local IndexedDB
-- **Smart Auto-Fill** — Type a day name → keyword detection → auto-suggest matching exercises
-- **Copy Day** — Duplicate an existing day's exercise list
-- **Import Sessions** — Pull exercises from a past completed session
-- **Most Used** — Top exercises across all sessions
-- **By Equipment** — Filter exercises by available equipment

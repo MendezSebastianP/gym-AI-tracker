@@ -17,10 +17,12 @@ import app.models  # noqa: F401  – registers User, Exercise, Routine, Session,
 
 from app.main import app
 
+import tempfile
+
 
 def _make_engine():
-    """Create a fresh SQLite engine backed by a unique temp file inside /app."""
-    db_file = f"/app/test_{uuid.uuid4().hex}.db"
+    """Create a fresh SQLite engine backed by a unique temp file."""
+    db_file = os.path.join(tempfile.gettempdir(), f"test_{uuid.uuid4().hex}.db")
     url = f"sqlite:///{db_file}"
     eng = create_engine(url, connect_args={"check_same_thread": False})
     return eng, db_file

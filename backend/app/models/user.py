@@ -25,7 +25,7 @@ class User(Base):
     # Gamification
     level = Column(Integer, default=1, server_default="1")
     experience = Column(Integer, default=0, server_default="0")
-    currency = Column(Integer, default=0, server_default="0")
+    currency = Column(Integer, default=100, server_default="100")
 
     @property
     def is_admin(self) -> bool:

@@ -219,6 +219,7 @@ def _analyze_strength(
     num_sets = len(latest_sets)
 
     current = {"weight": current_weight, "reps": round(avg_reps, 1), "sets": num_sets}
+    is_assisted = "assisted" in (exercise.name or "").lower()
 
     # ── RPE-based check (if RPE data available) ──────────────────────
     rpe_values = [s["rpe"] for s in latest_sets if s["rpe"] is not None]
@@ -228,8 +229,12 @@ def _analyze_strength(
             # Check if previous session also had high RPE
             prev_rpe = [s["rpe"] for s in history[1]["sets"] if s["rpe"] is not None]
             if prev_rpe and sum(prev_rpe) / len(prev_rpe) > 9.0:
-                deload_weight = round(current_weight * 0.9 / 2.5) * 2.5  # round to nearest 2.5
-                if deload_weight < current_weight:
+                if is_assisted:
+                    deload_weight = round(current_weight * 1.1 / 2.5) * 2.5
+                    if deload_weight <= current_weight: deload_weight = current_weight + 5.0
+                else:
+                    deload_weight = max(0.0, round(current_weight * 0.9 / 2.5) * 2.5)
+                if deload_weight != current_weight:
                     return ProgressionSuggestion(
                         type="deload",
                         current=current,
@@ -240,7 +245,8 @@ def _analyze_strength(
 
         if avg_rpe < 7.0 and current_weight > 0:
             increment = _get_weight_increment(exercise)
-            suggested_weight = current_weight + increment
+            suggested_weight = max(0.0, current_weight - increment) if is_assisted else current_weight + increment
+            
             return ProgressionSuggestion(
                 type="weight_increase",
                 current=current,
@@ -268,7 +274,7 @@ def _analyze_strength(
 
     if consecutive_at_top >= sessions_needed and current_weight > 0:
         increment = _get_weight_increment(exercise)
-        suggested_weight = current_weight + increment
+        suggested_weight = max(0.0, current_weight - increment) if is_assisted else current_weight + increment
         return ProgressionSuggestion(
             type="weight_increase",
             current=current,
@@ -310,8 +316,13 @@ def _analyze_strength(
                 failed_sessions += 1
 
         if failed_sessions >= 2:
-            deload_weight = round(current_weight * 0.9 / 2.5) * 2.5
-            if deload_weight < current_weight:
+            if is_assisted:
+                deload_weight = round(current_weight * 1.1 / 2.5) * 2.5
+                if deload_weight <= current_weight: deload_weight = current_weight + 5.0
+            else:
+                deload_weight = max(0.0, round(current_weight * 0.9 / 2.5) * 2.5)
+                
+            if deload_weight != current_weight:
                 return ProgressionSuggestion(
                     type="deload",
                     current=current,

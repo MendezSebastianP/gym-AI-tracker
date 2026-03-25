@@ -17,6 +17,10 @@ from app.models.routine import Routine
 from app.models.progression import ProgressionReport, ProgressionFeedback
 from app.limiter import limiter
 
+class ReportRequest(BaseModel):
+    user_context: Optional[str] = None
+
+
 router = APIRouter(
     prefix="/api/progression",
     tags=["progression"],
@@ -150,33 +154,18 @@ def get_latest_report(
         .first()
     )
 
-    # Count reports generated this week (across all routines)
-    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    reports_this_week = (
-        db.query(ProgressionReport)
-        .filter(
-            ProgressionReport.user_id == current_user.id,
-            ProgressionReport.created_at >= week_ago,
-        )
-        .count()
-    )
-    max_per_week = 3
-    remaining = max(0, max_per_week - reports_this_week)
-
     if not cached:
-        return {"report": None, "reports_remaining": remaining, "max_per_week": max_per_week}
+        return {"report": None}
     return {
-        "report": {"report_id": cached.id, "created_at": str(cached.created_at), **cached.report_data},
-        "reports_remaining": remaining,
-        "max_per_week": max_per_week,
+        "report": {"report_id": cached.id, "created_at": str(cached.created_at), **cached.report_data}
     }
 
 
 @router.post("/report/{routine_id}")
-@limiter.limit("3/week")
 async def generate_report(
     request: Request,
     routine_id: int,
+    body: ReportRequest = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -210,6 +199,7 @@ async def generate_report(
             user=current_user,
             routine=routine,
             algorithmic_results=algorithmic_results,
+            user_context=body.user_context if body else None,
         )
     except (ValueError, RuntimeError):
         # AI unavailable — return algorithmic results only
@@ -239,11 +229,16 @@ async def generate_report(
         for ex_id_str, suggestion in suggestions.items():
             ex_id = str(ex_id_str)
             enrichment = enrichments.get(ex_id, {})
-            day_report[ex_id] = {
+            alt = enrichment.get("alternative")
+            entry = {
                 **suggestion,
                 "ai_note": enrichment.get("note"),
-                "ai_alternative": enrichment.get("alternative"),
             }
+            # For exercise_swap, promote the AI-suggested replacement to the primary target
+            if suggestion.get("type") == "exercise_swap" and alt:
+                entry["new_exercise_id"] = alt.get("exercise_id")
+                entry["new_exercise_name"] = alt.get("name")
+            day_report[ex_id] = entry
         report_data["days"][day_name] = day_report
 
     # 4. Save report

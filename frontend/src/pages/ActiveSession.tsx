@@ -261,12 +261,16 @@ export default function ActiveSession() {
 	// ─── Pre-fill sets from previous session or routine defaults ──
 	useEffect(() => {
 		const prefillSets = async () => {
-			if (!routine || !session || !sets || sets.length > 0 || session.day_index === undefined) return;
-			if (prefillDone.current) return;
-			prefillDone.current = true;
+			if (!routine || !session || !sets || session.day_index === undefined) return;
 
 			const day = routine.days[session.day_index];
 			if (!day || !day.exercises || day.exercises.length === 0) return;
+
+			// Check which exercises we actually need to generate sets for
+			const missingExercises = day.exercises.filter((ex: any) => !sets.some((s: any) => s.exercise_id === ex.exercise_id));
+			if (missingExercises.length === 0) return;
+
+
 
 			const exerciseIds = day.exercises.map((e: any) => e.exercise_id);
 			const exerciseDetails = await db.exercises.bulkGet(exerciseIds);
@@ -292,7 +296,7 @@ export default function ActiveSession() {
 
 			const newSets: any[] = [];
 
-			for (const ex of day.exercises) {
+			for (const ex of missingExercises) {
 				const isLocked = ex.locked === true;
 				const prevExSets = previousSets.filter((s: any) => s.exercise_id === ex.exercise_id);
 				const detail = detailsMap.get(ex.exercise_id);
@@ -326,8 +330,8 @@ export default function ActiveSession() {
 							session_id: sessionId,
 							exercise_id: ex.exercise_id,
 							set_number: idx + 1,
-							weight_kg: prevSet.weight_kg || 0,
-							reps: prevSet.reps || 0,
+							weight_kg: (ex.weight_kg && ex.weight_kg > 0) ? ex.weight_kg : (prevSet.weight_kg || 0),
+							reps: (ex.reps && !isNaN(parseInt(ex.reps))) ? parseInt(ex.reps.split('-')[0]) : (prevSet.reps || 0),
 							duration_sec: (isTime || isCardio) ? (prevSet.duration_sec || 0) : undefined,
 							distance_km: isCardio ? (prevSet.distance_km || 0) : undefined,
 							avg_pace: isCardio ? (prevSet.avg_pace || undefined) : undefined,
@@ -558,7 +562,7 @@ export default function ActiveSession() {
 									api.put(`/weight/${updatedSession.weight_log_id}`, {
 										weight_kg: updatedSession.bodyweight_kg,
 										measured_at: newStartIso,
-									}).catch(() => {});
+									}).catch(() => { });
 								}
 							}}
 							className="input"
@@ -831,7 +835,7 @@ export default function ActiveSession() {
 														}
 													}
 													db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
-													api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => {});
+													api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => { });
 												}
 												// Save feedback
 												api.post('/progression/feedback', {
@@ -840,7 +844,7 @@ export default function ActiveSession() {
 													suggested_value: suggestion.suggested,
 													action: 'accepted',
 													applied_value: suggestion.suggested,
-												}).catch(() => {});
+												}).catch(() => { });
 												setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
 											}}
 											onDismiss={() => {
@@ -849,7 +853,7 @@ export default function ActiveSession() {
 													suggestion_type: progressionSuggestions.suggestions.get(ex.exercise_id)!.type,
 													suggested_value: progressionSuggestions.suggestions.get(ex.exercise_id)!.suggested,
 													action: 'rejected',
-												}).catch(() => {});
+												}).catch(() => { });
 												setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
 											}}
 										/>
@@ -937,122 +941,123 @@ export default function ActiveSession() {
 									{exerciseSets.map((s: any) => {
 										const setDone = completedSets.has(`${s.id}`);
 										return (
-										<div key={s.id}>
-											<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: setDone ? 'rgba(0,204,68,0.08)' : 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 ? '0' : '4px', gap: '4px', opacity: setDone ? 0.6 : 1, transition: 'all 0.15s' }}>
-												{isEditable ? (
-													<div
-														onClick={() => setCompletedSets(prev => {
-															const next = new Set(prev);
-															const key = `${s.id}`;
-															if (next.has(key)) next.delete(key); else next.add(key);
-															return next;
-														})}
-														style={{
-															width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-															border: setDone ? '2px solid var(--success)' : '2px solid var(--border)',
-															background: setDone ? 'var(--success)' : 'transparent',
-															display: 'flex', alignItems: 'center', justifyContent: 'center',
-															cursor: 'pointer', transition: 'all 0.15s',
-														}}
-													>
-														{setDone ? <Check size={12} style={{ color: 'white' }} /> : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)' }}>{s.set_number}</span>}
-													</div>
-												) : (
-													<span style={{ width: '30px', fontWeight: 'bold', fontSize: '14px' }}>{s.set_number}</span>
-												)}
+											<div key={s.id}>
+												<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: setDone ? 'rgba(0,204,68,0.08)' : 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 ? '0' : '4px', gap: '4px', opacity: setDone ? 0.6 : 1, transition: 'all 0.15s' }}>
+													{isEditable ? (
+														<div
+															onClick={() => setCompletedSets(prev => {
+																const next = new Set(prev);
+																const key = `${s.id}`;
+																if (next.has(key)) next.delete(key); else next.add(key);
+																return next;
+															})}
+															style={{
+																width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+																border: setDone ? '2px solid var(--success)' : '2px solid var(--border)',
+																background: setDone ? 'var(--success)' : 'transparent',
+																display: 'flex', alignItems: 'center', justifyContent: 'center',
+																cursor: 'pointer', transition: 'all 0.15s',
+															}}
+														>
+															{setDone ? <Check size={12} style={{ color: 'white' }} /> : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)' }}>{s.set_number}</span>}
+														</div>
+													) : (
+														<span style={{ width: '30px', fontWeight: 'bold', fontSize: '14px' }}>{s.set_number}</span>
+													)}
 
-												{isEditable ? (
-													<>
-														{ex.type === 'Cardio' ? (
-															<>
-																<NumberStepper
-																	value={s.distance_km || 0}
-																	onChange={(v) => updateSet(s.id!, 'distance_km', v)}
-																	step={0.1}
-																	min={0}
-																	inputId={`set-${s.id}-distance`}
-																/>
+													{isEditable ? (
+														<>
+															{ex.type === 'Cardio' ? (
+																<>
+																	<NumberStepper
+																		value={s.distance_km || 0}
+																		onChange={(v) => updateSet(s.id!, 'distance_km', v)}
+																		step={0.1}
+																		min={0}
+																		inputId={`set-${s.id}-distance`}
+																	/>
+																	<NumberStepper
+																		value={s.duration_sec || 0}
+																		onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
+																		step={30}
+																		min={0}
+																		inputId={`set-${s.id}-duration`}
+																	/>
+																	<NumberStepper
+																		value={s.incline || 0}
+																		onChange={(v) => updateSet(s.id!, 'incline', v)}
+																		step={0.5}
+																		min={0}
+																		inputId={`set-${s.id}-incline`}
+																	/>
+																</>
+															) : ex.type === 'Time' ? (
 																<NumberStepper
 																	value={s.duration_sec || 0}
 																	onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
-																	step={30}
+																	step={5}
 																	min={0}
 																	inputId={`set-${s.id}-duration`}
+																	onNext={() => focusNext(s.id!, 'reps')}
 																/>
-																<NumberStepper
-																	value={s.incline || 0}
-																	onChange={(v) => updateSet(s.id!, 'incline', v)}
-																	step={0.5}
-																	min={0}
-																	inputId={`set-${s.id}-incline`}
-																/>
-															</>
-														) : ex.type === 'Time' ? (
-															<NumberStepper
-																value={s.duration_sec || 0}
-																onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
-																step={5}
-																min={0}
-																inputId={`set-${s.id}-duration`}
-																onNext={() => focusNext(s.id!, 'reps')}
-															/>
-														) : (
-															<>
-																<HybridNumber
-																	value={s.weight_kg || 0}
-																	onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
-																	step={ex.is_bodyweight ? 1 : 2.5}
-																	min={0}
-																	max={500}
-																	sensitivity={14}
-																/>
-																<HybridNumber
-																	value={s.reps || 0}
-																	onChange={(v) => updateSet(s.id!, 'reps', v)}
-																	step={1}
-																	min={0}
-																	max={100}
-																	sensitivity={28}
-																/>
-															</>
-														)}
-														<button
-															className="btn btn-ghost"
-															onClick={() => deleteSet(s.id!)}
-															style={{ minWidth: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-														>
-															<Trash2 size={20} style={{ color: 'var(--error)' }} />
-														</button>
-													</>
-												) : (
-													<>
-														{ex.type === 'Cardio' ? (
-															<>
-																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.distance_km || 0}</span>
-																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{formatDurationMMSS(s.duration_sec || 0)}</span>
-																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.incline || '-'}</span>
-															</>
-														) : ex.type === 'Time' ? (
-															<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.duration_sec || 0}s</span>
-														) : (
-															<>
-																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.weight_kg}</span>
-																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.reps}</span>
-															</>
-														)}
-														<span style={{ width: '40px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-															<CheckCircle size={16} color="var(--success)" />
-														</span>
-													</>
+															) : (
+																<>
+																	<HybridNumber
+																		value={s.weight_kg || 0}
+																		onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
+																		step={ex.is_bodyweight ? 1 : 2.5}
+																		min={0}
+																		max={9999}
+																		sensitivity={14}
+																	/>
+																	<HybridNumber
+																		value={s.reps || 0}
+																		onChange={(v) => updateSet(s.id!, 'reps', v)}
+																		step={1}
+																		min={0}
+																		max={100}
+																		sensitivity={28}
+																	/>
+																</>
+															)}
+															<button
+																className="btn btn-ghost"
+																onClick={() => deleteSet(s.id!)}
+																style={{ minWidth: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+															>
+																<Trash2 size={20} style={{ color: 'var(--error)' }} />
+															</button>
+														</>
+													) : (
+														<>
+															{ex.type === 'Cardio' ? (
+																<>
+																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.distance_km || 0}</span>
+																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{formatDurationMMSS(s.duration_sec || 0)}</span>
+																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.incline || '-'}</span>
+																</>
+															) : ex.type === 'Time' ? (
+																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.duration_sec || 0}s</span>
+															) : (
+																<>
+																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.weight_kg}</span>
+																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.reps}</span>
+																</>
+															)}
+															<span style={{ width: '40px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+																<CheckCircle size={16} color="var(--success)" />
+															</span>
+														</>
+													)}
+												</div>
+												{ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 && (
+													<div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '2px 0 6px', marginBottom: '4px' }}>
+														Pace: {formatPace(s.duration_sec / s.distance_km)} /km
+													</div>
 												)}
 											</div>
-											{ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 && (
-												<div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '2px 0 6px', marginBottom: '4px' }}>
-													Pace: {formatPace(s.duration_sec / s.distance_km)} /km
-												</div>
-											)}
-										</div>
-									);})}
+										);
+									})}
 
 									{isEditable && (
 										<button

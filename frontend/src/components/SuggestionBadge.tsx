@@ -4,20 +4,21 @@ import type { ProgressionSuggestion } from '../hooks/useProgressionSuggestions';
 
 interface SuggestionBadgeProps {
 	suggestion: ProgressionSuggestion;
+	exerciseName?: string;
 	onApply: (suggestion: ProgressionSuggestion) => void;
 	onDismiss: () => void;
 }
 
-export default function SuggestionBadge({ suggestion, onApply, onDismiss }: SuggestionBadgeProps) {
+export default function SuggestionBadge({ suggestion, exerciseName, onApply, onDismiss }: SuggestionBadgeProps) {
 	const [expanded, setExpanded] = useState(false);
 
 	const typeColors: Record<string, string> = {
-		weight_increase: 'var(--accent)',
-		rep_increase: 'var(--accent)',
+		weight_increase: 'var(--primary)',
+		rep_increase: 'var(--primary)',
 		deload: '#f59e0b',
-		exercise_swap: '#ef4444',
-		bw_progression: 'var(--accent)',
-		cardio_increase: 'var(--accent)',
+		exercise_swap: '#8b8cf8',
+		bw_progression: 'var(--primary)',
+		cardio_increase: 'var(--primary)',
 	};
 
 	const typeLabels: Record<string, string> = {
@@ -25,63 +26,65 @@ export default function SuggestionBadge({ suggestion, onApply, onDismiss }: Sugg
 		rep_increase: 'Reps ↑',
 		deload: 'Deload',
 		exercise_swap: 'Swap',
-		bw_progression: 'Progress',
+		bw_progression: suggestion.new_exercise_name ? 'Next Progression' : 'Progress',
 		cardio_increase: 'Cardio ↑',
 	};
 
-	const color = typeColors[suggestion.type] || 'var(--accent)';
+	const color = typeColors[suggestion.type] || 'var(--primary)';
 	const label = typeLabels[suggestion.type] || 'Suggestion';
+	const applyTextColor = suggestion.type === 'deload' ? '#fff' : suggestion.type === 'exercise_swap' ? '#fff' : '#000';
 
 	return (
-		<div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-			{/* Lightbulb badge */}
+		<div style={{ marginTop: '4px' }}>
+			{/* Trigger button — small inline lightbulb + label */}
 			<button
 				onClick={() => setExpanded(!expanded)}
 				style={{
 					background: 'none',
 					border: 'none',
 					cursor: 'pointer',
-					padding: '2px',
+					padding: '3px 0',
 					display: 'flex',
 					alignItems: 'center',
-					gap: '2px',
+					gap: '5px',
 					color,
 					fontSize: '11px',
-					fontWeight: 600,
+					fontWeight: 700,
 				}}
 				title="View suggestion"
 			>
-				<Lightbulb size={14} fill={color} />
+				<Lightbulb size={13} fill={color} style={{ flexShrink: 0 }} />
+				{suggestion.new_exercise_name && (suggestion.type === 'exercise_swap' || suggestion.type === 'bw_progression')
+					? <>
+						<span style={{ textDecoration: 'line-through', opacity: 0.5 }}>{exerciseName || 'Exercise'}</span>
+						<ArrowRight size={11} />
+						<span>{suggestion.new_exercise_name}</span>
+					</>
+					: label
+				}
 			</button>
 
-			{/* Expanded card */}
+			{/* Popup — expands in place (no absolute positioning) */}
 			{expanded && (
-				<div
-					style={{
-						position: 'absolute',
-						top: '100%',
-						left: 0,
-						right: 0,
-						minWidth: '280px',
-						zIndex: 50,
-						background: 'var(--bg-secondary, #1a1a2e)',
-						border: `1px solid ${color}33`,
-						borderRadius: '8px',
-						padding: '12px',
-						marginTop: '4px',
-						boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-					}}
-				>
+				<div style={{
+					background: 'var(--bg-secondary)',
+					border: `1px solid ${color}44`,
+					borderRadius: '8px',
+					padding: '12px',
+					marginTop: '4px',
+					boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+				}}>
 					{/* Header */}
 					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-						<span style={{
-							fontSize: '11px',
-							fontWeight: 700,
-							textTransform: 'uppercase',
-							color,
-							letterSpacing: '0.5px',
-						}}>
-							{label}
+						<span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color, letterSpacing: '0.5px' }}>
+							{suggestion.new_exercise_name
+								? <>
+									<span style={{ textDecoration: 'line-through', opacity: 0.5 }}>{exerciseName || 'Exercise'}</span>
+									{' → '}
+									{suggestion.new_exercise_name}
+								</>
+								: label
+							}
 						</span>
 						<button
 							onClick={() => { setExpanded(false); onDismiss(); }}
@@ -91,21 +94,14 @@ export default function SuggestionBadge({ suggestion, onApply, onDismiss }: Sugg
 						</button>
 					</div>
 
-					{/* Reason text */}
-					<p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: '0 0 10px 0', lineHeight: 1.4 }}>
+					{/* Reason */}
+					<p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: '0 0 10px', lineHeight: 1.4 }}>
 						{suggestion.reason}
 					</p>
 
-					{/* Suggested values */}
-					{suggestion.type !== 'exercise_swap' && (
-						<div style={{
-							display: 'flex',
-							alignItems: 'center',
-							gap: '8px',
-							fontSize: '13px',
-							color: 'var(--text-secondary)',
-							marginBottom: '10px',
-						}}>
+					{/* Current → Suggested values */}
+					{suggestion.type !== 'exercise_swap' && !suggestion.new_exercise_name && (
+						<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
 							<span>
 								{suggestion.current.weight !== undefined
 									? `${suggestion.current.weight}kg × ${suggestion.current.reps}`
@@ -126,19 +122,12 @@ export default function SuggestionBadge({ suggestion, onApply, onDismiss }: Sugg
 						</div>
 					)}
 
-					{/* New exercise name for bw_progression */}
+					{/* Progression chain: current → new exercise */}
 					{suggestion.new_exercise_name && (
-						<div style={{
-							display: 'flex',
-							alignItems: 'center',
-							gap: '6px',
-							fontSize: '13px',
-							color,
-							fontWeight: 600,
-							marginBottom: '10px',
-						}}>
+						<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 700, color, marginBottom: '10px' }}>
 							<ArrowRight size={14} />
-							{suggestion.new_exercise_name} ({suggestion.suggested.sets}×{suggestion.suggested.reps})
+							{suggestion.new_exercise_name}
+							{` (${suggestion.suggested.sets}×${suggestion.suggested.reps})`}
 						</div>
 					)}
 
@@ -150,12 +139,12 @@ export default function SuggestionBadge({ suggestion, onApply, onDismiss }: Sugg
 							style={{
 								flex: 1,
 								background: color,
-								color: '#fff',
+								color: applyTextColor,
 								border: 'none',
-								padding: '6px 12px',
+								padding: '7px 12px',
 								borderRadius: '6px',
 								fontSize: '12px',
-								fontWeight: 600,
+								fontWeight: 700,
 								cursor: 'pointer',
 								display: 'flex',
 								alignItems: 'center',
@@ -163,17 +152,12 @@ export default function SuggestionBadge({ suggestion, onApply, onDismiss }: Sugg
 								gap: '4px',
 							}}
 						>
-							<Check size={14} /> Apply
+							<Check size={13} /> Apply
 						</button>
 						<button
 							onClick={() => { setExpanded(false); onDismiss(); }}
 							className="btn btn-ghost"
-							style={{
-								padding: '6px 12px',
-								borderRadius: '6px',
-								fontSize: '12px',
-								cursor: 'pointer',
-							}}
+							style={{ padding: '7px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
 						>
 							Dismiss
 						</button>

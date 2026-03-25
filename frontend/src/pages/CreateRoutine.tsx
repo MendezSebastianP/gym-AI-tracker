@@ -5,13 +5,14 @@ import { api } from '../api/client';
 import { db } from '../db/schema';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ExercisePicker from '../components/ExercisePicker';
-import { Plus, Trash, Trash2, Wand2, GripVertical, Pencil } from 'lucide-react';
+import { Plus, Trash, Trash2, Wand2, GripVertical, Pencil, Bot, RefreshCw } from 'lucide-react';
 import ExerciseSuggestions from '../components/ExerciseSuggestions';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
 import HybridNumber from '../components/HybridNumber';
+import CoinIcon from '../components/icons/CoinIcon';
 
 export default function CreateRoutine() {
 	const [mode, setMode] = useState<'select' | 'manual' | 'ai'>(() => {
@@ -21,7 +22,7 @@ export default function CreateRoutine() {
 				const savedDays = localStorage.getItem('draftRoutineDays');
 				const hasDraft = savedDays && JSON.parse(savedDays).some((d: any) => d.exercises?.length > 0);
 				if (hasDraft) return 'manual';
-			} catch {}
+			} catch { }
 		}
 		return 'select';
 	});
@@ -394,8 +395,32 @@ export default function CreateRoutine() {
 
 	if (mode === 'select') {
 		return (
-			<div className="container fade-in">
-				<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+			<div className="container fade-in" style={{ paddingBottom: '80px' }}>
+				<style>{`
+					@keyframes wizardGlow {
+						0%, 100% { box-shadow: 0 0 20px rgba(204,255,0,0.15), 0 0 40px rgba(204,255,0,0.07); }
+						50% { box-shadow: 0 0 32px rgba(204,255,0,0.30), 0 0 64px rgba(204,255,0,0.13); }
+					}
+					@keyframes wandSpin {
+						0% { transform: rotate(-10deg) scale(1); }
+						50% { transform: rotate(10deg) scale(1.15); }
+						100% { transform: rotate(-10deg) scale(1); }
+					}
+					@keyframes sparkFloat {
+						0% { transform: translateY(0) rotate(0deg); opacity: 0.5; }
+						50% { transform: translateY(-7px) rotate(20deg); opacity: 1; }
+						100% { transform: translateY(0) rotate(0deg); opacity: 0.5; }
+					}
+					@keyframes shimmerWizard {
+						0% { background-position: -200% 0; }
+						100% { background-position: 200% 0; }
+					}
+					@keyframes wizardBtnPulse {
+						0%, 100% { box-shadow: 0 0 0 0 rgba(204,255,0,0.5); }
+						50% { box-shadow: 0 0 0 8px rgba(204,255,0,0); }
+					}
+				`}</style>
+				<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
 					<h1>{t('Create Routine')}</h1>
 					{isOnboarding && (
 						<button className="btn btn-ghost" onClick={handleSkip}>
@@ -403,14 +428,56 @@ export default function CreateRoutine() {
 						</button>
 					)}
 				</div>
-				<div style={{ display: 'grid', gap: '16px', marginTop: '32px' }}>
-					<button className="card" onClick={() => setMode('ai')} style={{ textAlign: 'left', cursor: 'pointer', border: '1px solid var(--primary)', background: 'rgba(204,255,0,0.03)' }}>
-						<h3 style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-							<Wand2 size={20} /> {t('AI Wizard')}
-						</h3>
-						<p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '14px' }}>
-							{t('Generate a personalized routine based on your profile and goals.')}
-						</p>
+				<div style={{ display: 'grid', gap: '16px' }}>
+					{/* AI Wizard — hero card */}
+					<button
+						onClick={() => setMode('ai')}
+						style={{
+							textAlign: 'left', cursor: 'pointer', border: 'none', padding: 0, background: 'none', width: '100%',
+						}}
+					>
+						<div style={{
+							background: 'linear-gradient(135deg, rgba(204,255,0,0.1) 0%, rgba(0,230,120,0.06) 100%)',
+							border: '1px solid rgba(204,255,0,0.35)',
+							borderRadius: '18px',
+							padding: '28px 24px',
+							position: 'relative',
+							overflow: 'hidden',
+							animation: 'wizardGlow 4s ease-in-out infinite',
+						}}>
+							{/* Shimmer overlay */}
+							<div style={{
+								position: 'absolute', inset: 0, pointerEvents: 'none',
+								background: 'linear-gradient(105deg, transparent 40%, rgba(204,255,0,0.05) 50%, transparent 60%)',
+								backgroundSize: '200% 100%', animation: 'shimmerWizard 5s linear infinite',
+							}} />
+							{/* Sparkles */}
+							<div style={{ position: 'absolute', top: '16px', right: '20px', animation: 'sparkFloat 2.8s ease-in-out infinite' }}>
+								<Wand2 size={20} color="rgba(204,255,0,0.4)" style={{ animation: 'wandSpin 3s ease-in-out infinite' }} />
+							</div>
+							<div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+								<div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(204,255,0,0.12)', display: 'flex' }}>
+									<Wand2 size={24} color="var(--primary)" />
+								</div>
+								<h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--primary)' }}>
+									{t('AI Wizard')}
+								</h3>
+							</div>
+							<p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5, margin: '0 0 20px' }}>
+								{t('Generate a personalized routine based on your profile and goals.')}
+							</p>
+							<div style={{
+								padding: '12px 20px', borderRadius: '10px', background: 'var(--primary)',
+								color: '#000', fontWeight: 800, fontSize: '14px', textAlign: 'center',
+								animation: 'wizardBtnPulse 2.5s ease-in-out infinite',
+								display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+							}}>
+								<Wand2 size={16} /> {t('Generate with AI')}
+								<span style={{ marginLeft: '4px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,0,0,0.15)', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+									<CoinIcon size={12} style={{ color: 'var(--gold)' }} /> 50
+								</span>
+							</div>
+						</div>
 					</button>
 
 					<button className="card" onClick={() => setMode('manual')} style={{ textAlign: 'left', cursor: 'pointer' }}>
@@ -522,7 +589,7 @@ export default function CreateRoutine() {
 							gap: '12px'
 						}}>
 							<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', fontSize: '14px' }}>
-								<span style={{ fontSize: '18px' }}>🤖</span> {t('AI Coach Note')}
+								<span style={{ display: 'inline-flex' }}><Bot size={18} color="var(--primary)" /></span> {t('AI Coach Note')}
 							</div>
 							<p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
 								{aiCoachMessage}
@@ -542,8 +609,8 @@ export default function CreateRoutine() {
 							flexDirection: 'column',
 							gap: '8px'
 						}}>
-							<span style={{ fontSize: '13px', color: 'var(--warning, orange)' }}>
-								🔄 {selectedForReplace.size} exercise{selectedForReplace.size > 1 ? 's' : ''} selected for replacement
+							<span style={{ fontSize: '13px', color: 'var(--warning, orange)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+								<RefreshCw size={14} /> {selectedForReplace.size} exercise{selectedForReplace.size > 1 ? 's' : ''} selected for replacement
 							</span>
 							<input
 								className="input"
@@ -597,7 +664,7 @@ export default function CreateRoutine() {
 									}}><Trash size={16} /></button>
 								</div>
 
-							
+
 								<DndContext
 									sensors={sensors}
 									collisionDetection={closestCenter}

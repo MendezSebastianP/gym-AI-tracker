@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
-import { ArrowLeft, TrendingUp, Minus, TrendingDown, Check, X, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, TrendingUp, Minus, TrendingDown, Check, Loader2, AlertTriangle, Sparkles, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../api/client';
 import { useTranslation } from 'react-i18next';
+import CoinIcon from '../components/icons/CoinIcon';
 
 interface ReportSuggestion {
 	type: string;
@@ -15,7 +16,6 @@ interface ReportSuggestion {
 	new_exercise_id?: number;
 	new_exercise_name?: string;
 	ai_note?: string;
-	ai_alternative?: { exercise_id: number; name: string; reason: string } | null;
 }
 
 interface ReportData {
@@ -24,121 +24,117 @@ interface ReportData {
 	overall_assessment: string;
 	periodization_note: string | null;
 	days: Record<string, Record<string, ReportSuggestion>>;
+	created_at?: string;
 }
 
 export default function ProgressionReport() {
 	const { id } = useParams();
 	const navigate = useNavigate();
-	const { t, i18n } = useTranslation();
-	const [report, setReport] = useState<ReportData | null>(null);
+	const { t: _t, i18n } = useTranslation();
+	const location = useLocation();
+
+	// ── Core state ──────────────────────────────────────────────────────────────
+	const [panel, setPanel] = useState<'past' | 'new'>('new');
+	const [generated, setGenerated] = useState(false);
+	const [assessmentOpen, setAssessmentOpen] = useState(true);
+
+	const [savedReport, setSavedReport] = useState<ReportData | null>(null);
+	const [currentReport, setCurrentReport] = useState<ReportData | null>(null); // what's shown in new panel
+	const [reportAge, setReportAge] = useState<string | null>(null);
+
 	const [loading, setLoading] = useState(false);
 	const [generating, setGenerating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [appliedExercises, setAppliedExercises] = useState<Set<string>>(new Set());
+
+	const [appliedPast, setAppliedPast] = useState(new Set<string>());
+	const [appliedNew, setAppliedNew] = useState(new Set<string>());
+
 	const [exerciseNames, setExerciseNames] = useState<Map<number, string>>(new Map());
-	const [reportAge, setReportAge] = useState<string | null>(null);
-	const [reportsRemaining, setReportsRemaining] = useState<number | null>(null);
-	const [maxPerWeek, setMaxPerWeek] = useState(3);
-	const [showConfirm, setShowConfirm] = useState(false);
+
+	const [userContext, setUserContext] = useState((location.state as any)?.userContext || '');
 
 	const routine = useLiveQuery(async () => {
 		if (!id) return null;
 		return await db.routines.get(parseInt(id));
 	}, [id]);
 
-	// Load exercise names for ID resolution
+	const completedSessionsCount = useLiveQuery(async () => {
+		if (!id) return 0;
+		const sessions = await db.sessions.where('routine_id').equals(parseInt(id)).filter(s => !!s.completed_at).toArray();
+		return sessions.length;
+	}, [id]);
+
+	const minSessionsRequired = routine?.days?.length || 1;
+	const canGenerate = (completedSessionsCount || 0) >= minSessionsRequired;
+
+	// ── Exercise name resolution ─────────────────────────────────────────────
 	useEffect(() => {
 		db.exercises.toArray().then(exercises => {
-			const currentLang = i18n.language.split('-')[0];
+			const lang = i18n.language.split('-')[0];
 			const map = new Map<number, string>();
 			exercises.forEach((ex: any) => {
-				map.set(ex.id, ex.name_translations?.[currentLang] || ex.name);
+				map.set(ex.id, ex.name_translations?.[lang] || ex.name);
 			});
 			setExerciseNames(map);
 		});
 	}, [i18n.language]);
 
-	// Load last saved report on mount (GET, no rate limit)
+	const getExerciseName = (exId: string | number): string =>
+		exerciseNames.get(Number(exId)) || `Exercise #${exId}`;
+
+	// ── Load last saved report on mount ─────────────────────────────────────
 	useEffect(() => {
 		if (!id) return;
 		setLoading(true);
 		api.get(`/progression/report/${id}`)
 			.then(res => {
-				setReportsRemaining(res.data.reports_remaining);
-				setMaxPerWeek(res.data.max_per_week);
 				if (res.data.report) {
-					setReport(res.data.report);
-					if (res.data.report.created_at) {
-						const created = new Date(res.data.report.created_at);
-						const mins = Math.round((Date.now() - created.getTime()) / 60000);
+					const r = res.data.report as ReportData;
+					setSavedReport(r);
+					setPanel('past');
+					if (r.created_at) {
+						const mins = Math.round((Date.now() - new Date(r.created_at).getTime()) / 60000);
 						if (mins < 60) setReportAge(`${mins}m ago`);
 						else if (mins < 1440) setReportAge(`${Math.round(mins / 60)}h ago`);
 						else setReportAge(`${Math.round(mins / 1440)}d ago`);
 					}
 				}
 			})
-			.catch(() => {})
+			.catch(() => { })
 			.finally(() => setLoading(false));
 	}, [id]);
 
-	const confirmGenerate = () => {
-		setShowConfirm(true);
-	};
-
+	// ── Generate ─────────────────────────────────────────────────────────────
 	const generateReport = () => {
-		if (!id || generating) return;
-		setShowConfirm(false);
+		if (!id || generating || !canGenerate) return;
 		setGenerating(true);
 		setError(null);
-		api.post(`/progression/report/${id}`)
+		api.post(`/progression/report/${id}`, { user_context: userContext.trim() || undefined })
 			.then(res => {
-				setReport(res.data);
+				const r = res.data as ReportData;
+				setCurrentReport(r);
+				setSavedReport(r);
 				setReportAge('just now');
-				if (reportsRemaining !== null) setReportsRemaining(Math.max(0, reportsRemaining - 1));
+				setGenerated(true);
+				setAppliedNew(new Set());
+				setAssessmentOpen(true);
 			})
 			.catch(e => {
-				if (e?.response?.status === 429) {
-					setReportsRemaining(0);
-					setError('No reports remaining this week.');
-				} else {
-					setError(e?.response?.data?.detail || 'Failed to generate report');
-				}
+				setError(e?.response?.data?.detail || 'Failed to generate report');
 			})
 			.finally(() => setGenerating(false));
 	};
 
-	const getExerciseName = (exId: string | number): string => {
-		return exerciseNames.get(Number(exId)) || `Exercise #${exId}`;
-	};
-
-	const trendIcon = (suggestion: ReportSuggestion) => {
-		if (suggestion.type === 'weight_increase' || suggestion.type === 'bw_progression' || suggestion.type === 'cardio_increase' || suggestion.type === 'rep_increase') {
-			return <TrendingUp size={16} color="var(--success, #22c55e)" />;
-		}
-		if (suggestion.type === 'deload') {
-			return <TrendingDown size={16} color="#f59e0b" />;
-		}
-		if (suggestion.type === 'exercise_swap') {
-			return <AlertTriangle size={16} color="#ef4444" />;
-		}
-		return <Minus size={16} color="var(--text-tertiary)" />;
-	};
-
-	const typeLabel = (type: string) => {
-		const labels: Record<string, string> = {
-			weight_increase: 'Weight Increase',
-			rep_increase: 'Rep Increase',
-			deload: 'Deload Recommended',
-			exercise_swap: 'Consider Swapping',
-			bw_progression: 'Next Progression',
-			cardio_increase: 'Cardio Progression',
-		};
-		return labels[type] || type;
-	};
-
-	const applySuggestion = async (dayName: string, exIdStr: string, suggestion: ReportSuggestion, useAlternative?: boolean) => {
+	// ── Apply suggestion ────────────────────────────────────────────────────
+	const applySuggestion = async (
+		dayName: string, exIdStr: string,
+		suggestion: ReportSuggestion,
+		reportData: ReportData,
+		appliedSet: Set<string>,
+		setApplied: (fn: (prev: Set<string>) => Set<string>) => void,
+	) => {
 		const key = `${dayName}-${exIdStr}`;
-		if (appliedExercises.has(key) || !routine) return;
+		if (appliedSet.has(key) || !routine) return;
 
 		const updatedDays = JSON.parse(JSON.stringify(routine.days));
 		const exId = Number(exIdStr);
@@ -147,18 +143,10 @@ export default function ProgressionReport() {
 			if (day.day_name === dayName) {
 				const routineEx = day.exercises.find((e: any) => e.exercise_id === exId);
 				if (routineEx) {
-					if (useAlternative && suggestion.ai_alternative?.exercise_id) {
-						// Apply the AI alternative exercise
-						routineEx.exercise_id = suggestion.ai_alternative.exercise_id;
-					} else {
-						// Apply the main suggestion
-						if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
-						if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
-						if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
-						if (suggestion.new_exercise_id) {
-							routineEx.exercise_id = suggestion.new_exercise_id;
-						}
-					}
+					if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
+					if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
+					if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
+					if (suggestion.new_exercise_id) routineEx.exercise_id = suggestion.new_exercise_id;
 				}
 			}
 		}
@@ -166,409 +154,433 @@ export default function ProgressionReport() {
 		try {
 			await api.put(`/routines/${routine.id}`, { days: updatedDays });
 			await db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
-		} catch { /* offline */ }
 
-		// Also update current active session if any
-		try {
-			const activeSessions = await db.sessions
-				.where('routine_id')
-				.equals(routine.id!)
-				.filter(s => !s.completed_at)
-				.toArray();
+			// Sync suggestion to active draft session if it exists
+			try {
+				const activeSession = await db.sessions
+					.where('routine_id').equals(routine.id!)
+					.filter((s: any) => !s.completed_at).first();
 
-			for (const sess of activeSessions) {
-				const sessExId = Number(exIdStr);
-				const setsToUpdate = await db.sets
-					.where('session_id')
-					.equals(sess.id!)
-					.filter(s => s.exercise_id === sessExId)
-					.toArray();
-
-				for (const s of setsToUpdate) {
+				if (activeSession && activeSession.id) {
 					const updates: any = { syncStatus: 'updated' };
 					if (suggestion.suggested.weight !== undefined) updates.weight_kg = suggestion.suggested.weight;
 					if (suggestion.suggested.reps !== undefined) {
-						const repsVal = typeof suggestion.suggested.reps === 'string'
-							? parseInt(suggestion.suggested.reps.split('-')[0]) || 0
-							: suggestion.suggested.reps;
-						updates.reps = repsVal;
+						updates.reps = parseInt(String(suggestion.suggested.reps).split('-')[0]) || 0;
 					}
-					await db.sets.update(s.id!, updates);
-				}
-			}
-		} catch { /* best effort */ }
 
-		// Feedback
+					if (Object.keys(updates).length > 1) {
+						const setsToUpdate = await db.sets
+							.where('session_id').equals(activeSession.id)
+							.filter((s: any) => s.exercise_id === exId).toArray();
+
+						for (const s of setsToUpdate) {
+							if (s.id) await db.sets.update(s.id, updates);
+						}
+					}
+				}
+			} catch { /* ignore session sync prep errors */ }
+		} catch { /* offline */ }
+
 		api.post('/progression/feedback', {
-			report_id: report?.report_id,
+			report_id: reportData.report_id,
 			exercise_id: exId,
-			suggestion_type: useAlternative ? 'ai_alternative' : suggestion.type,
-			suggested_value: useAlternative ? suggestion.ai_alternative : suggestion.suggested,
+			suggestion_type: suggestion.type,
+			suggested_value: suggestion.suggested,
 			action: 'accepted',
-			applied_value: useAlternative ? suggestion.ai_alternative : suggestion.suggested,
-		}).catch(() => {});
+			applied_value: suggestion.suggested,
+		}).catch(() => { });
 
-		setAppliedExercises(prev => new Set([...prev, key]));
+		setApplied(prev => new Set([...prev, key]));
 	};
 
-	const applyAll = () => {
-		if (!report) return;
-		for (const [dayName, exercises] of Object.entries(report.days)) {
-			for (const [exId, suggestion] of Object.entries(exercises)) {
-				const key = `${dayName}-${exId}`;
-				if (!appliedExercises.has(key)) {
-					applySuggestion(dayName, exId, suggestion);
-				}
+	// ── Helpers ───────────────────────────────────────────────────────────────
+	const typeColor = (type: string) =>
+		type === 'deload' ? '#f59e0b' : type === 'exercise_swap' ? '#8b8cf8' : 'var(--primary)';
+
+	const typeLabel = (s: ReportSuggestion) => {
+		if (s.type === 'bw_progression' && s.new_exercise_name) return 'Next Progression';
+		return ({
+			weight_increase: '+Weight', rep_increase: '+Reps', deload: 'Deload',
+			exercise_swap: 'Swap', bw_progression: '+Reps', cardio_increase: '+Cardio',
+		}[s.type] || s.type);
+	};
+
+	const trendIcon = (type: string) => {
+		if (['weight_increase', 'bw_progression', 'cardio_increase', 'rep_increase'].includes(type))
+			return <TrendingUp size={15} color="var(--success, #22c55e)" />;
+		if (type === 'deload') return <TrendingDown size={15} color="#f59e0b" />;
+		if (type === 'exercise_swap') return <AlertTriangle size={15} color="#8b8cf8" />;
+		return <Minus size={15} color="var(--text-tertiary)" />;
+	};
+
+	const confidenceLabel = (c: number) => c >= 0.85 ? 'High' : c >= 0.7 ? 'Med' : 'Low';
+	const confidenceColor = (c: number) => c >= 0.85 ? 'var(--success, #22c55e)' : c >= 0.7 ? '#f59e0b' : 'var(--text-tertiary)';
+
+	const formatChange = (s: ReportSuggestion) => {
+		if (s.type === 'exercise_swap' && !s.new_exercise_name) return 'Consider replacement';
+		const c = s.current; const g = s.suggested;
+		const parts: string[] = [];
+		if (c.weight !== undefined && g.weight !== undefined && c.weight !== g.weight) parts.push(`${c.weight}→${g.weight}kg`);
+		if (c.sets !== undefined && g.sets !== undefined && c.sets !== g.sets) parts.push(`${c.sets}→${g.sets} sets`);
+		if (c.reps !== undefined && g.reps !== undefined && c.reps !== g.reps) parts.push(`${c.reps}→${g.reps} reps`);
+		return parts.join(' · ') || 'See details';
+	};
+
+	// ── Exercise card (shared between past and new panels) ────────────────────
+	const ExerciseCard = ({
+		dayName, exId, sug, appliedSet, setApplied, reportData,
+	}: {
+		dayName: string; exId: string; sug: ReportSuggestion;
+		appliedSet: Set<string>; setApplied: (fn: (prev: Set<string>) => Set<string>) => void;
+		reportData: ReportData;
+	}) => {
+		const isAppliedToRoutine = () => {
+			if (!routine) return false;
+			const day = routine.days.find((d: any) => d.day_name === dayName);
+			if (!day) return false;
+
+			if (sug.type === 'exercise_swap' || sug.new_exercise_id) {
+				const oldEx = day.exercises.find((e: any) => String(e.exercise_id) === exId);
+				const hasNewEx = day.exercises.some((e: any) => e.exercise_id === sug.new_exercise_id);
+				if (!oldEx && hasNewEx) return true;
+			} else {
+				const ex = day.exercises.find((e: any) => String(e.exercise_id) === exId);
+				if (!ex) return false; // Not swap, but missing?
+
+				let matched = true;
+				if (sug.suggested.weight !== undefined && ex.weight_kg !== sug.suggested.weight) matched = false;
+				if (sug.suggested.reps !== undefined && ex.reps !== String(sug.suggested.reps)) matched = false;
+				if (sug.suggested.sets !== undefined && ex.sets !== sug.suggested.sets) matched = false;
+				if (matched) return true;
 			}
-		}
+			return false;
+		};
+
+		const key = `${dayName}-${exId}`;
+		const done = appliedSet.has(key) || isAppliedToRoutine();
+		const color = typeColor(sug.type);
+		const applyTextColor = sug.type === 'exercise_swap' || sug.type === 'deload' ? '#fff' : '#000';
+
+		return (
+			<div style={{
+				padding: '12px 14px', borderRadius: '10px', marginBottom: '8px',
+				background: done ? 'rgba(34,197,94,0.04)' : 'var(--bg-secondary)',
+				border: `1px solid ${done ? 'rgba(34,197,94,0.25)' : 'var(--border)'}`,
+				opacity: done ? 0.6 : 1,
+			}}>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+					{trendIcon(sug.type)}
+					<span style={{ fontWeight: 700, fontSize: '14px', flex: 1, lineHeight: 1.4 }}>
+						{sug.new_exercise_name
+							? <>
+								<span style={{ textDecoration: 'line-through', opacity: 0.5, fontWeight: 500 }}>{getExerciseName(exId)}</span>
+								{' '}<ArrowRight size={13} style={{ display: 'inline', verticalAlign: 'middle' }} color="var(--primary)" />{' '}
+								<span style={{ color: 'var(--primary)' }}>{sug.new_exercise_name}</span>
+							</>
+							: getExerciseName(exId)
+						}
+					</span>
+					<span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: `${color}15`, color }}>{typeLabel(sug)}</span>
+				</div>
+
+				{/* Change summary */}
+				{sug.new_exercise_name ? (
+					<div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', marginBottom: '5px', color: 'var(--text-secondary)' }}>
+						{sug.suggested.sets && sug.suggested.reps && (
+							<span style={{ fontWeight: 600 }}>{sug.suggested.sets}×{sug.suggested.reps}</span>
+						)}
+					</div>
+				) : sug.type === 'exercise_swap' ? (
+					<div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '5px', color }}>
+						{formatChange(sug)}
+					</div>
+				) : (
+					<div style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 600, marginBottom: '4px' }}>
+						{formatChange(sug)}
+					</div>
+				)}
+
+				<p style={{ margin: '0 0 4px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{sug.reason}</p>
+				{sug.ai_note && <p style={{ margin: '0 0 6px', fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>"{sug.ai_note}"</p>}
+
+				<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+					<span style={{ fontSize: '10px', color: confidenceColor(sug.confidence) }}>● {confidenceLabel(sug.confidence)} reliability</span>
+					{done ? (
+						<span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: 700 }}>Applied</span>
+					) : (
+						<button
+							onClick={() => applySuggestion(dayName, exId, sug, reportData, appliedSet, setApplied)}
+							style={{ fontSize: '11px', padding: '5px 14px', borderRadius: '6px', background: color, color: applyTextColor, border: 'none', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+						>
+							<Check size={10} /> Apply
+						</button>
+					)}
+				</div>
+			</div>
+		);
 	};
 
+	// ── Loading ───────────────────────────────────────────────────────────────
 	if (loading) {
 		return (
 			<div className="container fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px' }}>
-				<Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />
+				<Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />
 				<p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading report...</p>
 			</div>
 		);
 	}
 
+	// ── Generating animation ──────────────────────────────────────────────────
 	if (generating) {
 		return (
-			<div className="container fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px', textAlign: 'center' }}>
-				<TrendingUp size={48} style={{ color: 'var(--accent)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-				<h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>Generating progression report...</h2>
-				<p style={{ color: 'var(--text-tertiary)', fontSize: '14px', margin: 0 }}>Analysing your session history and consulting AI</p>
-				<style>
-					{`
-					@keyframes fakeProgress {
-						0% { width: 0%; }
-						10% { width: 30%; }
-						40% { width: 70%; }
-						100% { width: 95%; }
-					}
-					@keyframes pulse {
-						0%, 100% { opacity: 1; }
-						50% { opacity: 0.5; }
-					}
-					`}
-				</style>
-				<div style={{ width: '80%', height: '6px', backgroundColor: 'var(--bg-tertiary, #222)', borderRadius: '3px', overflow: 'hidden', marginTop: '8px' }}>
-					<div style={{
-						height: '100%',
-						backgroundColor: 'var(--accent)',
-						animation: 'fakeProgress 15s cubic-bezier(0.1, 0.8, 0.2, 1) forwards',
-						borderRadius: '3px',
-					}} />
+			<div className="container fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '70vh', gap: '20px', textAlign: 'center' }}>
+				<style>{`
+					@keyframes fakeProgress { 0% { width: 0%; } 10% { width: 25%; } 40% { width: 65%; } 100% { width: 95%; } }
+					@keyframes orbitSpark { 0% { transform: rotate(0deg) translateX(36px) rotate(0deg); } 100% { transform: rotate(360deg) translateX(36px) rotate(-360deg); } }
+					@keyframes reportGenGlow { 0%, 100% { box-shadow: 0 0 20px rgba(204,255,0,0.3); } 50% { box-shadow: 0 0 40px rgba(204,255,0,0.6), 0 0 80px rgba(0,229,176,0.2); } }
+				`}</style>
+				<div style={{ position: 'relative', width: '80px', height: '80px', flexShrink: 0 }}>
+					<div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(204,255,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'reportGenGlow 2s ease-in-out infinite' }}>
+						<TrendingUp size={36} color="var(--primary)" />
+					</div>
+					{[0, 0.67, 1.33].map((delay, i) => (
+						<div key={i} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: `orbitSpark 2s linear infinite ${delay}s` }}>
+							<Sparkles size={i === 0 ? 14 : i === 1 ? 10 : 12} color={i === 0 ? 'rgba(204,255,0,0.9)' : i === 1 ? 'rgba(0,229,176,0.8)' : 'rgba(204,255,0,0.7)'} />
+						</div>
+					))}
+				</div>
+				<div>
+					<h2 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 8px', background: 'linear-gradient(135deg, var(--primary), #00e5b0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+						Analysing your training...
+					</h2>
+					<p style={{ color: 'var(--text-tertiary)', fontSize: '14px', margin: 0 }}>Crunching session history and consulting AI</p>
+				</div>
+				<div style={{ width: '80%', height: '6px', background: 'var(--bg-secondary)', borderRadius: '3px', overflow: 'hidden' }}>
+					<div style={{ height: '100%', borderRadius: '3px', background: 'linear-gradient(90deg, var(--primary), #00e5b0)', animation: 'fakeProgress 15s cubic-bezier(0.1, 0.8, 0.2, 1) forwards' }} />
 				</div>
 			</div>
 		);
 	}
 
-	const remainingLabel = reportsRemaining !== null
-		? `${reportsRemaining}/${maxPerWeek} reports remaining this week`
-		: '';
-
-	if (!report && !error) {
-		// No saved report — show generate button
-		return (
-			<div className="container fade-in">
-				<button className="btn btn-ghost" onClick={() => navigate(-1)} style={{ marginBottom: '16px' }}>
-					<ArrowLeft size={20} /> Back
-				</button>
-				<div className="card" style={{ textAlign: 'center', padding: '32px' }}>
-					<TrendingUp size={32} color="var(--accent)" style={{ marginBottom: '12px' }} />
-					<p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Progression Report</p>
-					<p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '8px' }}>
-						Analyse your session history and get AI-powered suggestions for weight, reps, and exercise changes.
-					</p>
-					{remainingLabel && (
-						<p style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginBottom: '16px' }}>{remainingLabel}</p>
-					)}
-					<button
-						className="btn btn-primary"
-						onClick={generateReport}
-						disabled={generating}
-						style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-					>
-						{generating ? (
-							<><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Generating...</>
-						) : (
-							'Generate Report'
-						)}
-					</button>
-				</div>
+	// ── Generate form (new panel, not yet generated) ──────────────────────────
+	const GenerateForm = () => (
+		<div>
+			<style>{`@keyframes genGlow { 0%,100% { box-shadow: 0 0 16px rgba(204,255,0,0.2), 0 4px 12px rgba(0,0,0,0.2); } 50% { box-shadow: 0 0 28px rgba(204,255,0,0.45), 0 6px 20px rgba(0,0,0,0.3); } }`}</style>
+			<h3 style={{ margin: '0 0 6px', fontSize: '16px', fontWeight: 800 }}>Generate New Report</h3>
+			<p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.5 }}>
+				AI analyses your full session history and tells you what to change for each exercise.
+				{routine && <> · <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{routine.name}</span></>}
+			</p>
+			<div style={{ marginBottom: '16px' }}>
+				<textarea
+					value={userContext}
+					onChange={e => setUserContext(e.target.value)}
+					placeholder='e.g. "Check if I should deload" or "Focus on my bench press plateau"'
+					maxLength={400}
+					rows={3}
+					style={{
+						width: '100%', padding: '10px 12px', borderRadius: '8px',
+						background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+						color: 'var(--text-primary)', fontSize: '13px', resize: 'vertical', boxSizing: 'border-box'
+					}}
+				/>
 			</div>
-		);
-	}
-
-	if (error && !report) {
-		return (
-			<div className="container fade-in">
-				<button className="btn btn-ghost" onClick={() => navigate(-1)} style={{ marginBottom: '16px' }}>
-					<ArrowLeft size={20} /> Back
-				</button>
-				<div className="card" style={{ textAlign: 'center', padding: '32px' }}>
-					<AlertTriangle size={32} color="#ef4444" style={{ marginBottom: '12px' }} />
-					<p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Failed to generate report</p>
-					<p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{error}</p>
-					{remainingLabel && (
-						<p style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginTop: '8px' }}>{remainingLabel}</p>
-					)}
-					<button className="btn btn-primary" onClick={generateReport} disabled={generating} style={{ marginTop: '16px' }}>
-						{generating ? 'Generating...' : 'Try Again'}
-					</button>
-				</div>
+			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: '20px', fontSize: '13px' }}>
+				{!canGenerate ? (
+					<span style={{ color: '#f59e0b', fontWeight: 600 }}>
+						Complete at least {minSessionsRequired} session{minSessionsRequired > 1 ? 's' : ''} first ({completedSessionsCount || 0}/{minSessionsRequired})
+					</span>
+				) : (
+					<span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+						Cost: <strong><CoinIcon size={14} style={{ color: 'var(--gold)' }} /> 50</strong>
+					</span>
+				)}
 			</div>
-		);
-	}
-
-	if (!report) return null;
-
-	const totalSuggestions = Object.values(report.days).reduce(
-		(acc, day) => acc + Object.keys(day).length, 0
+			{error && (
+				<p style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '12px', textAlign: 'center' }}>{error}</p>
+			)}
+			<button
+				onClick={generateReport}
+				disabled={generating || !canGenerate}
+				style={{
+					width: '100%', padding: '15px', borderRadius: '12px', border: 'none',
+					background: !canGenerate ? 'var(--bg-secondary)' : 'linear-gradient(135deg, var(--primary) 0%, #00e5b0 100%)',
+					color: !canGenerate ? 'var(--text-tertiary)' : '#000',
+					fontWeight: 800, fontSize: '15px', cursor: !canGenerate ? 'not-allowed' : 'pointer',
+					display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+					letterSpacing: '0.01em',
+					animation: 'genGlow 2.5s ease-in-out infinite',
+				}}
+			>
+				<Sparkles size={17} />
+				Generate Report — <CoinIcon size={15} style={{ color: !canGenerate ? 'var(--text-tertiary)' : 'rgba(0,0,0,0.6)' }} /> 50
+			</button>
+		</div>
 	);
+
+	// ── Report view (past panel OR new panel after generating) ────────────────
+	const ReportView = ({
+		report, appliedSet, setApplied, showBack,
+	}: {
+		report: ReportData;
+		appliedSet: Set<string>;
+		setApplied: (fn: (prev: Set<string>) => Set<string>) => void;
+		showBack?: boolean;
+	}) => {
+		const total = Object.values(report.days).reduce((a, d) => a + Object.keys(d).length, 0);
+		const appliedCount = appliedSet.size;
+
+		return (
+			<div>
+				{showBack && (
+					<div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+						<button onClick={() => { setGenerated(false); setCurrentReport(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', padding: '4px' }}>
+							<ArrowLeft size={18} />
+						</button>
+						<div>
+							<h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>{report.routine_name}</h3>
+							<span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>just now · {total} suggestions</span>
+						</div>
+						{total > 0 && (
+							<button
+								onClick={() => {
+									for (const [dayName, exs] of Object.entries(report.days)) {
+										for (const [exId, sug] of Object.entries(exs)) {
+											if (!appliedSet.has(`${dayName}-${exId}`)) {
+												applySuggestion(dayName, exId, sug, report, appliedSet, setApplied);
+											}
+										}
+									}
+								}}
+								style={{ marginLeft: 'auto', fontSize: '11px', padding: '6px 14px', borderRadius: '8px', background: 'var(--primary)', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
+							>
+								<Check size={12} /> Apply All
+							</button>
+						)}
+					</div>
+				)}
+
+				{/* Collapsible Assessment */}
+				<button onClick={() => setAssessmentOpen(!assessmentOpen)} style={{
+					width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+					padding: '12px 14px', borderRadius: assessmentOpen ? '10px 10px 0 0' : '10px',
+					background: 'var(--bg-secondary)', border: '1px solid var(--border)', cursor: 'pointer',
+					borderBottom: assessmentOpen ? 'none' : undefined, marginBottom: assessmentOpen ? 0 : '12px',
+				}}>
+					<span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
+						AI Assessment · {appliedCount}/{total} applied
+					</span>
+					{assessmentOpen ? <ChevronUp size={14} color="var(--text-tertiary)" /> : <ChevronDown size={14} color="var(--text-tertiary)" />}
+				</button>
+				{assessmentOpen && (
+					<div style={{ padding: '12px 14px 14px', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 10px 10px', marginBottom: '12px', background: 'var(--bg-card)' }}>
+						<p style={{ margin: '0 0 8px', fontSize: '13px', lineHeight: 1.6, color: 'var(--text-secondary)' }}>{report.overall_assessment}</p>
+						{report.periodization_note && (
+							<p style={{ margin: 0, fontSize: '12px', color: '#f59e0b', lineHeight: 1.5 }}>⚠ {report.periodization_note}</p>
+						)}
+					</div>
+				)}
+
+				{/* Exercises per day */}
+				{Object.entries(report.days).map(([dayName, exercises]) => (
+					<div key={dayName} style={{ marginBottom: '16px' }}>
+						<h4 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', margin: '0 0 8px' }}>{dayName}</h4>
+						{Object.entries(exercises).map(([exId, sug]) => (
+							<ExerciseCard
+								key={exId}
+								dayName={dayName} exId={exId} sug={sug}
+								appliedSet={appliedSet} setApplied={setApplied}
+								reportData={report}
+							/>
+						))}
+					</div>
+				))}
+
+				{total === 0 && (
+					<div className="card" style={{ textAlign: 'center', padding: '28px' }}>
+						<TrendingUp size={28} color="var(--success)" style={{ marginBottom: '10px' }} />
+						<p style={{ color: 'var(--text-primary)', fontWeight: 600, margin: '0 0 4px' }}>Looking good!</p>
+						<p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: 0 }}>No progression changes needed. Keep training consistently!</p>
+					</div>
+				)}
+			</div>
+		);
+	};
+
+	// ── Root render ───────────────────────────────────────────────────────────
+	const hasSavedReport = savedReport !== null;
 
 	return (
 		<div className="container fade-in" style={{ paddingBottom: '80px' }}>
-			{/* Header */}
-			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-				<div style={{ display: 'flex', alignItems: 'center' }}>
-					<button className="btn btn-ghost" onClick={() => navigate(-1)} style={{ paddingLeft: 0 }}>
-						<ArrowLeft size={24} />
-					</button>
-					<div>
-						<h2 style={{ margin: 0, fontSize: '18px' }}>Progression Report</h2>
-						<span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-							{report.routine_name}
-							{reportAge && <> &middot; {reportAge}</>}
-						</span>
-					</div>
+			{/* Page header */}
+			<div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+				<button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', padding: '4px' }}>
+					<ArrowLeft size={22} />
+				</button>
+				<div>
+					<h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Progression Report</h2>
+					{routine && <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{routine.name}</span>}
 				</div>
-				<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-					<button
-						className="btn btn-ghost"
-						onClick={confirmGenerate}
-						disabled={generating}
-						title={reportsRemaining !== null ? `Regenerate (${reportsRemaining} left this week)` : 'Regenerate report'}
-						style={{ padding: '8px', display: 'flex', alignItems: 'center' }}
-					>
-						<RefreshCw size={16} style={generating ? { animation: 'spin 1s linear infinite' } : undefined} />
-					</button>
-					{totalSuggestions > 0 && (
+			</div>
+
+			{/* Panel toggle — only when there's a past report */}
+			{hasSavedReport && (
+				<div style={{ display: 'flex', marginBottom: '20px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+					{(['past', 'new'] as const).map(p => (
 						<button
-							className="btn btn-primary"
-							onClick={applyAll}
-							style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+							key={p}
+							onClick={() => { setPanel(p); if (p === 'new' && !generated) setError(null); }}
+							style={{
+								flex: 1, padding: '10px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '13px',
+								background: panel === p ? 'var(--primary)' : 'var(--bg-secondary)',
+								color: panel === p ? '#000' : 'var(--text-secondary)',
+								display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+							}}
 						>
-							<Check size={14} /> Apply All ({totalSuggestions})
+							{p === 'past' ? (
+								<><Clock size={14} /> Past Report {reportAge && <span style={{ fontSize: '10px', fontWeight: 400, opacity: 0.8 }}>· {reportAge}</span>}</>
+							) : (
+								<><Sparkles size={14} /> New Report</>
+							)}
 						</button>
-					)}
-				</div>
-			</div>
-
-			{/* Inline error when regeneration fails but cached report is showing */}
-			{error && (
-				<div className="card" style={{ marginBottom: '16px', borderLeft: '3px solid #ef4444', padding: '10px 16px' }}>
-					<p style={{ margin: 0, fontSize: '13px', color: '#ef4444' }}>{error}</p>
+					))}
 				</div>
 			)}
 
-			{/* Overall Assessment */}
-			<div className="card" style={{ marginBottom: '16px', borderLeft: '3px solid var(--accent)' }}>
-				<h3 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--accent)' }}>Overall Assessment</h3>
-				<p style={{ margin: 0, fontSize: '14px', lineHeight: 1.6, color: 'var(--text-primary)' }}>
-					{report.overall_assessment}
-				</p>
-			</div>
-
-			{/* Periodization Note */}
-			{report.periodization_note && (
-				<div className="card" style={{ marginBottom: '16px', borderLeft: '3px solid #f59e0b' }}>
-					<h3 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#f59e0b' }}>Periodization</h3>
-					<p style={{ margin: 0, fontSize: '14px', lineHeight: 1.6, color: 'var(--text-primary)' }}>
-						{report.periodization_note}
-					</p>
+			{/* ── Past panel ── */}
+			{panel === 'past' && savedReport && (
+				<div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
+					<ReportView
+						report={savedReport}
+						appliedSet={appliedPast}
+						setApplied={setAppliedPast}
+					/>
 				</div>
 			)}
 
-			{/* Per-Day Exercise Breakdown */}
-			{Object.entries(report.days).map(([dayName, exercises]) => (
-				<div key={dayName} style={{ marginBottom: '20px' }}>
-					<h3 style={{ fontSize: '16px', marginBottom: '10px', color: 'var(--text-primary)', borderBottom: '1px solid var(--border, #333)', paddingBottom: '6px' }}>
-						{dayName}
-					</h3>
-					<div style={{ display: 'grid', gap: '10px' }}>
-						{Object.entries(exercises).map(([exId, suggestion]) => {
-							const key = `${dayName}-${exId}`;
-							const isApplied = appliedExercises.has(key);
-
-							return (
-								<div key={exId} className="card" style={{
-									padding: '12px 16px',
-									borderLeft: `3px solid ${
-										suggestion.type === 'deload' ? '#f59e0b'
-										: suggestion.type === 'exercise_swap' ? '#ef4444'
-										: 'var(--accent)'
-									}`,
-									opacity: isApplied ? 0.6 : 1,
-								}}>
-									{/* Exercise header */}
-									<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-										<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-											{trendIcon(suggestion)}
-											<span style={{ fontWeight: 600, fontSize: '14px' }}>{getExerciseName(exId)}</span>
-										</div>
-										<span style={{
-											fontSize: '11px',
-											fontWeight: 600,
-											textTransform: 'uppercase',
-											padding: '2px 8px',
-											borderRadius: '4px',
-											background: suggestion.type === 'deload' ? 'rgba(245,158,11,0.15)' : suggestion.type === 'exercise_swap' ? 'rgba(239,68,68,0.15)' : 'rgba(99,102,241,0.15)',
-											color: suggestion.type === 'deload' ? '#f59e0b' : suggestion.type === 'exercise_swap' ? '#ef4444' : 'var(--accent)',
-										}}>
-											{typeLabel(suggestion.type)}
-										</span>
-									</div>
-
-									{/* Reason */}
-									<p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 6px 0', lineHeight: 1.4 }}>
-										{suggestion.reason}
-									</p>
-
-									{/* AI Note */}
-									{suggestion.ai_note && (
-										<p style={{ fontSize: '12px', color: 'var(--text-tertiary)', margin: '0 0 6px 0', fontStyle: 'italic' }}>
-											Coach note: {suggestion.ai_note}
-										</p>
-									)}
-
-									{/* AI Alternative */}
-									{suggestion.ai_alternative && (
-										<div style={{ fontSize: '12px', color: 'var(--accent)', margin: '0 0 8px 0' }}>
-											Alternative: <strong>{suggestion.ai_alternative.name}</strong> — {suggestion.ai_alternative.reason}
-										</div>
-									)}
-
-									{/* Actions */}
-									{!isApplied ? (
-										<div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
-											<button
-												onClick={() => applySuggestion(dayName, exId, suggestion)}
-												style={{
-													background: 'var(--accent)',
-													color: '#fff',
-													border: 'none',
-													padding: '5px 14px',
-													borderRadius: '6px',
-													fontSize: '12px',
-													fontWeight: 600,
-													cursor: 'pointer',
-													display: 'flex',
-													alignItems: 'center',
-													gap: '4px',
-												}}
-											>
-												<Check size={12} /> Apply
-											</button>
-											{suggestion.ai_alternative && (
-												<button
-													onClick={() => applySuggestion(dayName, exId, suggestion, true)}
-													style={{
-														background: 'none',
-														color: 'var(--accent)',
-														border: '1px solid var(--accent)',
-														padding: '5px 14px',
-														borderRadius: '6px',
-														fontSize: '12px',
-														fontWeight: 600,
-														cursor: 'pointer',
-														display: 'flex',
-														alignItems: 'center',
-														gap: '4px',
-													}}
-												>
-													<Check size={12} /> Use Alternative
-												</button>
-											)}
-											<button
-												onClick={() => {
-													api.post('/progression/feedback', {
-														report_id: report.report_id,
-														exercise_id: Number(exId),
-														suggestion_type: suggestion.type,
-														suggested_value: suggestion.suggested,
-														action: 'rejected',
-													}).catch(() => {});
-													setAppliedExercises(prev => new Set([...prev, key]));
-												}}
-												className="btn btn-ghost"
-												style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px' }}
-											>
-												Dismiss
-											</button>
-										</div>
-									) : (
-										<span style={{ fontSize: '12px', color: 'var(--success)', fontWeight: 600 }}>
-											Applied
-										</span>
-									)}
-								</div>
-							);
-						})}
-					</div>
-				</div>
-			))}
-
-			{totalSuggestions === 0 && (
-				<div className="card" style={{ textAlign: 'center', padding: '32px' }}>
-					<TrendingUp size={32} color="var(--success)" style={{ marginBottom: '12px' }} />
-					<p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Looking good!</p>
-					<p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-						No progression changes needed right now. Keep training consistently!
-					</p>
+			{/* ── New panel: generate form ── */}
+			{hasSavedReport && panel === 'new' && !generated && (
+				<div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '24px' }}>
+					<GenerateForm />
 				</div>
 			)}
 
-			{/* Confirmation dialog */}
-			{showConfirm && (
-				<div style={{
-					position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-					display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-				}} onClick={() => setShowConfirm(false)}>
-					<div className="card" style={{ maxWidth: '340px', padding: '24px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-						{reportsRemaining === 0 ? (
-							<>
-								<AlertTriangle size={24} color="#f59e0b" style={{ marginBottom: '12px' }} />
-								<p style={{ fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px 0' }}>No reports left this week</p>
-								<p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px 0' }}>
-									You've used all {maxPerWeek} reports for this week. New reports will be available next week.
-								</p>
-								<button className="btn btn-ghost" onClick={() => setShowConfirm(false)} style={{ padding: '8px 20px' }}>
-									Got it
-								</button>
-							</>
-						) : (
-							<>
-								<RefreshCw size={24} color="var(--accent)" style={{ marginBottom: '12px' }} />
-								<p style={{ fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px 0' }}>Regenerate report?</p>
-								<p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 4px 0' }}>
-									This will generate a fresh AI-powered analysis using your latest session data.
-								</p>
-								<p style={{ fontSize: '12px', color: reportsRemaining === 1 ? '#f59e0b' : 'var(--text-tertiary)', margin: '0 0 16px 0' }}>
-									{remainingLabel}
-								</p>
-								<div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-									<button className="btn btn-ghost" onClick={() => setShowConfirm(false)} style={{ padding: '8px 20px' }}>
-										Cancel
-									</button>
-									<button className="btn btn-primary" onClick={generateReport} style={{ padding: '8px 20px' }}>
-										Generate
-									</button>
-								</div>
-							</>
-						)}
-					</div>
+			{/* ── New panel: generated results ── */}
+			{panel === 'new' && generated && currentReport && (
+				<div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
+					<ReportView
+						report={currentReport}
+						appliedSet={appliedNew}
+						setApplied={setAppliedNew}
+						showBack
+					/>
+				</div>
+			)}
+
+			{/* No past report + no panel toggle → just show generate form */}
+			{!hasSavedReport && (
+				<div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '24px' }}>
+					<GenerateForm />
 				</div>
 			)}
 		</div>

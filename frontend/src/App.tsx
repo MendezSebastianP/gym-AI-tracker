@@ -16,8 +16,6 @@ import Onboarding from './pages/Onboarding';
 import Quests from './pages/Quests';
 import TrainingContext from './pages/TrainingContext';
 import ProgressionReport from './pages/ProgressionReport';
-import Playground from './pages/Playground';
-
 import { AdminRoute } from './components/AdminRoute';
 import AdminLayout from './components/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -210,7 +208,6 @@ function App() {
 
 					<Route path="/settings" element={<Settings />} />
 					<Route path="/settings/questionnaire" element={<TrainingContext />} />
-					<Route path="/playground" element={<Playground />} />
 
 				</Route>
 			</Route>

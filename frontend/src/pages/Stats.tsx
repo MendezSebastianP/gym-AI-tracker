@@ -11,6 +11,8 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import CoinIcon from '../components/icons/CoinIcon';
+import StarIcon from '../components/icons/StarIcon';
 
 function formatPace(secondsPerKm: number): string {
 	if (!secondsPerKm || !isFinite(secondsPerKm)) return '--:--';
@@ -388,92 +390,119 @@ export default function Stats() {
 			{/* ─── Level Card ──────────────────────────────────────────────── */}
 			{gamification && (
 				<div className="card" style={{
-					padding: '16px', marginBottom: '16px',
-					background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.06))',
-					border: '1px solid rgba(99, 102, 241, 0.2)',
+					padding: '20px', marginBottom: '16px',
+					background: 'linear-gradient(135deg, rgba(204, 255, 0, 0.1), rgba(0, 229, 176, 0.05))',
+					border: '1px solid rgba(204, 255, 0, 0.25)',
+					position: 'relative',
+					animation: 'xpCardGlow 4s ease-in-out infinite'
 				}}>
-					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+					<style>{`
+						@keyframes xpCardGlow {
+							0%, 100% { box-shadow: 0 0 10px rgba(204,255,0,0.05); }
+							50% { box-shadow: 0 0 20px rgba(204,255,0,0.15); }
+						}
+						@keyframes xpStripesFlow {
+							0% { background-position: 0 0; }
+							100% { background-position: 40px 0; }
+						}
+						@keyframes xpPulseGlow {
+							0%, 100% { filter: drop-shadow(0 0 3px rgba(0, 229, 176, 0.4)); }
+							50% { filter: drop-shadow(0 0 8px rgba(0, 229, 176, 0.8)); }
+						}
+					`}</style>
+					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
 						<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-							<Star size={18} color="var(--gold)" fill="var(--gold)" />
-							<span style={{ fontSize: '15px', fontWeight: 700 }}>
+							<StarIcon size={20} style={{ color: 'var(--primary)' }} />
+							<span style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '0.5px' }}>
 								{t('Level')} {gamification.level}
 							</span>
 						</div>
-						<div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-							<Coins size={15} color="var(--gold)" />
-							<span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--gold)' }}>
+						<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+							<CoinIcon size={16} style={{ color: 'var(--gold)' }} />
+							<span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--gold)' }}>
 								{gamification.currency} {t('coins')}
 							</span>
 						</div>
 					</div>
+
+					{/* Highly Animated 3D Game XP Bar */}
 					<div style={{
-						height: '8px', borderRadius: '4px',
-						background: 'rgba(255, 255, 255, 0.08)',
-						overflow: 'hidden', marginBottom: '6px',
+						height: '24px', borderRadius: '12px',
+						background: 'rgba(0,0,0,0.4)', padding: '4px',
+						border: '1px solid rgba(255,255,255,0.08)',
+						boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.7)',
+						marginBottom: '10px'
 					}}>
 						<div style={{
-							height: '100%', borderRadius: '4px',
-							width: `${Math.round((gamification.experience / gamification.exp_to_next) * 100)}%`,
-							background: 'linear-gradient(90deg, #6366f1, var(--primary))',
-							transition: 'width 0.5s ease',
-						}} />
+							height: '100%', borderRadius: '8px',
+							width: `${Math.max(3, Math.round((gamification.experience / gamification.exp_to_next) * 100))}%`,
+							background: 'linear-gradient(90deg, #008f6b 0%, var(--primary) 70%, #00ffc4 100%)',
+							position: 'relative',
+							transition: 'width 1s cubic-bezier(0.34, 1.56, 0.64, 1)',
+							animation: 'xpPulseGlow 3s infinite ease-in-out'
+						}}>
+							{/* Diagonal Moving Stripes overlay */}
+							<div style={{
+								position: 'absolute', inset: 0, borderRadius: '8px',
+								background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.15) 0px, rgba(255,255,255,0.15) 10px, transparent 10px, transparent 20px)',
+								animation: 'xpStripesFlow 1s linear infinite'
+							}} />
+
+							{/* Glossy top highlight */}
+							<div style={{
+								position: 'absolute', top: 0, left: '2px', right: '2px', height: '45%',
+								background: 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%)',
+								borderRadius: '8px 8px 0 0'
+							}} />
+
+							{/* Bright leading spark edge */}
+							<div style={{
+								position: 'absolute', right: 0, top: 0, bottom: 0, width: '4px',
+								background: '#fff', borderRadius: '4px',
+								boxShadow: '0 0 10px var(--primary), 0 0 4px #fff'
+							}} />
+						</div>
 					</div>
-					<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-						<span>{gamification.experience} / {gamification.exp_to_next} XP</span>
+
+					<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+						<span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+							<span style={{ color: 'var(--text-primary)' }}>{gamification.experience}</span>
+							/ {gamification.exp_to_next} XP
+						</span>
 						<span>{t('Level')} {gamification.level + 1}</span>
 					</div>
 				</div>
 			)}
 
-			{/* ─── Stats Cards ─────────────────────────────────────────────── */}
-			<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-				<div className="card text-center p-4" style={{ marginBottom: 0 }}>
-					<div className="text-3xl font-bold text-primary mb-1">
-						{stats.sessions}
-					</div>
-					<div className="text-secondary text-sm">{t('Sessions')} <span style={{ fontSize: '10px' }}>({t('This Week')})</span></div>
-				</div>
-
-				{user?.settings?.track_time && stats.avg_duration_seconds > 0 && (
-					<div className="card text-center p-4" style={{ marginBottom: 0 }}>
-						<div className="text-3xl font-bold mb-1" style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-							<Clock size={20} />
-							{Math.round(stats.avg_duration_seconds / 60)}
-							<span className="text-sm font-normal text-tertiary">min</span>
+			{/* ── Stats Cards ─────────────────────────────────────────────── */}
+			{user?.settings?.track_time && (stats.avg_duration_seconds > 0 || stats.total_duration_seconds > 0) && (
+				<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+					{stats.avg_duration_seconds > 0 && (
+						<div className="card text-center p-4" style={{ marginBottom: 0 }}>
+							<div className="text-3xl font-bold mb-1" style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+								<Clock size={20} />
+								{Math.round(stats.avg_duration_seconds / 60)}
+								<span className="text-sm font-normal text-tertiary">min</span>
+							</div>
+							<div className="text-secondary text-sm">{t('Avg Duration')}</div>
 						</div>
-						<div className="text-secondary text-sm">{t('Avg Duration')}</div>
-					</div>
-				)}
+					)}
 
-				{user?.settings?.track_time && stats.total_duration_seconds > 0 && (
-					<div className="card text-center p-4" style={{ marginBottom: 0 }}>
-						<div className="text-3xl font-bold mb-1" style={{ color: 'var(--accent)' }}>
-							{stats.total_duration_seconds >= 3600
-								? `${(stats.total_duration_seconds / 3600).toFixed(1)}`
-								: Math.round(stats.total_duration_seconds / 60)}
-							<span className="text-sm font-normal text-tertiary" style={{ marginLeft: '4px' }}>
-								{stats.total_duration_seconds >= 3600 ? 'hrs' : 'min'}
-							</span>
+					{stats.total_duration_seconds > 0 && (
+						<div className="card text-center p-4" style={{ marginBottom: 0 }}>
+							<div className="text-3xl font-bold mb-1" style={{ color: 'var(--accent)' }}>
+								{stats.total_duration_seconds >= 3600
+									? `${(stats.total_duration_seconds / 3600).toFixed(1)}`
+									: Math.round(stats.total_duration_seconds / 60)}
+								<span className="text-sm font-normal text-tertiary" style={{ marginLeft: '4px' }}>
+									{stats.total_duration_seconds >= 3600 ? 'hrs' : 'min'}
+								</span>
+							</div>
+							<div className="text-secondary text-sm">{t('Total Time')}</div>
 						</div>
-						<div className="text-secondary text-sm">{t('Total Time')}</div>
-					</div>
-				)}
-
-				<div className="card text-center p-4" style={{ marginBottom: 0 }}>
-					<div className="text-3xl font-bold text-accent mb-1">
-						{(() => {
-							const v = stats.volume;
-							if (v >= 1000000) return `${(v / 1000000).toFixed(1)}`;
-							if (v >= 1000) return `${(v / 1000).toFixed(1)}`;
-							return Math.round(v);
-						})()}
-						<span className="text-sm font-normal text-tertiary" style={{ marginLeft: '4px' }}>
-							{stats.volume >= 1000000 ? 'kt' : stats.volume >= 1000 ? 't' : 'kg'}
-						</span>
-					</div>
-					<div className="text-secondary text-sm">{t('Volume')} <span style={{ fontSize: '10px' }}>({t('Total')})</span></div>
+					)}
 				</div>
-			</div>
+			)}
 
 			{/* ─── Consistency Card ────────────────────────────────────────── */}
 			<div className="card p-4">
@@ -544,8 +573,8 @@ export default function Stats() {
 											)}
 										</div>
 									</div>
-									<span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
-										{i === 7 ? t('This week') : `W${weeklyData.length - i}`}
+									<span style={{ fontSize: '10px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+										{i === weeklyData.length - 1 ? t('Now') : `W${weeklyData.length - i}`}
 									</span>
 								</div>
 							);
@@ -624,7 +653,7 @@ export default function Stats() {
 											<div style={{
 												width: '42px', height: '42px', borderRadius: '12px',
 												background: quest.completed
-													? 'linear-gradient(135deg, rgba(204, 255, 0, 0.2), rgba(99, 102, 241, 0.1))'
+													? 'linear-gradient(135deg, rgba(204, 255, 0, 0.2), rgba(0, 229, 176, 0.1))'
 													: 'rgba(255, 255, 255, 0.05)',
 												display: 'flex', alignItems: 'center', justifyContent: 'center',
 												flexShrink: 0,
@@ -663,7 +692,7 @@ export default function Stats() {
 														height: '100%', borderRadius: '3px',
 														width: `${pct}%`,
 														background: quest.completed
-															? 'linear-gradient(90deg, var(--primary), #6366f1)'
+															? 'linear-gradient(90deg, var(--primary), #00e5b0)'
 															: 'var(--primary)',
 														transition: 'width 0.5s ease'
 													}} />
@@ -672,11 +701,11 @@ export default function Stats() {
 												{/* Rewards + Claim */}
 												<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 													<div style={{ display: 'flex', gap: '8px' }}>
-														<span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 600 }}>
-															⭐ {quest.exp_reward} XP
+														<span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+															<StarIcon size={12} /> {quest.exp_reward} XP
 														</span>
-														<span style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: 600 }}>
-															🪙 {quest.currency_reward}
+														<span style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+															<CoinIcon size={13} style={{ color: 'var(--gold)' }} /> {quest.currency_reward}
 														</span>
 													</div>
 

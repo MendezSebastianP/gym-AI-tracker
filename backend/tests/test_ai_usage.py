@@ -60,9 +60,9 @@ def test_ai_usage_tracking_flow(client):
     assert admin_resp.status_code == 200
     report = admin_resp.json()
     
-    # Cost should be correctly calculated:
-    # prompt (1000 * 0.15 / 1M) + completion (500 * 0.60 / 1M) = $0.00015 + $0.00030 = $0.00045
-    assert report["financials"]["total_cost_usd"] == 0.0004
+    # Cost should be correctly calculated (gpt-4o pricing):
+    # prompt (1000 * 2.50 / 1M) + completion (500 * 10.00 / 1M) = $0.0025 + $0.005 = $0.0075
+    assert report["financials"]["total_cost_usd"] == 0.0075
     assert report["financials"]["total_tokens"] == 1500
     
     # Conversion should show 1 generation, 1 save = 100%

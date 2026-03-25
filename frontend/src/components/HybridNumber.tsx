@@ -14,7 +14,7 @@ export interface HybridNumProps {
 	showDelta?: boolean;
 }
 
-export function HybridNumber({ value, onChange, min = 0, max = 300, step = 0.5, sensitivity = 14, label, showHint = false, showDelta = true }: HybridNumProps) {
+export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5, sensitivity = 14, label, showHint = false, showDelta = true }: HybridNumProps) {
 	const [mode, setMode] = useState<'idle' | 'drum' | 'swipe' | 'edit'>('idle');
 	const [scrollOffset, setScrollOffset] = useState(0);
 	const [swipeDelta, setSwipeDelta] = useState(0);
@@ -351,12 +351,12 @@ export function HybridNumber({ value, onChange, min = 0, max = 300, step = 0.5, 
 		if (holdTimer.current) clearTimeout(holdTimer.current);
 	}, []);
 
-	// ── Edit commit ──────────────────────────────────────────────
 	const commitEdit = () => {
 		const parsed = parseFloat(editText);
 		if (!isNaN(parsed)) {
-			const snapped = Math.round(parsed / step) * step;
-			onChange(Math.max(min, Math.min(max, +snapped.toFixed(2))));
+			// Accept any value the user typed (don't snap to step)
+			const clamped = Math.max(min, Math.min(max, +parsed.toFixed(2)));
+			onChange(clamped);
 		}
 		setMode('idle');
 	};

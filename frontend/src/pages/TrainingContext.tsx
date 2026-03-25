@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { db } from '../db/schema';
 import { useAuthStore } from '../store/authStore';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Zap, Target, Brain } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Zap, Target, Brain, Dumbbell } from 'lucide-react';
+import StarIcon from '../components/icons/StarIcon';
 
 type ProfileField = 'age' | 'weight' | 'height' | 'gender';
 
@@ -279,8 +280,9 @@ export default function TrainingContext() {
 								position: 'absolute', top: '10px', right: '12px',
 								fontSize: '10px', color: 'var(--primary)', fontWeight: 'bold',
 								textTransform: 'uppercase', letterSpacing: '0.5px',
+								display: 'flex', alignItems: 'center', gap: '2px'
 							}}>
-								⭐ {t('Recommended')}
+								<StarIcon size={10} style={{ color: 'var(--primary)' }} /> {t('Recommended')}
 							</span>
 						)}
 						<div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: contextLevel === level ? 'var(--primary)' : 'var(--text-primary)', fontWeight: 'bold', fontSize: '16px' }}>
@@ -399,7 +401,9 @@ export default function TrainingContext() {
 						<div className="flex flex-col gap-sm" style={{ marginTop: '16px' }}>
 							<button onClick={() => setPrefs((p: any) => ({ ...p, available_equipment: allSelected ? [] : [...individualEquipment] }))}
 								className="btn w-full" style={btnStyle(allSelected)}>
-								<span style={{ fontSize: '14px' }}>🏋️ {t('Fully Equipped (Select All)')}</span>
+								<span style={{ fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+									<Dumbbell size={16} /> {t('Fully Equipped (Select All)')}
+								</span>
 								{allSelected && <Check size={18} />}
 							</button>
 							{individualEquipment.map(opt => {

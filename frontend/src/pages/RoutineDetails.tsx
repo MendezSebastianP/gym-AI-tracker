@@ -15,7 +15,6 @@ import HybridNumber from '../components/HybridNumber';
 import { api } from '../api/client';
 import { useState } from 'react';
 import ExercisePicker from '../components/ExercisePicker';
-import CoachChat from '../components/CoachChat';
 
 export default function RoutineDetails() {
 	const { id } = useParams();
@@ -58,22 +57,59 @@ export default function RoutineDetails() {
 		}
 	}, [suggestionDayIndex, pendingFetchDay]);
 
+	// Filter out explicitly applied/matching suggestions
+	const getValidSuggestionsCount = (dIndex: number) => {
+		if (suggestionDayIndex !== dIndex || !progressionSuggestions.fetched) return null;
+		const day = routine?.days[dIndex];
+		if (!day) return 0;
+		let count = 0;
+		day.exercises.forEach((ex: any) => {
+			const sug = progressionSuggestions.suggestions.get(ex.exercise_id);
+			if (sug && !dismissedSuggestions.has(ex.exercise_id)) {
+				let applied = true;
+				if (sug.suggested.weight !== undefined && ex.weight_kg !== sug.suggested.weight) applied = false;
+				if (sug.suggested.reps !== undefined && ex.reps !== String(sug.suggested.reps)) applied = false;
+				if (sug.suggested.sets !== undefined && ex.sets !== sug.suggested.sets) applied = false;
+				if (!applied) count++;
+			}
+		});
+		return count;
+	};
+
 	// Fetch all exercises to map IDs to translated names
 	const exercisesMap = useLiveQuery(async () => {
 		const all = await db.exercises.toArray();
 		const map = new Map();
 		const currentLang = i18n.language.split('-')[0];
 		all.forEach(ex => {
-			map.set(ex.id, (ex as any).name_translations?.[currentLang] || ex.name);
+			const e = ex as any;
+			map.set(ex.id, {
+				name: e.name_translations?.[currentLang] || e.name,
+				muscle: e.muscle_translations?.[currentLang] || e.muscle || '',
+				equipment: e.equipment_translations?.[currentLang] || e.equipment || '',
+			});
 		});
 		return map;
 	}, [i18n.language]);
 
 	const getExerciseName = (ex: any) => {
 		if (exercisesMap && ex.exercise_id && exercisesMap.has(ex.exercise_id)) {
-			return exercisesMap.get(ex.exercise_id);
+			return exercisesMap.get(ex.exercise_id).name;
 		}
 		return ex.name;
+	};
+
+	const getExerciseContext = (ex: any) => {
+		if (exercisesMap && ex.exercise_id && exercisesMap.has(ex.exercise_id)) {
+			const data = exercisesMap.get(ex.exercise_id);
+			if (!data.equipment && !data.muscle) return null;
+			return (
+				<span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '4px', color: 'var(--text-tertiary)' }}>
+					{[data.equipment, data.muscle].filter(Boolean).join(' · ')}
+				</span>
+			);
+		}
+		return null;
 	};
 
 	const days = editMode && editedDays ? editedDays : routine?.days || [];
@@ -326,19 +362,21 @@ export default function RoutineDetails() {
 							)}
 							{!editMode && (
 								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-									<CheckSuggestionsButton
-										loading={progressionSuggestions.loading && suggestionDayIndex === dIndex}
-										fetched={progressionSuggestions.fetched && suggestionDayIndex === dIndex}
-										suggestionsCount={suggestionDayIndex === dIndex ? progressionSuggestions.suggestions.size : 0}
-										onClick={() => {
-											if (suggestionDayIndex === dIndex) {
-												progressionSuggestions.fetch();
-											} else {
-												setSuggestionDayIndex(dIndex);
-												setPendingFetchDay(dIndex);
-											}
-										}}
-									/>
+									{getValidSuggestionsCount(dIndex) !== 0 && (
+										<CheckSuggestionsButton
+											loading={progressionSuggestions.loading && suggestionDayIndex === dIndex}
+											fetched={progressionSuggestions.fetched && suggestionDayIndex === dIndex}
+											suggestionsCount={getValidSuggestionsCount(dIndex) || 0}
+											onClick={() => {
+												if (suggestionDayIndex === dIndex) {
+													progressionSuggestions.fetch();
+												} else {
+													setSuggestionDayIndex(dIndex);
+													setPendingFetchDay(dIndex);
+												}
+											}}
+										/>
+									)}
 									<button
 										className="btn btn-primary"
 										style={{ padding: '8px 16px', fontSize: '14px' }}
@@ -368,6 +406,7 @@ export default function RoutineDetails() {
 													eIndex={eIndex}
 													dIndex={dIndex}
 													getExerciseName={getExerciseName}
+													getExerciseContext={getExerciseContext}
 													updateExerciseField={updateExerciseField}
 													toggleExerciseLock={toggleExerciseLock}
 													removeExercise={removeExercise}
@@ -400,61 +439,109 @@ export default function RoutineDetails() {
 							) : (
 								// Read-only view
 								day.exercises.map((ex: any, i: number) => (
-									<div key={i} style={{ display: 'flex', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '8px', position: 'relative' }}>
-										<span style={{ width: '24px', color: 'var(--text-tertiary)' }}>{i + 1}</span>
-										<span style={{ flex: 1, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-											{getExerciseName(ex)}
-											{suggestionDayIndex === dIndex && progressionSuggestions.fetched && progressionSuggestions.suggestions.has(ex.exercise_id) && !dismissedSuggestions.has(ex.exercise_id) && (
-												<SuggestionBadge
-													suggestion={progressionSuggestions.suggestions.get(ex.exercise_id)!}
-													onApply={(suggestion: ProgressionSuggestion) => {
-														// Update routine definition
-														if (routine) {
-															const updatedDays = JSON.parse(JSON.stringify(routine.days));
-															const dayExercises = updatedDays[dIndex]?.exercises;
-															if (dayExercises) {
-																const routineEx = dayExercises.find((e: any) => e.exercise_id === ex.exercise_id);
-																if (routineEx) {
-																	if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
-																	if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
-																	if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
-																}
-															}
-															db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
-															api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => {});
-														}
-														api.post('/progression/feedback', {
-															exercise_id: ex.exercise_id,
-															suggestion_type: suggestion.type,
-															suggested_value: suggestion.suggested,
-															action: 'accepted',
-															applied_value: suggestion.suggested,
-														}).catch(() => {});
-														setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
-													}}
-													onDismiss={() => {
-														api.post('/progression/feedback', {
-															exercise_id: ex.exercise_id,
-															suggestion_type: progressionSuggestions.suggestions.get(ex.exercise_id)!.type,
-															suggested_value: progressionSuggestions.suggestions.get(ex.exercise_id)!.suggested,
-															action: 'rejected',
-														}).catch(() => {});
-														setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
-													}}
-												/>
-											)}
-										</span>
-										<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-											{ex.locked && (
-												<Lock size={12} style={{ color: 'var(--accent, #6366f1)' }} />
-											)}
-											<span>{ex.sets} x {ex.reps}</span>
-											{(ex.weight_kg > 0) && (
-												<span style={{ color: 'var(--accent, #6366f1)', fontSize: '12px' }}>
-													{ex.weight_kg}kg
-												</span>
-											)}
+									<div key={i} style={{ marginBottom: '8px' }}>
+										<div style={{ display: 'flex', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+											<span style={{ width: '24px', color: 'var(--text-tertiary)' }}>{i + 1}</span>
+											<div style={{ flex: 1, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+												{getExerciseName(ex)}
+												{getExerciseContext(ex)}
+											</div>
+											<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+												{ex.locked && (
+													<Lock size={12} style={{ color: 'var(--primary)' }} />
+												)}
+												<span>{ex.sets} x {ex.reps}</span>
+												{(ex.weight_kg > 0) && (
+													<span style={{ color: 'var(--primary)', fontSize: '12px' }}>
+														{ex.weight_kg}kg
+													</span>
+												)}
+											</div>
 										</div>
+										{(() => {
+											if (suggestionDayIndex !== dIndex || !progressionSuggestions.fetched) return null;
+											const sug = progressionSuggestions.suggestions.get(ex.exercise_id);
+											if (!sug || dismissedSuggestions.has(ex.exercise_id)) return null;
+
+											let applied = true;
+											if (sug.suggested.weight !== undefined && ex.weight_kg !== sug.suggested.weight) applied = false;
+											if (sug.suggested.reps !== undefined && ex.reps !== String(sug.suggested.reps)) applied = false;
+											if (sug.suggested.sets !== undefined && ex.sets !== sug.suggested.sets) applied = false;
+
+											if (applied) return null; // Already applied to routine def
+
+											return (
+												<div style={{ paddingLeft: '24px' }}>
+													<SuggestionBadge
+														suggestion={sug}
+														exerciseName={getExerciseName(ex)}
+														onApply={(suggestion: ProgressionSuggestion) => {
+															// Update routine definition
+															if (routine) {
+																const updatedDays = JSON.parse(JSON.stringify(routine.days));
+																const dayExercises = updatedDays[dIndex]?.exercises;
+																if (dayExercises) {
+																	const routineEx = dayExercises.find((e: any) => e.exercise_id === ex.exercise_id);
+																	if (routineEx) {
+																		if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
+																		if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
+																		if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
+																		if (suggestion.new_exercise_id) routineEx.exercise_id = suggestion.new_exercise_id;
+																	}
+																}
+																db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
+																api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => { });
+
+																// Sync suggestion to active draft session if it exists
+																const syncDraft = async () => {
+																	try {
+																		const activeSession = await db.sessions
+																			.where('routine_id').equals(routine.id!)
+																			.filter((s: any) => !s.completed_at).first();
+
+																		if (activeSession && activeSession.id) {
+																			const updates: any = { syncStatus: 'updated' };
+																			if (suggestion.suggested.weight !== undefined) updates.weight_kg = suggestion.suggested.weight;
+																			if (suggestion.suggested.reps !== undefined) {
+																				updates.reps = parseInt(String(suggestion.suggested.reps).split('-')[0]) || 0;
+																			}
+
+																			if (Object.keys(updates).length > 1) {
+																				const setsToUpdate = await db.sets
+																					.where('session_id').equals(activeSession.id)
+																					.filter((s: any) => s.exercise_id === ex.exercise_id).toArray();
+
+																				for (const s of setsToUpdate) {
+																					if (s.id) await db.sets.update(s.id, updates);
+																				}
+																			}
+																		}
+																	} catch { /* ignore session sync prep errors */ }
+																};
+																syncDraft();
+															}
+															api.post('/progression/feedback', {
+																exercise_id: ex.exercise_id,
+																suggestion_type: suggestion.type,
+																suggested_value: suggestion.suggested,
+																action: 'accepted',
+																applied_value: suggestion.suggested,
+															}).catch(() => { });
+															setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+														}}
+														onDismiss={() => {
+															api.post('/progression/feedback', {
+																exercise_id: ex.exercise_id,
+																suggestion_type: progressionSuggestions.suggestions.get(ex.exercise_id)!.type,
+																suggested_value: progressionSuggestions.suggestions.get(ex.exercise_id)!.suggested,
+																action: 'rejected',
+															}).catch(() => { });
+															setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+														}}
+													/>
+												</div>
+											);
+										})()}
 									</div>
 								))
 							)}
@@ -472,11 +559,6 @@ export default function RoutineDetails() {
 				)}
 			</div>
 
-			{/* AI Coach Chat */}
-			{!editMode && routine && (
-				<CoachChat routineId={routine.id!} routineDays={routine.days || []} />
-			)}
-
 			{
 				showPicker && (
 					<ExercisePicker
@@ -492,7 +574,7 @@ export default function RoutineDetails() {
 	);
 }
 
-function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, updateExerciseField, toggleExerciseLock, removeExercise, editing, onStartEdit, onStopEdit }: any) {
+function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, getExerciseContext, updateExerciseField, toggleExerciseLock, removeExercise, editing, onStartEdit, onStopEdit }: any) {
 	const {
 		attributes,
 		listeners,
@@ -530,15 +612,11 @@ function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, updateExerci
 				>
 					<GripVertical size={14} color="var(--text-tertiary)" />
 				</div>
-				<div style={{ flex: 1, minWidth: 0 }}>
-					<div style={{ fontSize: '14px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+				<div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+					<span style={{ fontSize: '14px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
 						{getExerciseName(ex)}
-					</div>
-					{(ex.muscle_group || ex.equipment) && (
-						<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
-							{[ex.muscle_group, ex.equipment].filter(Boolean).join(' · ')}
-						</div>
-					)}
+					</span>
+					{getExerciseContext && getExerciseContext(ex)}
 				</div>
 				{/* Pill button */}
 				<button

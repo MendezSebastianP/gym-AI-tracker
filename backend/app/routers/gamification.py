@@ -148,7 +148,7 @@ SHOP_ITEMS = [
         "id": "theme_light",
         "name": "Light Mode",
         "description": "A clean, bright interface theme",
-        "price": 50,
+        "price": 200,
         "type": "theme",
         "preview": {
             "bg_primary": "#F5F5F7",
@@ -162,7 +162,7 @@ SHOP_ITEMS = [
         "id": "theme_gold",
         "name": "Gold Edition",
         "description": "Premium dark gold aesthetic",
-        "price": 150,
+        "price": 1000,
         "type": "theme",
         "preview": {
             "bg_primary": "#1A1510",
@@ -287,7 +287,7 @@ def activate_theme(
 # ── Promo Codes ───────────────────────────────────────────────────────────────
 
 PROMO_CODES = {
-    "PACHO": 1_000_000,
+    "PACHO": 2_000,
 }
 
 
