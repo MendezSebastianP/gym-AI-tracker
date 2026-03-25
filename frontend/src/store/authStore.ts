@@ -11,7 +11,7 @@ interface AuthState {
 	isAdmin: boolean;
 	isLoading: boolean;
 	login: (token: string, refreshToken?: string) => Promise<void>;
-	logout: () => void;
+	logout: () => Promise<void>;
 	checkAuth: () => Promise<void>;
 	updateUser: (updates: Partial<User>) => void;
 }
@@ -34,29 +34,29 @@ export const useAuthStore = create<AuthState>((set) => ({
 			// Fetch user profile
 			const response = await api.get('/auth/me');
 			const user = response.data;
-			set({ user, isAdmin: user.is_admin || false });
+			set({ user, isAdmin: user.is_admin || false, isLoading: false });
 
 			// Cache user to IndexedDB
 			await db.users.put(user);
 		} catch (error) {
 			console.error("Failed to fetch user profile", error);
+			set({ isLoading: false });
 		}
 	},
 
 	logout: async () => {
-		// Sync ALL pending sessions/sets to server before clearing local data
+		// Sync pending data — capped at 4s so logout never hangs
 		try {
-			await syncAllDataBeforeLogout();
+			await Promise.race([
+				syncAllDataBeforeLogout(),
+				new Promise<void>(resolve => setTimeout(resolve, 4000)),
+			]);
 		} catch (e) {
-			console.error("Failed to sync before logout", e);
+			console.error("Sync before logout failed", e);
 		}
 
-		// Revoke refresh token on server
-		try {
-			await api.post('/auth/logout');
-		} catch (e) {
-			// Best-effort — don't block logout if server is unreachable
-		}
+		// Revoke refresh token on server — fire and forget, never blocks logout
+		api.post('/auth/logout').catch(() => {});
 
 		localStorage.removeItem('token');
 		localStorage.removeItem('refresh_token');
@@ -66,7 +66,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 		} catch (e) {
 			console.error("Failed to clear local DB on logout", e);
 		}
-		set({ user: null, token: null, isAuthenticated: false, isAdmin: false });
+		set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });
 	},
 
 
@@ -74,6 +74,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 		const token = localStorage.getItem('token');
 		if (!token) {
 			set({ isLoading: false, isAuthenticated: false });
+			return;
+		}
+		// If already authenticated with user data, skip redundant server call
+		const state = useAuthStore.getState();
+		if (state.isAuthenticated && state.user) {
+			set({ isLoading: false });
 			return;
 		}
 

@@ -11,9 +11,10 @@ export interface HybridNumProps {
 	sensitivity?: number;
 	label?: string;
 	showHint?: boolean;
+	showDelta?: boolean;
 }
 
-export function HybridNumber({ value, onChange, min = 0, max = 300, step = 0.5, sensitivity = 14, label, showHint = false }: HybridNumProps) {
+export function HybridNumber({ value, onChange, min = 0, max = 300, step = 0.5, sensitivity = 14, label, showHint = false, showDelta = true }: HybridNumProps) {
 	const [mode, setMode] = useState<'idle' | 'drum' | 'swipe' | 'edit'>('idle');
 	const [scrollOffset, setScrollOffset] = useState(0);
 	const [swipeDelta, setSwipeDelta] = useState(0);
@@ -449,7 +450,7 @@ export function HybridNumber({ value, onChange, min = 0, max = 300, step = 0.5, 
 				{step < 1 ? value.toFixed(1) : value}
 
 				{/* Swipe delta indicator — right side */}
-				{isSwipe && swipeDelta !== 0 && (
+				{showDelta && isSwipe && swipeDelta !== 0 && (
 					<div style={{
 						position: 'absolute', right: -38, top: '50%',
 						transform: 'translateY(-50%)',

@@ -197,3 +197,123 @@ class TestAIRoutineGeneration:
                 r = client.post("/api/ai/generate-routine", headers=headers)
 
         assert r.status_code == 200
+
+
+MOCK_FILL_DAY_RESPONSE = {
+    "exercises": [
+        {"exercise_id": 1, "sets": 3, "reps": "10", "rest": 60, "notes": None},
+        {"exercise_id": 3, "sets": 3, "reps": "12", "rest": 60, "notes": "Incline angle"},
+    ]
+}
+
+
+class TestAIFillDay:
+    """Tests for POST /api/ai/fill-day endpoint."""
+
+    def test_no_auth_returns_401(self, client):
+        r = client.post("/api/ai/fill-day", json={"prompt": "add chest exercises"})
+        assert r.status_code == 401
+
+    def test_missing_api_key_returns_503(self, client):
+        headers = register_and_login(client)
+        _seed_exercises(client, headers)
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
+            r = client.post(
+                "/api/ai/fill-day",
+                json={"prompt": "add chest exercises"},
+                headers=headers,
+            )
+            assert r.status_code == 503
+
+    def test_fill_day_success(self, client):
+        headers = register_and_login(client)
+        _seed_exercises(client, headers)
+
+        mock_response = _mock_openai_response(MOCK_FILL_DAY_RESPONSE)
+        mock_create = AsyncMock(return_value=mock_response)
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key-123"}):
+            with patch("app.openai_service.AsyncOpenAI") as MockClient:
+                instance = MockClient.return_value
+                instance.chat.completions.create = mock_create
+
+                r = client.post(
+                    "/api/ai/fill-day",
+                    json={
+                        "prompt": "add 2 chest exercises with barbell",
+                        "existing_exercise_ids": [],
+                        "day_name": "Push Day",
+                    },
+                    headers=headers,
+                )
+
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data["exercises"]) == 2
+        assert data["exercises"][0]["exercise_id"] == 1
+
+    def test_fill_day_filters_invalid_ids(self, client):
+        headers = register_and_login(client)
+        _seed_exercises(client, headers)
+
+        bad_response = {
+            "exercises": [
+                {"exercise_id": 1, "sets": 3, "reps": "10", "rest": 60},
+                {"exercise_id": 99999, "sets": 3, "reps": "10", "rest": 60},
+            ]
+        }
+
+        mock_response = _mock_openai_response(bad_response)
+        mock_create = AsyncMock(return_value=mock_response)
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key-123"}):
+            with patch("app.openai_service.AsyncOpenAI") as MockClient:
+                instance = MockClient.return_value
+                instance.chat.completions.create = mock_create
+
+                r = client.post(
+                    "/api/ai/fill-day",
+                    json={"prompt": "add exercises"},
+                    headers=headers,
+                )
+
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data["exercises"]) == 1
+        assert data["exercises"][0]["exercise_id"] == 1
+
+    def test_fill_day_excludes_existing(self, client):
+        headers = register_and_login(client)
+        _seed_exercises(client, headers)
+
+        response_with_existing = {
+            "exercises": [
+                {"exercise_id": 1, "sets": 3, "reps": "10", "rest": 60},
+                {"exercise_id": 3, "sets": 3, "reps": "12", "rest": 60},
+            ]
+        }
+
+        mock_response = _mock_openai_response(response_with_existing)
+        mock_create = AsyncMock(return_value=mock_response)
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key-123"}):
+            with patch("app.openai_service.AsyncOpenAI") as MockClient:
+                instance = MockClient.return_value
+                instance.chat.completions.create = mock_create
+
+                r = client.post(
+                    "/api/ai/fill-day",
+                    json={
+                        "prompt": "add exercises",
+                        "existing_exercise_ids": [1],
+                    },
+                    headers=headers,
+                )
+
+        assert r.status_code == 200
+        data = r.json()
+        # Exercise 1 should be excluded since it's in existing_exercise_ids
+        ids = [ex["exercise_id"] for ex in data["exercises"]]
+        assert 1 not in ids
+        assert 3 in ids

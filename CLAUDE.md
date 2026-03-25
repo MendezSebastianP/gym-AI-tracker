@@ -25,17 +25,19 @@ backend/
     progression_chains.py  # Bodyweight exercise progression chain definitions (12 chains)
     progression_summary.py # Builds structured user progress summaries for AI prompts
     gamification.py        # XP, levels, PR detection
-    seed_data.py           # Exercise library seeder (~90KB)
+    seed_data.py           # Exercise library seeder (~200+ exercises with difficulty, muscles, translations)
+    seed_demo.py           # Demo user + sample data (idempotent)
   alembic/versions/        # DB migrations
   tests/                   # Pytest test suite
 frontend/
   src/
-    pages/               # Route pages (Dashboard, ActiveSession, Stats, ProgressionReport, Playground, etc.)
-    components/          # Reusable UI (ExercisePicker, HybridNumber, RestTimer, SuggestionBadge, CoachChat, etc.)
+    pages/               # Route pages (Dashboard, ActiveSession, Stats, ProgressionReport, CreateRoutine, RoutineDetails, Playground, etc.)
+    components/          # Reusable UI components (see below)
+    components/playground/ # Experimental filling strategy UI (not in main flow yet — kept for future integration)
     hooks/               # Custom React hooks (useProgressionSuggestions, etc.)
     db/                  # Dexie schema + sync service for offline-first
     api/client.ts        # Axios wrapper with JWT auto-refresh
-    stores/authStore.ts  # Zustand auth state
+    store/authStore.ts   # Zustand auth state
 scheduler/               # Background job runner (Python)
 deploy/                  # Prod config (Caddy, webhook, redeploy.sh)
 ```
@@ -73,18 +75,16 @@ Models live in `backend/app/models/` and must be imported in `backend/app/models
 
 ## Seeding
 
-The exercise library and demo account are seeded via Python modules:
-
 ```bash
 # Dev:
-docker compose exec api python -m app.seed_data    # Exercise catalog (~200+ exercises with difficulty, muscles, translations)
+docker compose exec api python -m app.seed_data    # Exercise catalog
 docker compose exec api python -m app.seed_demo    # Demo user account with sample data
 
 # Prod (on mini PC):
 make prod-seed
 ```
 
-`seed_data.py` is idempotent — safe to re-run. It upserts exercises by name. `seed_demo.py` creates a demo account for testing.
+`seed_data.py` is idempotent — safe to re-run. It upserts exercises by name.
 
 ## Testing
 
@@ -100,7 +100,7 @@ Backend tests are in `backend/tests/` using pytest with fixtures in `conftest.py
 ## Key Patterns
 
 - **Offline-first:** Frontend stores data in IndexedDB (Dexie), syncs to backend when online. `syncQueue` table holds pending changes.
-- **Routine structure:** Routines store days as a JSON array of day objects containing exercise references.
+- **Routine structure:** Routines store days as a JSON array of day objects containing exercise references (exercise_id, sets, reps, rest, weight_kg, locked).
 - **Gamification:** XP per session (base 50, scaled by history), PRs trigger bonus XP. Level-up costs `level * 100` XP.
 - **AI generation:** User preferences + filtered exercise catalog sent to GPT-4o. Rate limited to 3/hour. Exercises referenced by ID only — AI cannot invent exercises.
 - **Progression suggestions:** Three modes — (A) algorithmic quick suggestions via "Check Suggestions" button (no AI cost), (B) AI Coach Chat in RoutineDetails, (C) full Progression Report page (algorithmic + AI). Suggestions can be applied to both routine definition and active session sets. Lazy-fetch pattern: no automatic API calls, user triggers via button.
@@ -120,8 +120,6 @@ Defined in `.env` (gitignored). Key vars:
 ## Production — Mini PC
 
 The production server is a mini PC on the same local network, accessible via `ssh minipc` (alias in ~/.ssh/config). IP: `192.168.1.45`, user: `trota`, project path: `~/Documents/gym-AI-tracker`.
-
-We can run commands on it directly from this machine:
 
 ```bash
 # SSH and run a command:
@@ -167,10 +165,49 @@ DB tables: `progression_reports`, `progression_feedback`, `exercise_progressions
 
 Key files: `progression_engine.py` (algorithms), `progression_chains.py` (12 BW chains), `progression_summary.py` (AI prompt builder), `routers/progression.py` (5 endpoints).
 
+## Routine Builder UX
+
+### CreateRoutine (`pages/CreateRoutine.tsx`)
+
+Three entry modes:
+- **select** (default): shows ExerciseSuggestions chips + multi-select ExercisePicker
+- **manual**: day list with pill cards
+- **ai**: AI wizard questionnaire (3-step: goal, experience, equipment)
+
+Mode persistence: only restores `manual` from localStorage if the draft has actual exercises. New Routine always starts in `select` mode.
+
+Exercise rows use the **Pill Card** pattern (tap to expand):
+- Collapsed: `grip | exercise name + muscle/equipment meta | sets×reps pill | trash`
+- Expanded: HybridNumber for sets + reps (cardio gets plain text input), Done button
+- `overflow: editing ? 'visible' : 'hidden'` + `zIndex: editing ? 2 : 0` allows HybridNumber drum popup to escape card bounds
+
+Drag-to-reorder uses `@dnd-kit/sortable` with `PointerSensor` (`activationConstraint: { distance: 5 }`).
+
+### RoutineDetails (`pages/RoutineDetails.tsx`)
+
+Same Pill Card pattern in edit mode. Exercise fields include `weight_kg` and `locked`. Pill label shows `sets×reps · kg` when weight > 0. Lock toggle kept as icon.
+
+### ExercisePicker (`components/ExercisePicker.tsx`)
+
+Rendered via `createPortal(…, document.body)` — required to escape CSS transform stacking context from `.fade-in` animation (even `translateY(0)` creates a stacking context, breaking `position: fixed` children).
+
+- Positioned `bottom: 65px` (above the 65px bottom nav bar), `z-index: 200`
+- Multi-select mode: always-visible bottom bar showing "N selected" (tappable to show/hide name chips) + "Add All" button (disabled at 0 selected)
+- Scroll container uses `flex: 1; min-height: 0` to prevent flex min-height expansion bug
+
 ## Session UX Components
 
-Three custom components integrated into ActiveSession for mobile-first input:
+- **HybridNumber** (`components/HybridNumber.tsx`): Three-in-one number input — drag = swipe (adaptive speed), single tap = drum picker (iOS-style scroll wheel), double-tap = keyboard edit. Used in ActiveSession (weight + reps), CreateRoutine and RoutineDetails (sets + reps in edit panel). `showDelta={false}` suppresses ±N overlay when inputs are adjacent.
+- **RestTimer** (`components/RestTimer.tsx`): Circular countdown timer with SVG progress ring, swipe-to-adjust, vibration on completion. Collapsible in ActiveSession.
+- **Set Completion Marking**: Tappable checkmarks per set row, "All done" per exercise. Completed exercises show green border + strikethrough.
 
-- **HybridNumber** (`components/HybridNumber.tsx`): Three-in-one number input — drag up/down = swipe (adaptive speed), single tap = drum picker (iOS-style scroll wheel at 2/5 position), double-tap = keyboard edit (text selected for replacement). Uses non-passive touch listeners to block pull-to-refresh, timestamp-based double-tap detection, and off-screen input for synchronous mobile keyboard focus. Replaces NumberStepper for strength exercises (weight + reps).
-- **RestTimer** (`components/RestTimer.tsx`): Circular countdown timer with SVG progress ring, swipe-to-adjust time, play/pause/skip controls, vibration on completion. Collapsible in ActiveSession header area.
-- **Set Completion Marking**: Inline in ActiveSession — tappable circular checkmarks on each set row, per-exercise "All done" button. Completed exercises show green border + strikethrough name + progress counter.
+## Playground (`pages/Playground.tsx`)
+
+Experimental filling strategy UI — not integrated into the main routine creation flow yet, kept for future integration. Six strategy tabs:
+
+- **Day Templates** — One-tap preset exercise lists (Push/Pull/Leg/Upper/Lower/Full Body) built from local IndexedDB
+- **Smart Auto-Fill** — Type a day name → keyword detection → auto-suggest matching exercises
+- **Copy Day** — Duplicate an existing day's exercise list
+- **Import Sessions** — Pull exercises from a past completed session
+- **Most Used** — Top exercises across all sessions
+- **By Equipment** — Filter exercises by available equipment

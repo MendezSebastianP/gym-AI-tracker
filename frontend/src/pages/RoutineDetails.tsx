@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
-import { Play, ArrowLeft, Edit, Save, X, Lock, Unlock, Plus, Trash2, HelpCircle, GripVertical, FileText } from 'lucide-react';
+import { Play, ArrowLeft, Edit, Save, X, Lock, Unlock, Plus, Trash2, GripVertical, FileText, Pencil } from 'lucide-react';
 import CheckSuggestionsButton from '../components/CheckSuggestionsButton';
 import SuggestionBadge from '../components/SuggestionBadge';
 import { useProgressionSuggestions } from '../hooks/useProgressionSuggestions';
@@ -11,6 +11,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
+import HybridNumber from '../components/HybridNumber';
 import { api } from '../api/client';
 import { useState } from 'react';
 import ExercisePicker from '../components/ExercisePicker';
@@ -42,7 +43,7 @@ export default function RoutineDetails() {
 	const [editedDays, setEditedDays] = useState<any[] | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [showPicker, setShowPicker] = useState<{ dayIndex: number; cardioMode?: boolean } | null>(null);
-	const [showLockHelp, setShowLockHelp] = useState(false);
+	const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
 	const [editedDescription, setEditedDescription] = useState<string>('');
 	const [suggestionDayIndex, setSuggestionDayIndex] = useState<number | undefined>(undefined);
 	const [pendingFetchDay, setPendingFetchDay] = useState<number | undefined>(undefined);
@@ -199,6 +200,26 @@ export default function RoutineDetails() {
 		setShowPicker(null);
 	};
 
+	const addExercisesToDay = (dayIndex: number, exercises: any[]) => {
+		if (!editedDays) return;
+		const newDays = JSON.parse(JSON.stringify(editedDays));
+		for (const exercise of exercises) {
+			const isCardio = exercise.type === 'Cardio';
+			newDays[dayIndex].exercises.push({
+				_id: Math.random().toString(36).substring(7),
+				exercise_id: exercise.id,
+				name: exercise.name,
+				sets: isCardio ? 1 : 3,
+				rips: isCardio ? '20 min' : '10',
+				rest: isCardio ? 0 : 60,
+				weight_kg: 0,
+				locked: false
+			});
+		}
+		setEditedDays(newDays);
+		setShowPicker(null);
+	};
+
 	const startSession = async (dayIndex: number) => {
 		if (!routine) return;
 
@@ -289,7 +310,7 @@ export default function RoutineDetails() {
 											newDays[dIndex].day_name = e.target.value;
 											setEditedDays(newDays);
 										}}
-										style={{ fontWeight: 'bold', fontSize: '18px', padding: '4px 8px', maxWidth: '200px' }}
+										style={{ fontWeight: 'bold', fontSize: '18px', padding: '4px 8px', flex: 1 }}
 									/>
 									<button
 										className="btn btn-ghost p-2"
@@ -332,38 +353,7 @@ export default function RoutineDetails() {
 						<div style={{ display: 'grid', gap: '8px' }}>
 							{editMode ? (
 								<>
-									{/* Header */}
-									<div style={{ display: 'flex', alignItems: 'center', fontSize: '11px', color: 'var(--text-tertiary)', padding: '0 8px', gap: '8px' }}>
-										<span style={{ width: '24px' }}>{t('Move')}</span>
-										<span style={{ flex: 1 }}>{t('Exercise')}</span>
-										<span style={{ width: '55px', textAlign: 'center' }}>{t('Sets')}</span>
-										<span style={{ width: '65px', textAlign: 'center' }}>{t('Reps')}</span>
-										<span style={{ width: '65px', textAlign: 'center' }}>KG</span>
-										<span style={{ width: '60px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-											{t('Lock')}
-											<HelpCircle
-												size={12}
-												style={{ cursor: 'pointer', color: 'var(--text-tertiary)' }}
-												onClick={() => setShowLockHelp(!showLockHelp)}
-											/>
-										</span>
-										<span style={{ width: '60px', textAlign: 'center' }}>{t('Actions')}</span>
-									</div>
 
-									{/* Lock help tooltip */}
-									{showLockHelp && (
-										<div style={{
-											background: 'var(--bg-tertiary)',
-											padding: '8px 12px',
-											borderRadius: '6px',
-											fontSize: '12px',
-											color: 'var(--text-secondary)',
-											border: '1px solid rgba(99, 102, 241, 0.3)',
-											marginBottom: '4px'
-										}}>
-											{t('When locked, sets/reps will always be pre-filled exactly from this plan. Unlocked exercises will dynamically pre-fill based on your latest workout.')}
-										</div>
-									)}
 
 									<DndContext
 										sensors={sensors}
@@ -381,6 +371,9 @@ export default function RoutineDetails() {
 													updateExerciseField={updateExerciseField}
 													toggleExerciseLock={toggleExerciseLock}
 													removeExercise={removeExercise}
+													editing={editingExerciseId === ex._id}
+													onStartEdit={() => setEditingExerciseId(ex._id)}
+													onStopEdit={() => setEditingExerciseId(null)}
 												/>
 											))}
 										</SortableContext>
@@ -487,7 +480,9 @@ export default function RoutineDetails() {
 			{
 				showPicker && (
 					<ExercisePicker
+						multiSelect={!showPicker.cardioMode}
 						onSelect={(ex) => addExerciseToDay(showPicker.dayIndex, ex)}
+						onSelectMultiple={(exs) => addExercisesToDay(showPicker.dayIndex, exs)}
 						onClose={() => setShowPicker(null)}
 						cardioMode={showPicker.cardioMode ?? false}
 					/>
@@ -497,8 +492,7 @@ export default function RoutineDetails() {
 	);
 }
 
-function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, updateExerciseField, toggleExerciseLock, removeExercise }: any) {
-	const { t } = useTranslation();
+function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, updateExerciseField, toggleExerciseLock, removeExercise, editing, onStartEdit, onStopEdit }: any) {
 	const {
 		attributes,
 		listeners,
@@ -507,82 +501,118 @@ function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, updateExerci
 		transition,
 	} = useSortable({ id: ex._id });
 
-	const style = {
-		transform: CSS.Transform.toString(transform),
-		transition,
-		display: 'flex',
-		alignItems: 'center',
-		padding: '8px',
-		backgroundColor: ex.locked ? 'rgba(99, 102, 241, 0.08)' : 'rgba(0,0,0,0.2)',
-		borderRadius: '6px',
-		gap: '8px',
-		border: ex.locked ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid transparent',
-		marginBottom: '4px'
-	};
+	const isCardio = typeof ex.reps === 'string' && isNaN(Number(ex.reps)) && ex.reps !== '';
+
+	const pillLabel = ex.weight_kg > 0
+		? `${ex.sets}×${ex.reps} · ${ex.weight_kg}kg`
+		: `${ex.sets}×${ex.reps}`;
 
 	return (
-		<div ref={setNodeRef} style={style}>
-			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', cursor: 'grab' }} {...attributes} {...listeners}>
-				<GripVertical size={16} color="var(--text-tertiary)" />
+		<div
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
+				backgroundColor: ex.locked ? 'rgba(99,102,241,0.06)' : 'var(--bg-card)',
+				border: editing ? '1px solid var(--primary)' : ex.locked ? '1px solid rgba(99,102,241,0.3)' : '1px solid var(--border)',
+				borderRadius: '8px',
+				marginBottom: '6px',
+				overflow: editing ? 'visible' : 'hidden',
+				position: 'relative',
+				zIndex: editing ? 2 : 0,
+			}}
+		>
+			{/* Single row: grip | name+meta | pill | lock | trash */}
+			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 8px' }}>
+				<div
+					style={{ width: '20px', cursor: 'grab', display: 'flex', justifyContent: 'center', flexShrink: 0 }}
+					{...attributes} {...listeners}
+				>
+					<GripVertical size={14} color="var(--text-tertiary)" />
+				</div>
+				<div style={{ flex: 1, minWidth: 0 }}>
+					<div style={{ fontSize: '14px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+						{getExerciseName(ex)}
+					</div>
+					{(ex.muscle_group || ex.equipment) && (
+						<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
+							{[ex.muscle_group, ex.equipment].filter(Boolean).join(' · ')}
+						</div>
+					)}
+				</div>
+				{/* Pill button */}
+				<button
+					onClick={onStartEdit}
+					style={{
+						display: 'flex', alignItems: 'center', gap: '4px',
+						padding: '4px 8px', borderRadius: '6px', flexShrink: 0,
+						border: '1px solid var(--border)', background: 'var(--bg-secondary)',
+						color: 'var(--text-primary)', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+					}}
+				>
+					{pillLabel}
+					<Pencil size={9} color="var(--text-tertiary)" />
+				</button>
+				{/* Lock toggle */}
+				<button
+					onClick={() => toggleExerciseLock(dIndex, eIndex)}
+					style={{
+						padding: '4px', borderRadius: '4px', border: 'none', background: 'none',
+						cursor: 'pointer', flexShrink: 0,
+						color: ex.locked ? 'var(--accent, #6366f1)' : 'var(--text-tertiary)',
+					}}
+					title={ex.locked ? 'Locked — pre-fills from plan' : 'Free — pre-fills from last session'}
+				>
+					{ex.locked ? <Lock size={14} /> : <Unlock size={14} />}
+				</button>
+				{/* Trash */}
+				<button
+					onClick={() => removeExercise(dIndex, eIndex)}
+					style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center' }}
+				>
+					<Trash2 size={15} color="var(--error)" />
+				</button>
 			</div>
-			<span style={{ flex: 1, fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-				{getExerciseName(ex)}
-			</span>
-			<input
-				type="number"
-				className="input"
-				value={ex.sets || 3}
-				onChange={(e) => updateExerciseField(dIndex, eIndex, 'sets', parseInt(e.target.value) || 1)}
-				style={{ width: '55px', textAlign: 'center', padding: '4px', fontSize: '13px' }}
-				min={1}
-			/>
-			<input
-				type="text"
-				className="input"
-				value={ex.reps || '10'}
-				onChange={(e) => updateExerciseField(dIndex, eIndex, 'reps', e.target.value)}
-				style={{ width: '65px', textAlign: 'center', padding: '4px', fontSize: '13px' }}
-			/>
-			<input
-				type="number"
-				className="input"
-				value={ex.weight_kg || 0}
-				onChange={(e) => updateExerciseField(dIndex, eIndex, 'weight_kg', parseFloat(e.target.value) || 0)}
-				style={{ width: '65px', textAlign: 'center', padding: '4px', fontSize: '13px' }}
-				step={0.5}
-				min={0}
-			/>
-			<button
-				className={`btn btn-ghost p-1`}
-				onClick={() => toggleExerciseLock(dIndex, eIndex)}
-				style={{
-					width: '60px',
-					display: 'flex',
-					alignItems: 'center',
-					justifyContent: 'center',
-					gap: '2px',
-					fontSize: '11px',
-					color: ex.locked ? 'var(--accent, #6366f1)' : 'var(--text-tertiary)',
-					background: ex.locked ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
-					borderRadius: '4px'
-				}}
-				title={ex.locked ? t('Locked TIP') : t('Unlocked TIP')}
-			>
-				{ex.locked ? <><Lock size={12} /> {t('Lock')}</> : <><Unlock size={12} /> {t('Free')}</>}
-			</button>
-			<button
-				className="btn btn-ghost p-1"
-				onClick={() => removeExercise(dIndex, eIndex)}
-				style={{
-					display: 'flex',
-					alignItems: 'center',
-					justifyContent: 'center',
-					padding: '8px',
-					flexShrink: 0
-				}}
-			>
-				<Trash2 size={18} style={{ color: 'var(--error)' }} />
-			</button>
+
+			{/* Inline edit panel */}
+			{editing && (
+				<div style={{ padding: '8px 12px 14px 36px', borderTop: '1px solid var(--border)', background: 'rgba(204,255,0,0.03)', display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+					<HybridNumber
+						value={ex.sets}
+						onChange={v => updateExerciseField(dIndex, eIndex, 'sets', v)}
+						min={1} max={20} step={1} sensitivity={28} label="Sets" showDelta={false}
+					/>
+					<span style={{ fontSize: '13px', color: 'var(--text-tertiary)', fontWeight: 600, paddingBottom: '12px' }}>×</span>
+					{isCardio ? (
+						<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duration</span>
+							<input
+								className="input"
+								style={{ width: '80px', height: '40px', fontSize: '13px', padding: '4px 8px' }}
+								value={ex.reps}
+								onChange={e => updateExerciseField(dIndex, eIndex, 'reps', e.target.value)}
+							/>
+						</div>
+					) : (
+						<HybridNumber
+							value={Number(ex.reps) || 10}
+							onChange={v => updateExerciseField(dIndex, eIndex, 'reps', String(v))}
+							min={1} max={100} step={1} sensitivity={28} label="Reps" showDelta={false}
+						/>
+					)}
+					<HybridNumber
+						value={ex.weight_kg || 0}
+						onChange={v => updateExerciseField(dIndex, eIndex, 'weight_kg', v)}
+						min={0} max={500} step={2.5} sensitivity={14} label="KG" showDelta={false}
+					/>
+					<button
+						onClick={onStopEdit}
+						style={{ padding: '8px 14px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#000', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '2px' }}
+					>
+						Done
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }

@@ -5,15 +5,25 @@ import { api } from '../api/client';
 import { db } from '../db/schema';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ExercisePicker from '../components/ExercisePicker';
-import { Plus, Trash, Wand2, GripVertical } from 'lucide-react';
+import { Plus, Trash, Trash2, Wand2, GripVertical, Pencil } from 'lucide-react';
+import ExerciseSuggestions from '../components/ExerciseSuggestions';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
+import HybridNumber from '../components/HybridNumber';
 
 export default function CreateRoutine() {
 	const [mode, setMode] = useState<'select' | 'manual' | 'ai'>(() => {
-		return (localStorage.getItem('draftRoutineMode') as any) || 'select';
+		const savedMode = localStorage.getItem('draftRoutineMode');
+		if (savedMode === 'manual') {
+			try {
+				const savedDays = localStorage.getItem('draftRoutineDays');
+				const hasDraft = savedDays && JSON.parse(savedDays).some((d: any) => d.exercises?.length > 0);
+				if (hasDraft) return 'manual';
+			} catch {}
+		}
+		return 'select';
 	});
 	const [name, setName] = useState(() => {
 		return localStorage.getItem('draftRoutineName') || '';
@@ -62,6 +72,7 @@ export default function CreateRoutine() {
 	const undoTimeoutRef = useRef<number | null>(null);
 
 	const existingRoutines = useLiveQuery(() => db.routines.count());
+	const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (!nameInitialized && existingRoutines !== undefined) {
@@ -200,6 +211,14 @@ export default function CreateRoutine() {
 					exercises: await Promise.all(
 						(day.exercises || []).map(async (ex: any) => {
 							const localEx = await db.exercises.get(ex.exercise_id);
+							// Convert range reps (e.g. "8-12") to middle value
+							let reps = String(ex.reps || '10');
+							if (reps.includes('-') && !reps.includes('min')) {
+								const [lo, hi] = reps.split('-').map(Number);
+								if (!isNaN(lo) && !isNaN(hi)) {
+									reps = String(Math.round((lo + hi) / 2));
+								}
+							}
 							return {
 								_id: Math.random().toString(36).substring(7),
 								exercise_id: ex.exercise_id,
@@ -207,7 +226,7 @@ export default function CreateRoutine() {
 								muscle_group: localEx?.muscle || localEx?.muscle_group || null,
 								equipment: localEx?.equipment || null,
 								sets: ex.sets || 3,
-								reps: ex.reps || '10',
+								reps,
 								rest: ex.rest || 60,
 								notes: ex.notes || null,
 							};
@@ -292,6 +311,14 @@ export default function CreateRoutine() {
 							if (selectedForReplace.has(ex._id) && replacements[ex.exercise_id]) {
 								const rep = replacements[ex.exercise_id];
 								const localEx = await db.exercises.get(rep.exercise_id);
+								// Convert range reps to middle value
+								let reps = String(rep.reps || ex.reps || '10');
+								if (reps.includes('-') && !reps.includes('min')) {
+									const [lo, hi] = reps.split('-').map(Number);
+									if (!isNaN(lo) && !isNaN(hi)) {
+										reps = String(Math.round((lo + hi) / 2));
+									}
+								}
 								return {
 									_id: Math.random().toString(36).substring(7),
 									exercise_id: rep.exercise_id,
@@ -299,7 +326,7 @@ export default function CreateRoutine() {
 									muscle_group: localEx?.muscle || localEx?.muscle_group || null,
 									equipment: localEx?.equipment || null,
 									sets: rep.sets || ex.sets,
-									reps: rep.reps || ex.reps,
+									reps,
 									rest: rep.rest || ex.rest,
 									notes: rep.notes || null,
 								};
@@ -327,13 +354,32 @@ export default function CreateRoutine() {
 		newDays[dayIndex].exercises.push({
 			_id: Math.random().toString(36).substring(7),
 			exercise_id: exercise.id,
-			name: exercise.name, // cache name for display
+			name: exercise.name,
 			muscle_group: exercise.muscle || exercise.muscle_group || null,
 			equipment: exercise.equipment || null,
 			sets: isCardio ? 1 : 3,
 			reps: isCardio ? '20 min' : '10',
 			rest: isCardio ? 0 : 60
 		});
+		setDays(newDays);
+		setShowPicker(null);
+	};
+
+	const addExercises = (dayIndex: number, exercises: any[]) => {
+		const newDays = [...days];
+		for (const exercise of exercises) {
+			const isCardio = exercise.type === 'Cardio';
+			newDays[dayIndex].exercises.push({
+				_id: Math.random().toString(36).substring(7),
+				exercise_id: exercise.id,
+				name: exercise.name,
+				muscle_group: exercise.muscle || exercise.muscle_group || null,
+				equipment: exercise.equipment || null,
+				sets: isCardio ? 1 : 3,
+				reps: isCardio ? '20 min' : '10',
+				rest: isCardio ? 0 : 60
+			});
+		}
 		setDays(newDays);
 		setShowPicker(null);
 	};
@@ -551,20 +597,7 @@ export default function CreateRoutine() {
 									}}><Trash size={16} /></button>
 								</div>
 
-								{day.exercises.length > 0 && (
-									<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--text-tertiary)', padding: '0 8px', marginBottom: '4px' }}>
-										<span style={{ flex: '0 0 24px', textAlign: 'center' }}>Move</span>
-										<span style={{ flex: '1 1 0px', minWidth: 0, paddingLeft: '8px' }}>Exercise</span>
-										<div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-											<span style={{ width: '40px', textAlign: 'center' }}>Sets</span>
-											<span style={{ width: '12px' }}></span>
-											<span style={{ width: '50px', textAlign: 'center' }}>Reps</span>
-										</div>
-										<span style={{ flex: '0 0 32px' }}></span>
-									</div>
-								)}
-
-
+							
 								<DndContext
 									sensors={sensors}
 									collisionDetection={closestCenter}
@@ -583,11 +616,13 @@ export default function CreateRoutine() {
 												isSelected={selectedForReplace.has(ex._id)}
 												onToggleSelect={() => toggleSelectExercise(ex._id)}
 												onRemove={() => handleRemoveExercise(dIndex, eIndex)}
+												editing={editingExerciseId === ex._id}
+												onStartEdit={() => setEditingExerciseId(ex._id)}
+												onStopEdit={() => setEditingExerciseId(null)}
 											/>
 										))}
 									</SortableContext>
 								</DndContext>
-
 								<div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
 									<button
 										className="btn btn-secondary"
@@ -604,11 +639,30 @@ export default function CreateRoutine() {
 										<Plus size={16} style={{ marginRight: '4px' }} /> Cardio
 									</button>
 								</div>
+
+								{/* Smart Suggestions */}
+								<ExerciseSuggestions
+									existingExerciseIds={day.exercises.map((e: any) => e.exercise_id)}
+									onAdd={(exercise) => {
+										const newDays = [...days];
+										newDays[dIndex].exercises.push({
+											_id: Math.random().toString(36).substring(7),
+											exercise_id: exercise.id,
+											name: exercise.name,
+											muscle_group: exercise.muscle || exercise.muscle_group || null,
+											equipment: exercise.equipment || null,
+											sets: 3, reps: '10', rest: 60
+										});
+										setDays(newDays);
+									}}
+								/>
 							</div>
 						))}
 
-						<button className="btn btn-ghost" onClick={() => setDays([...days, { day_name: `Day ${days.length + 1}`, exercises: [] }])}>
-							+ Add Day
+						<button onClick={() => setDays([...days, { day_name: `Day ${days.length + 1}`, exercises: [] }])}
+							style={{ width: '100%', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', fontSize: '13px', fontWeight: 600, border: '2px dashed rgba(204,255,0,0.35)', borderRadius: '10px', background: 'rgba(204,255,0,0.05)', color: 'var(--primary)', cursor: 'pointer' }}
+						>
+							<Plus size={15} /> Add Training Day
 						</button>
 					</div>
 					<button className="btn btn-primary" style={{ width: '100%', marginTop: '16px' }} onClick={handleSave}>
@@ -654,7 +708,9 @@ export default function CreateRoutine() {
 
 			{showPicker && (
 				<ExercisePicker
+					multiSelect={!showPicker.cardioMode}
 					onSelect={(ex) => addExercise(showPicker.dayIndex, ex)}
+					onSelectMultiple={(exs) => addExercises(showPicker.dayIndex, exs)}
 					onClose={() => setShowPicker(null)}
 					cardioMode={showPicker.cardioMode ?? false}
 				/>
@@ -663,7 +719,7 @@ export default function CreateRoutine() {
 	);
 }
 
-function SortableCreateExerciseRow({ ex, eIndex, dIndex, days, setDays, isAiGenerated, isSelected, onToggleSelect, onRemove }: any) {
+function SortableCreateExerciseRow({ ex, eIndex, dIndex, days, setDays, isAiGenerated, isSelected, onToggleSelect, onRemove, editing, onStartEdit, onStopEdit }: any) {
 	const {
 		attributes,
 		listeners,
@@ -672,83 +728,109 @@ function SortableCreateExerciseRow({ ex, eIndex, dIndex, days, setDays, isAiGene
 		transition,
 	} = useSortable({ id: ex._id });
 
-	const style = {
-		transform: CSS.Transform.toString(transform),
-		transition,
-		display: 'flex',
-		alignItems: 'center',
-		gap: '8px',
-		backgroundColor: isSelected ? 'rgba(255, 165, 0, 0.1)' : 'var(--bg-card)',
-		border: isSelected ? '1px solid orange' : '1px solid var(--border)',
-		padding: '12px 8px',
-		borderRadius: '8px',
-		marginBottom: '8px',
-		cursor: isAiGenerated ? 'pointer' : 'default',
-		boxSizing: 'border-box' as const,
-		width: '100%'
+	// Detect cardio: reps is non-numeric text (e.g. "20 min")
+	const isCardio = typeof ex.reps === 'string' && isNaN(Number(ex.reps)) && ex.reps !== '';
+
+	const handlePillClick = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		if (isAiGenerated) {
+			onToggleSelect();
+		} else {
+			onStartEdit();
+		}
 	};
 
 	return (
-		<div ref={setNodeRef} style={style} onClick={isAiGenerated ? onToggleSelect : undefined}>
-			{/* Grip Icon */}
-			<button {...attributes} {...listeners} className="btn btn-ghost p-0" style={{ flex: '0 0 24px', display: 'flex', justifyContent: 'center', margin: 0, cursor: 'grab', padding: 0 }} onClick={e => e.stopPropagation()}>
-				<GripVertical size={16} />
-			</button>
-
-			{/* Center Stack: Name & Meta */}
-			<div style={{ flex: '1 1 0px', display: 'flex', flexDirection: 'column', minWidth: 0, gap: '2px' }}>
-				<span style={{ fontSize: '14px', fontWeight: 'bold', color: isSelected ? 'orange' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-					{ex.name}
-				</span>
-				<span style={{ fontSize: '10px', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-					{ex.muscle_group || 'Any'} • {ex.equipment || 'Bodyweight'}
-				</span>
+		<div
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
+				backgroundColor: isSelected ? 'rgba(255,165,0,0.08)' : 'var(--bg-card)',
+				border: isSelected ? '1px solid orange' : editing ? '1px solid var(--primary)' : '1px solid var(--border)',
+				borderRadius: '8px',
+				marginBottom: '6px',
+				overflow: editing ? 'visible' : 'hidden',
+				position: 'relative',
+				zIndex: editing ? 2 : 0,
+			}}
+			onClick={isAiGenerated ? onToggleSelect : undefined}
+		>
+			{/* Single row: grip | name+meta | pill | trash */}
+			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 8px' }}>
+				<div
+					style={{ width: '20px', cursor: 'grab', display: 'flex', justifyContent: 'center', flexShrink: 0 }}
+					{...attributes} {...listeners}
+					onClick={e => e.stopPropagation()}
+				>
+					<GripVertical size={14} color="var(--text-tertiary)" />
+				</div>
+				<div style={{ flex: 1, minWidth: 0 }}>
+					<div style={{ fontSize: '14px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isSelected ? 'orange' : 'var(--text-primary)' }}>
+						{ex.name}
+					</div>
+					<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
+						{ex.muscle_group || 'Any'} · {ex.equipment || 'Bodyweight'}
+					</div>
+				</div>
+				{/* Pill button */}
+				<button
+					onClick={handlePillClick}
+					style={{
+						display: 'flex', alignItems: 'center', gap: '4px',
+						padding: '4px 8px', borderRadius: '6px', flexShrink: 0,
+						border: '1px solid var(--border)',
+						background: isSelected ? 'rgba(255,165,0,0.15)' : 'var(--bg-secondary)',
+						color: isSelected ? 'orange' : 'var(--text-primary)',
+						cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+					}}
+				>
+					{ex.sets}×{ex.reps}
+					{!isAiGenerated && <Pencil size={9} color="var(--text-tertiary)" />}
+				</button>
+				{/* Trash */}
+				<button
+					onClick={e => { e.stopPropagation(); if (onRemove) onRemove(); }}
+					style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+				>
+					<Trash2 size={15} color="var(--error)" />
+				</button>
 			</div>
 
-			{/* Inputs Block */}
-			<div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-				<input
-					className="input text-center"
-					style={{ width: '40px', height: '32px', fontSize: '13px', padding: '0 4px', margin: 0 }}
-					type="number"
-					value={ex.sets}
-					placeholder="S"
-					title="Sets"
-					onClick={e => e.stopPropagation()}
-					onChange={e => {
-						const newDays = [...days];
-						newDays[dIndex].exercises[eIndex].sets = parseInt(e.target.value) || 1;
-						setDays(newDays);
-					}}
-				/>
-				<span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>x</span>
-				<input
-					className="input text-center"
-					style={{ width: '50px', height: '32px', fontSize: '13px', padding: '0 4px', margin: 0 }}
-					type="text"
-					value={ex.reps || '10'}
-					placeholder="R"
-					title="Reps"
-					onClick={e => e.stopPropagation()}
-					onChange={e => {
-						const newDays = [...days];
-						newDays[dIndex].exercises[eIndex].reps = e.target.value;
-						setDays(newDays);
-					}}
-				/>
-			</div>
-
-			{/* Trash Icon */}
-			<button
-				className="btn btn-ghost p-0"
-				onClick={(e) => {
-					e.stopPropagation();
-					if (onRemove) onRemove();
-				}}
-				style={{ flex: '0 0 32px', color: 'var(--error)', margin: 0, width: '32px', display: 'flex', justifyContent: 'flex-end', padding: 0 }}
-			>
-				<Trash size={16} />
-			</button>
+			{/* Inline edit panel — expands when pill is tapped */}
+			{editing && (
+				<div style={{ padding: '8px 12px 14px 36px', borderTop: '1px solid var(--border)', background: 'rgba(204,255,0,0.03)', display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+					<HybridNumber
+						value={ex.sets}
+						onChange={v => { const nd = [...days]; nd[dIndex].exercises[eIndex].sets = v; setDays(nd); }}
+						min={1} max={20} step={1} sensitivity={28} label="Sets" showDelta={false}
+					/>
+					<span style={{ fontSize: '13px', color: 'var(--text-tertiary)', fontWeight: 600, paddingBottom: '12px' }}>×</span>
+					{isCardio ? (
+						<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duration</span>
+							<input
+								className="input"
+								style={{ width: '80px', height: '40px', fontSize: '13px', padding: '4px 8px' }}
+								value={ex.reps}
+								onChange={e => { const nd = [...days]; nd[dIndex].exercises[eIndex].reps = e.target.value; setDays(nd); }}
+							/>
+						</div>
+					) : (
+						<HybridNumber
+							value={Number(ex.reps) || 10}
+							onChange={v => { const nd = [...days]; nd[dIndex].exercises[eIndex].reps = String(v); setDays(nd); }}
+							min={1} max={100} step={1} sensitivity={28} label="Reps" showDelta={false}
+						/>
+					)}
+					<button
+						onClick={e => { e.stopPropagation(); onStopEdit(); }}
+						style={{ padding: '8px 14px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#000', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '2px' }}
+					>
+						Done
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }

@@ -203,3 +203,89 @@ async def replace_exercises(
         )
 
     return result
+
+
+# ── AI Fill Day ─────────────────────────────────────────────────────────────
+
+
+class FillDayRequest(BaseModel):
+    prompt: str
+    existing_exercise_ids: List[int] = []
+    day_name: Optional[str] = None
+
+
+class FillDayExercise(BaseModel):
+    exercise_id: int
+    sets: int
+    reps: str
+    rest: int
+    notes: Optional[str] = None
+
+
+class FillDayResponse(BaseModel):
+    exercises: List[FillDayExercise]
+
+
+@router.post("/fill-day", response_model=FillDayResponse)
+@limiter.limit("3/hour")
+async def fill_day(
+    request: Request,
+    body: FillDayRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Given a free-text prompt like "add 3 chest exercises with dumbbells",
+    return exercises scoped to a single day. Uses AI.
+    Rate limited to 3 requests per hour per IP.
+    """
+    from app.openai_service import fill_day_ai
+
+    preferences = (
+        db.query(UserPreference)
+        .filter(UserPreference.user_id == current_user.id)
+        .first()
+    )
+
+    exp_level = preferences.experience_level if (preferences and preferences.experience_level) else "5"
+    try:
+        max_difficulty = float(exp_level)
+    except (ValueError, TypeError):
+        experience_to_max_level = {
+            "Beginner (0-6 months)": 2.5,
+            "Intermediate (6 months - 2 years)": 3.5,
+            "Advanced (2+ years)": 10.0,
+            "I don't know": 3.0,
+        }
+        max_difficulty = experience_to_max_level.get(exp_level, 3.0)
+
+    exercises = (
+        db.query(Exercise)
+        .filter(Exercise.user_id == None)  # noqa: E711
+        .filter(Exercise.difficulty_level <= max_difficulty)
+        .all()
+    )
+
+    try:
+        result = await fill_day_ai(
+            db=db,
+            user=current_user,
+            preferences=preferences,
+            exercises=exercises,
+            prompt=body.prompt,
+            existing_ids=body.existing_exercise_ids,
+            day_name=body.day_name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI fill-day failed: {str(e)}"
+        )
+
+    return result

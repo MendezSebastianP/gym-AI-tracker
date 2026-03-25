@@ -24,14 +24,20 @@ api.interceptors.request.use(
 
 // Track whether a refresh is already in-flight to avoid parallel refreshes
 let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
+type RefreshCb = (token: string | null, error?: unknown) => void;
+let refreshSubscribers: RefreshCb[] = [];
 
 function onTokenRefreshed(token: string) {
 	refreshSubscribers.forEach((cb) => cb(token));
 	refreshSubscribers = [];
 }
 
-function subscribeToRefresh(cb: (token: string) => void) {
+function onRefreshFailed(error: unknown) {
+	refreshSubscribers.forEach((cb) => cb(null, error));
+	refreshSubscribers = [];
+}
+
+function subscribeToRefresh(cb: RefreshCb) {
 	refreshSubscribers.push(cb);
 }
 
@@ -64,8 +70,9 @@ api.interceptors.response.use(
 
 		if (isRefreshing) {
 			// Another request is already refreshing — wait for it
-			return new Promise((resolve) => {
-				subscribeToRefresh((newToken: string) => {
+			return new Promise((resolve, reject) => {
+				subscribeToRefresh((newToken, error) => {
+					if (error || !newToken) { reject(error); return; }
 					originalRequest.headers.Authorization = `Bearer ${newToken}`;
 					originalRequest._retry = true;
 					resolve(api(originalRequest));
@@ -95,8 +102,7 @@ api.interceptors.response.use(
 			return api(originalRequest);
 		} catch (refreshError) {
 			isRefreshing = false;
-			refreshSubscribers = [];
-			// Refresh failed — force logout
+			onRefreshFailed(refreshError); // properly reject all queued requests
 			localStorage.removeItem('token');
 			localStorage.removeItem('refresh_token');
 			return Promise.reject(refreshError);

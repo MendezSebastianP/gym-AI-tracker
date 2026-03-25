@@ -1,17 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { useTranslation } from 'react-i18next';
-import { X, Search, Filter, Dumbbell, Layers, Activity, Plus } from 'lucide-react';
+import { X, Search, Filter, Dumbbell, Layers, Activity, Plus, Check } from 'lucide-react';
 import { api } from '../api/client';
 
 interface ExercisePickerProps {
 	onSelect: (exercise: any) => void;
 	onClose: () => void;
 	cardioMode?: boolean;
+	multiSelect?: boolean;
+	onSelectMultiple?: (exercises: any[]) => void;
 }
 
-export default function ExercisePicker({ onSelect, onClose, cardioMode = false }: ExercisePickerProps) {
+export default function ExercisePicker({ onSelect, onClose, cardioMode = false, multiSelect = false, onSelectMultiple }: ExercisePickerProps) {
 	const [search, setSearch] = useState('');
 	const { t, i18n } = useTranslation();
 	const [filters, setFilters] = useState({
@@ -20,6 +23,11 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false }
 		equipment: ''
 	});
 	const [showFilters, setShowFilters] = useState(false);
+	const [expandedFilter, setExpandedFilter] = useState<'group' | 'muscle' | 'equipment' | null>(null);
+
+	const toggleFilterSection = (section: 'group' | 'muscle' | 'equipment') => {
+		setExpandedFilter(prev => prev === section ? null : section);
+	};
 
 	// Custom Exercise Form State
 	const [isCreating, setIsCreating] = useState(false);
@@ -28,6 +36,31 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false }
 	const [customGroup, setCustomGroup] = useState('');
 	const [customEquipment, setCustomEquipment] = useState('');
 	const [isSubmitting, setIsSubmitting] = useState(false);
+
+	// Multi-select state
+	const [selected, setSelected] = useState<Map<number, any>>(new Map());
+	const [showSelectedNames, setShowSelectedNames] = useState(false);
+
+	const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+
+	const toggleSelected = (ex: any) => {
+		setSelected(prev => {
+			const next = new Map(prev);
+			if (next.has(ex.id)) {
+				next.delete(ex.id);
+			} else {
+				next.set(ex.id, ex);
+			}
+			return next;
+		});
+	};
+
+	const handleAddAll = () => {
+		if (onSelectMultiple) {
+			onSelectMultiple(Array.from(selected.values()));
+		}
+		onClose();
+	};
 
 	const exercises = useLiveQuery(async () => {
 		const all = await db.exercises.toArray();
@@ -40,6 +73,12 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false }
 			})
 			.sort((a, b) => a._displayName.localeCompare(b._displayName));
 	}, [i18n.language]);
+
+	useEffect(() => {
+		if (exercises !== undefined) { setLoadingTimedOut(false); return; }
+		const timer = setTimeout(() => setLoadingTimedOut(true), 3000);
+		return () => clearTimeout(timer);
+	}, [exercises]);
 
 	// Extract unique filter options
 	const options = useMemo(() => {
@@ -139,7 +178,16 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false }
 	}, [exercises, search, filters, t, cardioMode]);
 
 	const toggleFilter = (type: 'muscle' | 'group' | 'equipment', value: string) => {
-		setFilters(prev => ({ ...prev, [type]: prev[type] === value ? '' : value }));
+		setFilters(prev => {
+			const isDeselect = prev[type] === value;
+			return {
+				...prev,
+				[type]: isDeselect ? '' : value,
+				// Target Zone and Specific Muscle are mutually exclusive
+				...(type === 'group' && !isDeselect ? { muscle: '' } : {}),
+				...(type === 'muscle' && !isDeselect ? { group: '' } : {}),
+			};
+		});
 	};
 
 	const clearFilters = () => {
@@ -168,7 +216,11 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false }
 
 			// Complete and select
 			setIsCreating(false);
-			onSelect(newEx);
+			if (multiSelect) {
+				toggleSelected(newEx);
+			} else {
+				onSelect(newEx);
+			}
 		} catch (e) {
 			console.error("Failed to create custom exercise", e);
 			alert(t("Failed to create custom exercise. Are you offline?"));
@@ -178,7 +230,7 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false }
 	};
 
 	if (isCreating) {
-		return (
+		return createPortal(
 			<div style={{
 				position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
 				backgroundColor: 'var(--bg-primary)', zIndex: 200, padding: '16px',
@@ -224,14 +276,16 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false }
 						{isSubmitting ? t('Saving...') : t('Create & Select')}
 					</button>
 				</div>
-			</div>
+			</div>,
+			document.body
 		);
 	}
 
-	return (
+	return createPortal(
 		<div style={{
-			position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-			backgroundColor: 'var(--bg-primary)', zIndex: 200, padding: '16px',
+			position: 'fixed', top: 0, left: 0, right: 0, bottom: '65px',
+			backgroundColor: 'var(--bg-primary)', zIndex: 200,
+			padding: '16px 16px 0',
 			display: 'flex', flexDirection: 'column'
 		}}>
 			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
@@ -261,64 +315,116 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false }
 			</div>
 
 			{!cardioMode && showFilters && (
-				<div className="mb-4 p-3 bg-secondary rounded-lg fade-in">
-					<div className="flex justify-between items-center mb-2">
-						<h3 className="text-xs font-bold text-secondary">{t('Filters')}</h3>
-						{(Object.values(filters).some(Boolean) || search) && (
-							<button onClick={clearFilters} className="text-xs text-primary">
+				<div style={{ marginBottom: '8px', borderRadius: '10px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+					{/* Header row */}
+					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: expandedFilter ? '1px solid var(--border)' : 'none', background: 'var(--bg-secondary)' }}>
+						<span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('Filters')}</span>
+						{Object.values(filters).some(Boolean) && (
+							<button onClick={clearFilters} style={{ fontSize: '11px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
 								{t('Clear All')}
 							</button>
 						)}
 					</div>
 
-					<div className="flex flex-col gap-md">
-						<div>
-							<div className="flex items-center gap-2 mb-2">
-								<Layers size={12} className="text-tertiary" />
-								<span className="text-xs text-secondary">{t('Target Zone')}</span>
-							</div>
-							<div className="flex" style={{ flexWrap: 'wrap', gap: '8px' }}>
+					{/* Accordion: Target Zone (mutually exclusive with Specific Muscle) */}
+					<div style={{ borderBottom: '1px solid var(--border)' }}>
+						<button
+							onClick={() => toggleFilterSection('group')}
+							style={{
+								width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+								padding: '10px 12px', background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer',
+								opacity: filters.muscle ? 0.45 : 1,
+							}}
+						>
+							<Layers size={13} color={filters.group ? 'var(--primary)' : 'var(--text-tertiary)'} />
+							<span style={{ flex: 1, textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Target Zone')}</span>
+							{filters.group && (
+								<span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '8px', background: 'rgba(204, 255, 0, 0.15)', color: 'var(--primary)', fontWeight: 600 }}>
+									{t(filters.group)}
+								</span>
+							)}
+							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{expandedFilter === 'group' ? '▲' : '▼'}</span>
+						</button>
+						{expandedFilter === 'group' && (
+							<div style={{ padding: '8px 12px 10px', display: 'flex', flexWrap: 'wrap', gap: '6px', background: 'var(--bg-primary)' }}>
 								{options.groups.map(g => (
-									<button key={g} onClick={() => toggleFilter('group', g!)} className={`chip ${filters.group === g ? 'active' : 'inactive'}`}>
+									<button key={g} onClick={() => { toggleFilter('group', g!); if (filters.group !== g) setExpandedFilter(null); }} className={`chip ${filters.group === g ? 'active' : 'inactive'}`}>
 										{t(g!)}
 									</button>
 								))}
 							</div>
-						</div>
+						)}
+					</div>
 
-						{/* Individual Muscle Filter */}
-						<div>
-							<div className="flex items-center gap-2 mb-2">
-								<Activity size={12} className="text-tertiary" />
-								<span className="text-xs text-secondary">{t('Specific Muscle')}</span>
-							</div>
-							<div className="flex" style={{ flexWrap: 'wrap', gap: '8px' }}>
+					{/* "or" divider — only shown when neither is selected */}
+					{!filters.group && !filters.muscle && (
+						<div style={{ textAlign: 'center', fontSize: '10px', color: 'var(--text-tertiary)', padding: '3px 0', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', letterSpacing: '0.5px' }}>
+							— or —
+						</div>
+					)}
+
+					{/* Accordion: Specific Muscle (mutually exclusive with Target Zone) */}
+					<div style={{ borderBottom: '1px solid var(--border)' }}>
+						<button
+							onClick={() => toggleFilterSection('muscle')}
+							style={{
+								width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+								padding: '10px 12px', background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer',
+								opacity: filters.group ? 0.45 : 1,
+							}}
+						>
+							<Activity size={13} color={filters.muscle ? 'var(--primary)' : 'var(--text-tertiary)'} />
+							<span style={{ flex: 1, textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Specific Muscle')}</span>
+							{filters.muscle && (
+								<span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '8px', background: 'rgba(204, 255, 0, 0.15)', color: 'var(--primary)', fontWeight: 600 }}>
+									{t(filters.muscle)}
+								</span>
+							)}
+							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{expandedFilter === 'muscle' ? '▲' : '▼'}</span>
+						</button>
+						{expandedFilter === 'muscle' && (
+							<div style={{ padding: '8px 12px 10px', display: 'flex', flexWrap: 'wrap', gap: '6px', background: 'var(--bg-primary)' }}>
 								{options.muscles.map(m => (
-									<button key={m} onClick={() => toggleFilter('muscle', m!)} className={`chip ${filters.muscle === m ? 'active' : 'inactive'}`}>
+									<button key={m} onClick={() => { toggleFilter('muscle', m!); if (filters.muscle !== m) setExpandedFilter(null); }} className={`chip ${filters.muscle === m ? 'active' : 'inactive'}`}>
 										{t(m!)}
 									</button>
 								))}
 							</div>
-						</div>
+						)}
+					</div>
 
-						<div>
-							<div className="flex items-center gap-2 mb-2">
-								<Dumbbell size={12} className="text-tertiary" />
-								<span className="text-xs text-secondary">{t('Equipment')}</span>
-							</div>
-							<div className="flex" style={{ flexWrap: 'wrap', gap: '8px' }}>
+								{/* Accordion: Equipment */}
+					<div>
+						<button
+							onClick={() => toggleFilterSection('equipment')}
+							style={{
+								width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+								padding: '10px 12px', background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer',
+							}}
+						>
+							<Dumbbell size={13} color={filters.equipment ? 'var(--primary)' : 'var(--text-tertiary)'} />
+							<span style={{ flex: 1, textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Equipment')}</span>
+							{filters.equipment && (
+								<span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '8px', background: 'rgba(204, 255, 0, 0.15)', color: 'var(--primary)', fontWeight: 600 }}>
+									{t(filters.equipment)}
+								</span>
+							)}
+							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{expandedFilter === 'equipment' ? '▲' : '▼'}</span>
+						</button>
+						{expandedFilter === 'equipment' && (
+							<div style={{ padding: '8px 12px 10px', display: 'flex', flexWrap: 'wrap', gap: '6px', background: 'var(--bg-primary)' }}>
 								{options.equipment.map(e => (
-									<button key={e} onClick={() => toggleFilter('equipment', e!)} className={`chip ${filters.equipment === e ? 'active' : 'inactive'}`}>
+									<button key={e} onClick={() => { toggleFilter('equipment', e!); if (filters.equipment !== e) setExpandedFilter(null); }} className={`chip ${filters.equipment === e ? 'active' : 'inactive'}`}>
 										{t(e!)}
 									</button>
 								))}
 							</div>
-						</div>
+						)}
 					</div>
 				</div>
 			)}
 
-			<div style={{ flex: 1, overflowY: 'auto' }}>
+			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: '8px' }}>
 				{/* Create Custom option only in regular mode */}
 				{!cardioMode && (
 					<div
@@ -336,28 +442,118 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false }
 					</div>
 				)}
 
-				{filteredExercises?.map(ex => (
-					<div
-						key={ex.id}
-						onClick={() => onSelect(ex)}
-						style={{ padding: '12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 0.2s' }}
-						className="hover:bg-white/5"
-					>
-						<div style={{ fontWeight: 'bold', fontSize: '15px' }}>{ex._displayName}</div>
-						<div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-							{ex.muscle_group && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={10} /> {t(ex.muscle_group)}</span>}
-							{ex.equipment && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Dumbbell size={10} /> {t(ex.equipment)}</span>}
-							{ex.muscle && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Activity size={10} /> {t(ex.muscle)}</span>}
+				{filteredExercises?.map(ex => {
+					const isSelected = multiSelect && selected.has(ex.id);
+					return (
+						<div
+							key={ex.id}
+							onClick={() => multiSelect ? toggleSelected(ex) : onSelect(ex)}
+							style={{
+								padding: '12px', borderBottom: '1px solid var(--border)',
+								cursor: 'pointer', transition: 'background 0.2s',
+								display: 'flex', alignItems: 'center', gap: '10px',
+								background: isSelected ? 'rgba(204, 255, 0, 0.06)' : 'transparent',
+							}}
+							className="hover:bg-white/5"
+						>
+							{multiSelect && (
+								<div style={{
+									width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0,
+									border: isSelected ? '2px solid var(--primary)' : '2px solid var(--border)',
+									background: isSelected ? 'var(--primary)' : 'transparent',
+									display: 'flex', alignItems: 'center', justifyContent: 'center',
+									transition: 'all 0.15s',
+								}}>
+									{isSelected && <Check size={14} color="#000" strokeWidth={3} />}
+								</div>
+							)}
+							<div style={{ flex: 1, minWidth: 0 }}>
+								<div style={{ fontWeight: 'bold', fontSize: '15px' }}>{ex._displayName}</div>
+								<div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+									{ex.muscle_group && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={10} /> {t(ex.muscle_group)}</span>}
+									{ex.equipment && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Dumbbell size={10} /> {t(ex.equipment)}</span>}
+									{ex.muscle && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Activity size={10} /> {t(ex.muscle)}</span>}
+								</div>
+							</div>
 						</div>
-					</div>
-				))}
+					);
+				})}
 
-				{filteredExercises?.length === 0 && (
+				{exercises === undefined && !loadingTimedOut && (
+					<div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-tertiary)' }}>
+						<p>{t('Loading exercises...')}</p>
+					</div>
+				)}
+				{(loadingTimedOut || (exercises !== undefined && filteredExercises.length === 0)) && (
 					<div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-tertiary)' }}>
 						<p>{cardioMode ? t('No cardio exercises found.') : t('No exercises found.')}</p>
+						{!cardioMode && (!exercises || exercises.length === 0) && (
+							<p style={{ fontSize: '12px', marginTop: '8px' }}>{t('Make sure your exercise library is synced.')}</p>
+						)}
 					</div>
 				)}
 			</div>
-		</div>
+
+		{/* Multi-select bottom bar — flex sibling so it never overlaps the list */}
+		{multiSelect && (
+			<div style={{ flexShrink: 0, background: 'var(--bg-secondary)', borderTop: '1px solid var(--border)' }}>
+				{/* Expandable selected names */}
+				{showSelectedNames && selected.size > 0 && (
+					<div style={{
+						padding: '8px 16px 6px',
+						borderBottom: '1px solid var(--border)',
+						display: 'flex', flexWrap: 'wrap', gap: '6px',
+						maxHeight: '100px', overflowY: 'auto',
+					}}>
+						{Array.from(selected.values()).map((ex: any) => (
+							<span key={ex.id} style={{
+								fontSize: '12px', fontWeight: 600,
+								padding: '3px 10px', borderRadius: '20px',
+								background: 'rgba(204,255,0,0.12)', color: 'var(--primary)',
+								border: '1px solid rgba(204,255,0,0.25)',
+							}}>
+								{ex._displayName || ex.name}
+							</span>
+						))}
+					</div>
+				)}
+				{/* Action row */}
+				<div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+					<button
+						onClick={() => selected.size > 0 && setShowSelectedNames(p => !p)}
+						style={{
+							fontSize: '14px', fontWeight: 600, padding: 0,
+							color: selected.size > 0 ? 'var(--text-primary)' : 'var(--text-tertiary)',
+							background: 'none', border: 'none',
+							cursor: selected.size > 0 ? 'pointer' : 'default',
+							display: 'flex', alignItems: 'center', gap: '5px',
+						}}
+					>
+						{selected.size} {t('selected')}
+						{selected.size > 0 && (
+							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+								{showSelectedNames ? '▲' : '▼'}
+							</span>
+						)}
+					</button>
+					<button
+						onClick={handleAddAll}
+						disabled={selected.size === 0}
+						style={{
+							padding: '10px 24px', borderRadius: '10px', border: 'none',
+							background: selected.size > 0 ? 'var(--primary)' : 'var(--bg-tertiary)',
+							color: selected.size > 0 ? '#000' : 'var(--text-tertiary)',
+							fontSize: '14px', fontWeight: 700,
+							cursor: selected.size > 0 ? 'pointer' : 'not-allowed',
+							transition: 'all 0.15s',
+						}}
+					>
+						{t('Add All')}
+					</button>
+				</div>
+			</div>
+		)}
+		</div>,
+		document.body
 	);
 }
