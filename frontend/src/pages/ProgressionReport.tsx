@@ -363,7 +363,7 @@ export default function ProgressionReport() {
 	}
 
 	// ── Generate form (new panel, not yet generated) ──────────────────────────
-	const GenerateForm = () => (
+	const renderGenerateForm = () => (
 		<div>
 			<style>{`@keyframes genGlow { 0%,100% { box-shadow: 0 0 16px rgba(204,255,0,0.2), 0 4px 12px rgba(0,0,0,0.2); } 50% { box-shadow: 0 0 28px rgba(204,255,0,0.45), 0 6px 20px rgba(0,0,0,0.3); } }`}</style>
 			<h3 style={{ margin: '0 0 6px', fontSize: '16px', fontWeight: 800 }}>Generate New Report</h3>
@@ -419,7 +419,7 @@ export default function ProgressionReport() {
 	);
 
 	// ── Report view (past panel OR new panel after generating) ────────────────
-	const ReportView = ({
+	const renderReportView = ({
 		report, appliedSet, setApplied, showBack,
 	}: {
 		report: ReportData;
@@ -550,37 +550,37 @@ export default function ProgressionReport() {
 			{/* ── Past panel ── */}
 			{panel === 'past' && savedReport && (
 				<div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
-					<ReportView
-						report={savedReport}
-						appliedSet={appliedPast}
-						setApplied={setAppliedPast}
-					/>
+					{renderReportView({
+						report: savedReport,
+						appliedSet: appliedPast,
+						setApplied: setAppliedPast,
+					})}
 				</div>
 			)}
 
 			{/* ── New panel: generate form ── */}
 			{hasSavedReport && panel === 'new' && !generated && (
 				<div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '24px' }}>
-					<GenerateForm />
+					{renderGenerateForm()}
 				</div>
 			)}
 
 			{/* ── New panel: generated results ── */}
 			{panel === 'new' && generated && currentReport && (
 				<div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
-					<ReportView
-						report={currentReport}
-						appliedSet={appliedNew}
-						setApplied={setAppliedNew}
-						showBack
-					/>
+					{renderReportView({
+						report: currentReport,
+						appliedSet: appliedNew,
+						setApplied: setAppliedNew,
+						showBack: true
+					})}
 				</div>
 			)}
 
 			{/* No past report + no panel toggle → just show generate form */}
 			{!hasSavedReport && (
 				<div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '24px' }}>
-					<GenerateForm />
+					{renderGenerateForm()}
 				</div>
 			)}
 		</div>
