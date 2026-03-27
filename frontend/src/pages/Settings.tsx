@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore';
 import { db } from '../db/schema';
 import { api } from '../api/client';
 import { useState, useEffect } from 'react';
-import { User, Edit3, Save, X, Database, Globe, LogOut, ClipboardList } from 'lucide-react';
+import { User, Edit3, Save, X, Database, Globe, LogOut, ClipboardList, HelpCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Settings() {
@@ -14,21 +14,17 @@ export default function Settings() {
 	const [saving, setSaving] = useState(false);
 	const [editingProfile, setEditingProfile] = useState(false);
 	const [profileData, setProfileData] = useState({
-		weight: user?.weight || '',
 		height: user?.height || '',
 		age: user?.age || '',
 		gender: user?.gender || '',
-		priorities: (user?.priorities as any)?.selected || []
 	});
 
 	useEffect(() => {
 		if (user) {
 			setProfileData({
-				weight: user.weight || '',
 				height: user.height || '',
 				age: user.age || '',
 				gender: user.gender || '',
-				priorities: (user.priorities as any)?.selected || []
 			});
 		}
 	}, [user]);
@@ -66,11 +62,9 @@ export default function Settings() {
 		setSaving(true);
 		try {
 			const updates: any = {};
-			if (profileData.weight) updates.weight = Number(profileData.weight);
 			if (profileData.height) updates.height = Number(profileData.height);
 			if (profileData.age) updates.age = Number(profileData.age);
-			if (profileData.gender) updates.gender = profileData.gender;
-			if (profileData.priorities.length > 0) updates.priorities = { selected: profileData.priorities };
+			updates.gender = profileData.gender || null;
 
 			await api.put('/auth/me', updates);
 			updateUser(updates);
@@ -85,21 +79,18 @@ export default function Settings() {
 		}
 	};
 
-	const togglePriority = (p: string) => {
-		setProfileData(prev => ({
-			...prev,
-			priorities: prev.priorities.includes(p)
-				? prev.priorities.filter((x: string) => x !== p)
-				: [...prev.priorities, p]
-		}));
-	};
-
 	const handleLogout = async () => {
 		await logout();
 		window.location.href = '/';
 	};
 
-	const priorityOptions = ['strength', 'hypertrophy', 'endurance', 'flexibility'];
+	const genderLabel = (g: string) => {
+		if (g === 'male') return t('Male');
+		if (g === 'female') return t('Female');
+		if (g === 'other') return t('Other');
+		if (g === 'prefer_not_to_say') return t('Prefer not to answer');
+		return '-';
+	};
 
 	return (
 		<div className="container" style={{ paddingBottom: '100px', maxWidth: '600px' }}>
@@ -158,7 +149,10 @@ export default function Settings() {
 					{!editingProfile ? (
 						<div className="grid grid-cols-3 gap-4">
 							<div className="flex flex-col gap-2">
-								<span className="text-xs text-secondary">{t('Weight')}</span>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+									<span className="text-xs text-secondary">{t('Weight')}</span>
+									<HelpCircle size={12} style={{ color: 'var(--text-tertiary)', cursor: 'help' }} title={t('Editable in sessions only')} />
+								</div>
 								<span className="font-bold">{user?.weight ? `${user.weight} kg` : '-'}</span>
 							</div>
 							<div className="flex flex-col gap-2">
@@ -171,37 +165,16 @@ export default function Settings() {
 							</div>
 							<div className="flex flex-col gap-2">
 								<span className="text-xs text-secondary">{t('Gender')}</span>
-								<span className="font-bold">{user?.gender ? t(user.gender.charAt(0).toUpperCase() + user.gender.slice(1)) : '-'}</span>
-							</div>
-							<div className="flex flex-col gap-2" style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
-								<span className="text-xs text-secondary">{t('Priorities')}</span>
-								<div className="flex" style={{ flexWrap: 'wrap', gap: '8px' }}>
-									{(user?.priorities as any)?.selected?.length > 0 ? (
-										(user?.priorities as any).selected.map((p: string) => (
-											<span key={p} className="chip inactive">
-												{t(p)}
-											</span>
-										))
-									) : (
-										<span className="text-sm text-tertiary">-</span>
-									)}
-								</div>
+								<span className="font-bold">{user?.gender ? genderLabel(user.gender) : '-'}</span>
 							</div>
 						</div>
 					) : (
 						<div className="flex flex-col gap-4 fade-in">
+							<div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+								<HelpCircle size={14} />
+								{t('Weight is tracked in sessions via the Body Weight button')}
+							</div>
 							<div className="grid grid-cols-2 gap-4">
-								<div className="flex flex-col gap-2">
-									<label className="text-xs text-secondary">{t('Weight')}</label>
-									<input
-										type="number"
-										value={profileData.weight}
-										onChange={e => setProfileData({ ...profileData, weight: e.target.value })}
-										className="input text-center"
-										style={{ padding: '8px' }}
-										placeholder="kg"
-									/>
-								</div>
 								<div className="flex flex-col gap-2">
 									<label className="text-xs text-secondary">{t('Height')}</label>
 									<input
@@ -224,7 +197,7 @@ export default function Settings() {
 										placeholder="yrs"
 									/>
 								</div>
-								<div className="flex flex-col gap-2">
+								<div className="flex flex-col gap-2" style={{ gridColumn: '1 / -1' }}>
 									<label className="text-xs text-secondary">{t('Gender')}</label>
 									<select
 										value={profileData.gender}
@@ -235,21 +208,9 @@ export default function Settings() {
 										<option value="">{t('Select...')}</option>
 										<option value="male">{t('Male')}</option>
 										<option value="female">{t('Female')}</option>
+										<option value="other">{t('Other')}</option>
+										<option value="prefer_not_to_say">{t('Prefer not to answer')}</option>
 									</select>
-								</div>
-							</div>
-							<div className="flex flex-col gap-2">
-								<label className="text-xs text-secondary">{t('Priorities')}</label>
-								<div className="flex" style={{ flexWrap: 'wrap', gap: '8px' }}>
-									{priorityOptions.map(p => (
-										<button
-											key={p}
-											onClick={() => togglePriority(p)}
-											className={`chip ${profileData.priorities.includes(p) ? 'active' : 'inactive'}`}
-										>
-											{t(p)}
-										</button>
-									))}
 								</div>
 							</div>
 						</div>

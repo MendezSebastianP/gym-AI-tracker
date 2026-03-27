@@ -7,7 +7,7 @@ export const ProtectedRoute = () => {
 
 	useEffect(() => {
 		checkAuth();
-	}, [checkAuth]);
+	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 	if (isLoading) {
 		return <div style={{ display: 'flex', justifyContent: 'center', marginTop: '50px' }}>Loading...</div>;

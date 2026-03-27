@@ -55,10 +55,6 @@ api.interceptors.response.use(
 			originalRequest.url?.includes('/auth/login') ||
 			originalRequest.url?.includes('/auth/register')
 		) {
-			// If it's a non-retryable 401, clear tokens
-			if (error.response?.status === 401 && !originalRequest.url?.includes('/auth/')) {
-				localStorage.removeItem('token');
-			}
 			return Promise.reject(error);
 		}
 

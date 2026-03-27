@@ -306,31 +306,6 @@ def _analyze_strength(
                 confidence=0.7,
             )
 
-    # ── Check if reps are below range (failed progression) ──────────
-    if len(history) >= 2 and current_weight > 0:
-        failed_sessions = 0
-        for session_data in history[:3]:
-            sets = session_data["sets"]
-            any_below = any(s["reps"] < rep_low for s in sets)
-            if any_below:
-                failed_sessions += 1
-
-        if failed_sessions >= 2:
-            if is_assisted:
-                deload_weight = round(current_weight * 1.1 / 2.5) * 2.5
-                if deload_weight <= current_weight: deload_weight = current_weight + 5.0
-            else:
-                deload_weight = max(0.0, round(current_weight * 0.9 / 2.5) * 2.5)
-                
-            if deload_weight != current_weight:
-                return ProgressionSuggestion(
-                    type="deload",
-                    current=current,
-                    suggested={"weight": deload_weight, "reps": rep_high, "sets": target_sets},
-                    reason=f"You've struggled to hit {rep_low} reps for 2+ sessions. Deload to {deload_weight}kg and rebuild.",
-                    confidence=0.75,
-                )
-
     return None
 
 

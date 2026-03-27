@@ -81,7 +81,8 @@ def update_session(
 
     # Trigger gamification when session is marked complete for the first time
     if not was_completed and db_session.completed_at is not None:
-        db_session.bodyweight_kg = current_user.weight
+        if db_session.bodyweight_kg is None:
+            db_session.bodyweight_kg = current_user.weight
         from app.gamification import award_session_xp
         gamification_result = award_session_xp(db, current_user, session_id)
         response["gamification"] = gamification_result
@@ -117,7 +118,10 @@ def complete_session_bulk(
         db_session.duration_seconds = bulk_data.duration_seconds
 
     if not was_completed and db_session.completed_at is not None:
-        db_session.bodyweight_kg = current_user.weight
+        if bulk_data.bodyweight_kg is not None:
+            db_session.bodyweight_kg = bulk_data.bodyweight_kg
+        elif db_session.bodyweight_kg is None:
+            db_session.bodyweight_kg = current_user.weight
 
     # Sync Sets: Delete all currently belonging to this session and recreate them
     # Because this is a "bulk sync everything at once", the local is truth.

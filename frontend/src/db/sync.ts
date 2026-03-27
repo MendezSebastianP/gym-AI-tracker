@@ -148,6 +148,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 				completed_at: session.completed_at,
 				notes: session.notes,
 				duration_seconds: session.duration_seconds || null,
+				bodyweight_kg: session.bodyweight_kg || null,
 				sets: sessionSets.map((s: any) => ({
 					exercise_id: s.exercise_id,
 					set_number: s.set_number,

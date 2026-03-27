@@ -98,6 +98,22 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 		setsByExercise.set(s.exercise_id, arr);
 	}
 
+	const deleteExercise = async (exerciseId: number) => {
+		if (!confirm(t('Remove this exercise from the session history?'))) return;
+		// Delete from server (sets that have been synced)
+		const exSets = (sets || []).filter((s: any) => s.exercise_id === exerciseId);
+		for (const s of exSets) {
+			if (s.server_id) {
+				try { await api.delete(`/sets/${s.server_id}`); } catch {}
+			}
+		}
+		// Delete from IndexedDB using index query (more reliable than bulkDelete)
+		await db.sets
+			.where('session_id').equals(sessionId)
+			.and((s: any) => s.exercise_id === exerciseId)
+			.delete();
+	};
+
 	const handleDelete = async () => {
 		if (!confirm(t('Are you sure you want to delete this session? This cannot be undone.'))) return;
 		if (session.server_id) {
@@ -181,13 +197,21 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 							background: 'rgba(0,0,0,0.15)', borderRadius: '8px',
 							padding: '10px 12px', fontSize: '13px'
 						}}>
-							<div style={{ fontWeight: 600, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-								{ex.name}
-								{(ex.equipment || ex.muscle) && (
-									<span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '4px', color: 'var(--text-tertiary)' }}>
-										{[ex.equipment, ex.muscle].filter(Boolean).join(' · ')}
-									</span>
-								)}
+							<div style={{ fontWeight: 600, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
+								<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+									{ex.name}
+									{(ex.equipment || ex.muscle) && (
+										<span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '4px', color: 'var(--text-tertiary)' }}>
+											{[ex.equipment, ex.muscle].filter(Boolean).join(' · ')}
+										</span>
+									)}
+								</div>
+								<button
+									onClick={() => deleteExercise(ex.exercise_id)}
+									style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+								>
+									<Trash2 size={13} color="var(--error)" />
+								</button>
 							</div>
 							<div style={{ display: 'grid', gap: '3px' }}>
 								{exSets.map((s: any) => (
@@ -203,7 +227,7 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 											<span>{s.duration_sec || 0}s</span>
 										) : (
 											<>
-												<span style={{ minWidth: '50px' }}>{s.weight_kg} kg</span>
+												<span style={{ minWidth: '50px' }}>{s.weight_kg != null ? `${s.weight_kg} kg` : 'NA'}</span>
 												<span>× {s.reps} reps</span>
 											</>
 										)}

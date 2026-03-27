@@ -149,6 +149,7 @@ class SessionCompleteBulk(BaseModel):
     completed_at: datetime
     notes: Optional[str] = None
     duration_seconds: Optional[int] = None
+    bodyweight_kg: Optional[float] = None
     sets: List[CompleteSetItem] = []
 
 class SessionUpdate(SessionBase):

@@ -350,6 +350,7 @@ export default function Sessions() {
 									const cycleIndex = sessionCycleMap.get(session.id!) || 0;
 									const isDarkCycle = cycleIndex % 2 === 1;
 									const baseBg = isDarkCycle ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.02)';
+									const isPendingSync = !demoMode && session.syncStatus !== 'synced';
 
 									const date = new Date(session.completed_at!);
 									const dayNum = date.getDate();
@@ -377,8 +378,10 @@ export default function Sessions() {
 												cursor: demoMode ? 'default' : 'pointer',
 												textAlign: 'center',
 												transition: 'all 0.15s ease',
+												position: 'relative',
 											}}
 										>
+											{isPendingSync && <span style={{ position: 'absolute', top: '4px', right: '4px', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--warning, #f59e0b)' }} />}
 											<div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
 												{dayNum}
 											</div>

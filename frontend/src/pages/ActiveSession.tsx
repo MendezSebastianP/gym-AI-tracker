@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
-import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Minus, Plus, Scale, ChevronDown, ChevronUp, Check, Timer, Clock } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Scale, ChevronDown, ChevronUp, Check, Timer, Clock } from 'lucide-react';
 import HybridNumber from '../components/HybridNumber';
 import RestTimer from '../components/RestTimer';
 import Stopwatch from '../components/Stopwatch';
@@ -29,90 +29,6 @@ function formatDurationMMSS(totalSec: number): string {
 	const m = Math.floor(totalSec / 60);
 	const s = totalSec % 60;
 	return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-// ─── Inline Number Stepper (mobile-friendly) ────────────────────────
-// Replaces raw <input type="number"> with tap-to-increment/decrement buttons + editable center
-function NumberStepper({
-	value,
-	onChange,
-	step = 1,
-	min = 0,
-	inputId,
-	onNext,
-	selectOnFocus = true,
-}: {
-	value: number;
-	onChange: (v: number) => void;
-	step?: number;
-	min?: number;
-	inputId?: string;
-	onNext?: () => void;
-	selectOnFocus?: boolean;
-}) {
-	const inputRef = useRef<HTMLInputElement>(null);
-	const holdTimer = useRef<ReturnType<typeof setInterval>>();
-
-	const inc = () => onChange(Math.round((value + step) * 100) / 100);
-	const dec = () => onChange(Math.max(min, Math.round((value - step) * 100) / 100));
-
-	const startHold = (fn: () => void) => {
-		fn();
-		holdTimer.current = setInterval(fn, 120);
-	};
-	const stopHold = () => { if (holdTimer.current) clearInterval(holdTimer.current); };
-
-	return (
-		<div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '2px', minWidth: 0 }}>
-			<button
-				className="btn btn-ghost"
-				onPointerDown={() => startHold(dec)}
-				onPointerUp={stopHold}
-				onPointerLeave={stopHold}
-				style={{ padding: '6px', lineHeight: 1, touchAction: 'manipulation', borderRadius: '6px', color: 'var(--text-secondary)' }}
-				type="button"
-			>
-				<Minus size={16} />
-			</button>
-			<input
-				ref={inputRef}
-				id={inputId}
-				type="number"
-				inputMode="decimal"
-				value={value}
-				onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-				onFocus={(e) => { if (selectOnFocus) e.target.select(); }}
-				onKeyDown={(e) => {
-					if (e.key === 'Enter' || e.key === 'Tab') {
-						e.preventDefault();
-						onNext?.();
-					}
-				}}
-				className="input"
-				style={{
-					flex: 1,
-					minWidth: 0,
-					textAlign: 'center',
-					padding: '8px 2px',
-					fontSize: '16px',
-					fontWeight: 'bold',
-					WebkitAppearance: 'none',
-					MozAppearance: 'textfield',
-				} as any}
-				step={step}
-			/>
-			<button
-				className="btn btn-ghost"
-				onPointerDown={() => startHold(inc)}
-				onPointerUp={stopHold}
-				onPointerLeave={stopHold}
-				style={{ padding: '6px', lineHeight: 1, touchAction: 'manipulation', borderRadius: '6px', color: 'var(--text-secondary)' }}
-				type="button"
-			>
-				<Plus size={16} />
-			</button>
-		</div>
-	);
 }
 
 // ─── Main Component ──────────────────────────────────────────────────
@@ -171,6 +87,7 @@ export default function ActiveSession() {
 	const [showStopwatch, setShowStopwatch] = useState(false);
 	const [completedSets, setCompletedSets] = useState<Set<string>>(new Set());
 	const prefillDone = useRef(false);
+	useEffect(() => { prefillDone.current = false; }, [sessionId]);
 
 	// Progression suggestions
 	const progressionSuggestions = useProgressionSuggestions(routine?.id, session?.day_index);
@@ -218,15 +135,27 @@ export default function ActiveSession() {
 		if (bwTimeout.current) clearTimeout(bwTimeout.current);
 		bwTimeout.current = setTimeout(async () => {
 			try {
-				const res = await api.post('/weight', {
-					weight_kg: val,
-					measured_at: session?.started_at,
-				});
-				await db.sessions.update(sessionId, {
-					bodyweight_kg: val,
-					weight_log_id: res.data.id,
-					syncStatus: 'updated' as any,
-				});
+				const currentSession = await db.sessions.get(sessionId);
+				if (currentSession?.weight_log_id) {
+					await api.put(`/weight/${currentSession.weight_log_id}`, {
+						weight_kg: val,
+						measured_at: currentSession.started_at,
+					});
+					await db.sessions.update(sessionId, {
+						bodyweight_kg: val,
+						syncStatus: 'updated' as any,
+					});
+				} else {
+					const res = await api.post('/weight', {
+						weight_kg: val,
+						measured_at: currentSession?.started_at || session?.started_at,
+					});
+					await db.sessions.update(sessionId, {
+						bodyweight_kg: val,
+						weight_log_id: res.data.id,
+						syncStatus: 'updated' as any,
+					});
+				}
 			} catch { /* offline — weight log skipped */ }
 		}, 1000);
 	};
@@ -261,6 +190,7 @@ export default function ActiveSession() {
 	// ─── Pre-fill sets from previous session or routine defaults ──
 	useEffect(() => {
 		const prefillSets = async () => {
+			if (prefillDone.current) return;
 			if (!routine || !session || !sets || session.day_index === undefined) return;
 
 			const day = routine.days[session.day_index];
@@ -268,9 +198,13 @@ export default function ActiveSession() {
 
 			// Check which exercises we actually need to generate sets for
 			const missingExercises = day.exercises.filter((ex: any) => !sets.some((s: any) => s.exercise_id === ex.exercise_id));
-			if (missingExercises.length === 0) return;
+			if (missingExercises.length === 0) {
+				prefillDone.current = true;
+				return;
+			}
 
-
+			// Lock out concurrent calls before any async work
+			prefillDone.current = true;
 
 			const exerciseIds = day.exercises.map((e: any) => e.exercise_id);
 			const exerciseDetails = await db.exercises.bulkGet(exerciseIds);
@@ -371,6 +305,17 @@ export default function ActiveSession() {
 		prefillSets();
 	}, [routine, session, sets, sessionId]);
 
+	// Flush pending set changes to server when user backgrounds the app
+	useEffect(() => {
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === 'hidden' && session && !session.completed_at) {
+				import('../db/sync').then(({ processSyncQueue }) => processSyncQueue()).catch(() => {});
+			}
+		};
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+		return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+	}, [session]);
+
 	// Load collapsed exercises
 	useEffect(() => {
 		if (session?.locked_exercises) {
@@ -400,6 +345,7 @@ export default function ActiveSession() {
 							type: detail?.type || 'Strength',
 							muscle: detail?.muscle || null,
 							muscle_group: detail?.muscle_group || null,
+							equipment: (detail as any)?.equipment_translations?.[currentLang] || detail?.equipment || null,
 						};
 					});
 					setExercises(enriched);
@@ -563,6 +509,27 @@ export default function ActiveSession() {
 										weight_kg: updatedSession.bodyweight_kg,
 										measured_at: newStartIso,
 									}).catch(() => { });
+								}
+							}}
+							className="input"
+							style={{ width: '100%', fontSize: '14px', padding: '12px' }}
+						/>
+					</div>
+
+					{/* Body weight editor */}
+					<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+						<label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{t('Body Weight (kg)')}</label>
+						<input
+							type="number"
+							inputMode="decimal"
+							value={(session as any).bodyweight_kg ?? ''}
+							placeholder={t('Not logged')}
+							onChange={async (e) => {
+								const val = parseFloat(e.target.value);
+								const bwVal = isNaN(val) ? null : val;
+								await db.sessions.update(sessionId, { bodyweight_kg: bwVal, syncStatus: 'updated' } as any);
+								if (session.server_id) {
+									api.put(`/sessions/${session.server_id}`, { bodyweight_kg: bwVal }).catch(() => {});
 								}
 							}}
 							className="input"
@@ -798,8 +765,9 @@ export default function ActiveSession() {
 								}}
 								onClick={() => toggleCollapse(ex.exercise_id)}
 							>
-								<div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-									<h3 style={{ margin: 0, color: isExAllDone ? 'var(--success)' : undefined, textDecoration: isExAllDone ? 'line-through' : 'none' }}>{ex.name}</h3>
+								<div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+									<div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+										<h3 style={{ margin: 0, color: isExAllDone ? 'var(--success)' : undefined, textDecoration: isExAllDone ? 'line-through' : 'none' }}>{ex.name}</h3>
 									{exDoneCount > 0 && !isExAllDone && (
 										<span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>
 											{exDoneCount}/{exerciseSets.length}
@@ -873,6 +841,12 @@ export default function ActiveSession() {
 											<Lock size={10} /> {t('Locked')}
 										</span>
 									)}
+									</div>
+									{(() => { const meta = [ex.equipment, ex.muscle].filter((v: any) => v && v !== 'None' && v !== 'none'); return meta.length > 0 ? (
+										<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', paddingLeft: '2px', marginTop: '1px' }}>
+											{meta.join(' · ')}
+										</div>
+									) : null; })()}
 								</div>
 								{isEditable && (
 									<div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -969,36 +943,46 @@ export default function ActiveSession() {
 														<>
 															{ex.type === 'Cardio' ? (
 																<>
-																	<NumberStepper
+																	<HybridNumber
 																		value={s.distance_km || 0}
 																		onChange={(v) => updateSet(s.id!, 'distance_km', v)}
 																		step={0.1}
 																		min={0}
-																		inputId={`set-${s.id}-distance`}
+																		max={200}
+																		sensitivity={14}
+																		showDelta={false}
+																		label="km"
 																	/>
-																	<NumberStepper
+																	<HybridNumber
 																		value={s.duration_sec || 0}
 																		onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
 																		step={30}
 																		min={0}
-																		inputId={`set-${s.id}-duration`}
+																		max={36000}
+																		sensitivity={28}
+																		showDelta={false}
+																		label="sec"
 																	/>
-																	<NumberStepper
+																	<HybridNumber
 																		value={s.incline || 0}
 																		onChange={(v) => updateSet(s.id!, 'incline', v)}
 																		step={0.5}
 																		min={0}
-																		inputId={`set-${s.id}-incline`}
+																		max={30}
+																		sensitivity={14}
+																		showDelta={false}
+																		label="%"
 																	/>
 																</>
 															) : ex.type === 'Time' ? (
-																<NumberStepper
+																<HybridNumber
 																	value={s.duration_sec || 0}
 																	onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
 																	step={5}
 																	min={0}
-																	inputId={`set-${s.id}-duration`}
-																	onNext={() => focusNext(s.id!, 'reps')}
+																	max={3600}
+																	sensitivity={28}
+																	showDelta={false}
 																/>
 															) : (
 																<>
@@ -1098,43 +1082,6 @@ export default function ActiveSession() {
 				</div>
 			)}
 
-			{/* Muscles + Body Weight — completed session summary */}
-			{isCompleted && (() => {
-				const muscleGroups = [...new Set(exercises.map((e: any) => e.muscle_group).filter(Boolean))];
-				const muscles = [...new Set(exercises.map((e: any) => e.muscle).filter(Boolean))];
-				const bw = (session as any)?.bodyweight_kg;
-				if (!bw && muscleGroups.length === 0 && muscles.length === 0) return null;
-				return (
-					<div className="card" style={{ marginTop: '12px', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-						{muscleGroups.length > 0 && (
-							<div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-								{muscleGroups.map((g: string) => (
-									<span key={g} style={{
-										fontSize: 11, fontWeight: 600, padding: '2px 8px',
-										borderRadius: 'var(--radius-full)', background: 'var(--bg-tertiary)',
-										color: 'var(--text-secondary)', border: '1px solid var(--border)',
-									}}>{g}</span>
-								))}
-								{muscles.filter((m: string) => !muscleGroups.includes(m)).map((m: string) => (
-									<span key={m} style={{
-										fontSize: 11, padding: '2px 8px',
-										borderRadius: 'var(--radius-full)', background: 'var(--bg-tertiary)',
-										color: 'var(--text-tertiary)', border: '1px solid var(--border)',
-									}}>{m}</span>
-								))}
-							</div>
-						)}
-						{bw && (
-							<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-								<Scale size={14} style={{ color: 'var(--text-secondary)' }} />
-								<span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-									{t('Body Weight')} <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>· {bw} kg</span>
-								</span>
-							</div>
-						)}
-					</div>
-				);
-			})()}
 
 			{/* Body Weight (optional) */}
 			{isEditable && !isCompleted && (
@@ -1157,12 +1104,14 @@ export default function ActiveSession() {
 					</button>
 					{bwOpen && (
 						<div style={{ marginTop: 8, padding: '10px 16px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
-							<NumberStepper
+							<HybridNumber
 								value={bwValue}
 								onChange={saveBw}
-								step={0.25}
+								step={0.5}
 								min={0}
-								inputId="bw-input"
+								max={300}
+								sensitivity={14}
+								showDelta={false}
 							/>
 						</div>
 					)}

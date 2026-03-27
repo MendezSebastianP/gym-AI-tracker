@@ -468,7 +468,7 @@ export default function Dashboard() {
                                 contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }}
                                 labelStyle={{ color: 'var(--text-secondary)' }}
                             />
-                            <Line type="monotone" dataKey="kg" stroke="#CCFF00" strokeWidth={2} dot={false} />
+                            <Line type="stepAfter" dataKey="kg" stroke="#CCFF00" strokeWidth={2} dot={{ r: 3, fill: '#CCFF00' }} />
                         </LineChart>
                     </ResponsiveContainer>
                 ) : (

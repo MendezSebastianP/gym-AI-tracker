@@ -24,6 +24,7 @@ import AdminExercises from './pages/admin/AdminExercises';
 import AdminSettings from './pages/admin/AdminSettings';
 
 import { useEffect } from 'react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { api } from './api/client';
 import { db } from './db/schema';
 import { useAuthStore } from './store/authStore';
@@ -32,6 +33,8 @@ import i18n from './i18n';
 
 function App() {
 	const { isAuthenticated, isAdmin, user } = useAuthStore();
+
+	const { needRefresh, updateServiceWorker } = useRegisterSW();
 
 	useEffect(() => {
 		if (isAuthenticated) {
@@ -144,12 +147,17 @@ function App() {
 							if (serverIdToLocalSet.has(setServerId)) {
 								const localSetId = serverIdToLocalSet.get(setServerId)!;
 								const existing = existingSets.find(x => x.id === localSetId);
-								await db.sets.update(localSetId, {
-									...setData,
-									server_id: setServerId,
-									session_id: localSessionId,
-									syncStatus: existing?.syncStatus === 'updated' ? 'updated' : 'synced'
-								});
+								if (existing?.syncStatus === 'updated') {
+									// Local has unsent edits — preserve local values, just ensure IDs are linked
+									await db.sets.update(localSetId, { server_id: setServerId, session_id: localSessionId });
+								} else {
+									await db.sets.update(localSetId, {
+										...setData,
+										server_id: setServerId,
+										session_id: localSessionId,
+										syncStatus: 'synced'
+									});
+								}
 							} else {
 								await db.sets.add({
 									...setData,
@@ -187,6 +195,29 @@ function App() {
 	}, [isAuthenticated]);
 
 	return (
+		<>
+		{needRefresh[0] && (
+			<div style={{
+				position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+				background: 'var(--bg-secondary)', borderBottom: '1px solid var(--overlay-medium)',
+				padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px',
+				fontSize: '13px', color: 'var(--text-primary)'
+			}}>
+				<span style={{ flex: 1 }}>New version available</span>
+				<button
+					onClick={() => updateServiceWorker(true)}
+					style={{
+						background: 'var(--accent)', color: '#000', border: 'none',
+						borderRadius: '6px', padding: '5px 12px', fontSize: '12px',
+						fontWeight: 600, cursor: 'pointer'
+					}}
+				>Update</button>
+				<button
+					onClick={() => needRefresh[1](false)}
+					style={{ background: 'transparent', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '4px' }}
+				>✕</button>
+			</div>
+		)}
 		<Routes>
 			<Route path="/" element={isAuthenticated ? (isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/home" replace />) : <Landing />} />
 			<Route path="/login" element={<Login />} />
@@ -224,6 +255,7 @@ function App() {
 
 			<Route path="*" element={<Navigate to="/" replace />} />
 		</Routes>
+		</>
 	);
 }
 
