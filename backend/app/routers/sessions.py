@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import get_db
 from app.models.session import Session as SessionModel, Set as SetModel
 from app.schemas import SessionResponse, SessionCreate, SessionUpdate, SetResponse, SessionCompleteBulk
@@ -73,7 +73,11 @@ def update_session(
     
     for key, value in session_update.model_dump(exclude_unset=True).items():
         setattr(db_session, key, value)
-    
+
+    # Set streak_eligible_at once on first completion — never overwrite
+    if not was_completed and db_session.completed_at is not None and db_session.streak_eligible_at is None:
+        db_session.streak_eligible_at = datetime.now(timezone.utc)
+
     db.commit()
     db.refresh(db_session)
 
@@ -116,6 +120,10 @@ def complete_session_bulk(
         db_session.notes = bulk_data.notes
     if bulk_data.duration_seconds is not None:
         db_session.duration_seconds = bulk_data.duration_seconds
+
+    # Set streak_eligible_at once on first completion — never overwrite
+    if not was_completed and db_session.completed_at is not None and db_session.streak_eligible_at is None:
+        db_session.streak_eligible_at = datetime.now(timezone.utc)
 
     if not was_completed and db_session.completed_at is not None:
         if bulk_data.bodyweight_kg is not None:

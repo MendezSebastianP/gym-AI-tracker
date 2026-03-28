@@ -4,7 +4,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.quest import Quest, UserQuest
-from app.gamification import _update_quest_progress, claim_quest_reward, assign_quests, exp_for_next_level
+from app.gamification import _update_quest_progress, claim_quest_reward, assign_quests, exp_for_next_level, compute_streak_weeks, _streak_coins, _current_iso_week_str, _get_week_boundaries, compute_unclaimed_streak_data, get_streak_week_slots
 
 router = APIRouter(
     prefix="/api/gamification",
@@ -17,12 +17,19 @@ def get_gamification_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Return current level, experience, and currency for the authenticated user."""
+    streak_reward_week = current_user.streak_reward_week or ""
+    unclaimed = compute_unclaimed_streak_data(db, current_user)
+    streak_slots = get_streak_week_slots(db, current_user.id, streak_reward_week)
     return {
         "level": current_user.level or 1,
         "experience": current_user.experience or 0,
         "exp_to_next": exp_for_next_level(current_user.level or 1),
         "currency": current_user.currency or 0,
+        "joker_tokens": current_user.joker_tokens or 0,
+        "streak_reward_week": streak_reward_week,
+        "streak_slots": streak_slots,
+        "unclaimed_streak_weeks": unclaimed["unclaimed_weeks"],
+        "unclaimed_streak_coins": unclaimed["total_coins"],
     }
 
 
@@ -31,12 +38,13 @@ def get_gamification_stats_demo(db: Session = Depends(get_db)):
     """Return gamification stats for the demo user (no auth required)."""
     demo_user = db.query(User).filter(User.is_demo == True).first()
     if not demo_user:
-        return {"level": 1, "experience": 0, "exp_to_next": 100, "currency": 0}
+        return {"level": 1, "experience": 0, "exp_to_next": 100, "currency": 0, "joker_tokens": 0}
     return {
         "level": demo_user.level or 1,
         "experience": demo_user.experience or 0,
         "exp_to_next": exp_for_next_level(demo_user.level or 1),
         "currency": demo_user.currency or 0,
+        "joker_tokens": demo_user.joker_tokens or 0,
     }
 
 
@@ -127,7 +135,114 @@ def claim_quest(
     return result
 
 
+# ── Streak Claim ──────────────────────────────────────────────────────────────
+
+@router.post("/streak/claim")
+def claim_streak_reward(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Claim coins for all unclaimed streak weeks at once."""
+    data = compute_unclaimed_streak_data(db, current_user)
+
+    if data["unclaimed_weeks"] == 0:
+        return {
+            "claimed_weeks": 0,
+            "streak_coins": 0,
+            "streak_weeks": data["current_streak"],
+            "currency": current_user.currency or 0,
+            "joker_awarded": False,
+        }
+
+    current_user.currency = (current_user.currency or 0) + data["total_coins"]
+    current_user.streak_reward_week = data["unclaimed_week_strs"][-1]
+
+    joker_awarded = False
+    if data["joker_due"]:
+        current_user.joker_tokens = (current_user.joker_tokens or 0) + 1
+        joker_awarded = True
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "claimed_weeks": data["unclaimed_weeks"],
+        "streak_coins": data["total_coins"],
+        "streak_weeks": data["current_streak"],
+        "currency": current_user.currency,
+        "joker_awarded": joker_awarded,
+    }
+
+
 # ── Shop ──────────────────────────────────────────────────────────────────────
+
+SKIN_ITEMS = [
+    {
+        "id": "skin_a",
+        "name": "Ember — Campfire",
+        "description": "Warm organic layered flames with rising licks. The default skin.",
+        "price": 0,
+        "type": "streak_skin",
+        "rarity": "common",
+        "accent": "#FF8C00",
+    },
+    {
+        "id": "skin_b",
+        "name": "Arcane Crystal Flame",
+        "description": "Angular faceted crystal with violet gradient. Wind-blown tip motion.",
+        "price": 100,
+        "type": "streak_skin",
+        "rarity": "rare",
+        "accent": "#CE93D8",
+    },
+    {
+        "id": "skin_c1",
+        "name": "Inferno Orb",
+        "description": "Molten fire sphere with rotating inner swirl. Three orbiting sparks when claimable.",
+        "price": 150,
+        "type": "streak_skin",
+        "rarity": "rare",
+        "accent": "#FF9500",
+    },
+    {
+        "id": "skin_c2",
+        "name": "Aurum Orb",
+        "description": "Liquid gold sphere. Slow reverse swirl gives a precious, metallic feel. Included with Gold Edition.",
+        "price": 300,
+        "type": "streak_skin",
+        "rarity": "epic",
+        "accent": "#FFD700",
+        "included_with": "theme_gold",
+    },
+    {
+        "id": "skin_c3",
+        "name": "Tempest Orb",
+        "description": "Electric storm sphere. Lightning bolts arc inside. Fast swirl and triple orbit sparks.",
+        "price": 200,
+        "type": "streak_skin",
+        "rarity": "epic",
+        "accent": "#42A5F5",
+    },
+    {
+        "id": "skin_d",
+        "name": "8-BIT Pixel Fire",
+        "description": "Stacked pixel blocks with choppy steps() jumps. Scanline CRT overlay. Retro arcade feel.",
+        "price": 300,
+        "type": "streak_skin",
+        "rarity": "legendary",
+        "accent": "#FF9900",
+    },
+]
+
+
+def _skin_owned(item_id: str, settings: dict) -> bool:
+    """Determine if a skin is owned, considering free and bundle cases."""
+    if item_id == "skin_a":
+        return True
+    if item_id == "skin_c2" and "theme_gold" in settings.get("purchased_themes", []):
+        return True
+    return item_id in settings.get("purchased_skins", [])
+
 
 SHOP_ITEMS = [
     {
@@ -190,10 +305,16 @@ def get_shop(
             **item,
             "owned": item["id"] == "theme_dark" or item["id"] in purchased,
         })
+    skin_items = [
+        {**skin, "owned": _skin_owned(skin["id"], settings)}
+        for skin in SKIN_ITEMS
+    ]
     return {
         "items": items,
+        "skin_items": skin_items,
         "currency": current_user.currency or 0,
         "active_theme": settings.get("active_theme", "dark"),
+        "active_streak_skin": settings.get("active_streak_skin", "skin_a"),
     }
 
 
@@ -210,10 +331,16 @@ def get_shop_demo(db: Session = Depends(get_db)):
             **item,
             "owned": item["id"] == "theme_dark" or item["id"] in purchased,
         })
+    skin_items = [
+        {**skin, "owned": _skin_owned(skin["id"], settings)}
+        for skin in SKIN_ITEMS
+    ]
     return {
         "items": items,
+        "skin_items": skin_items,
         "currency": (demo_user.currency or 0) if demo_user else 0,
         "active_theme": settings.get("active_theme", "dark"),
+        "active_streak_skin": settings.get("active_streak_skin", "skin_a"),
     }
 
 
@@ -229,32 +356,52 @@ def buy_shop_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Purchase a shop item with currency."""
-    item = next((i for i in SHOP_ITEMS if i["id"] == req.item_id), None)
+    """Purchase a shop item (theme or streak skin) with currency."""
+    all_items = SHOP_ITEMS + SKIN_ITEMS
+    item = next((i for i in all_items if i["id"] == req.item_id), None)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
     settings = dict(current_user.settings or {})
-    purchased = list(settings.get("purchased_themes", []))
 
-    if req.item_id in purchased:
-        raise HTTPException(status_code=400, detail="Already owned")
+    # Already owned?
+    if item["type"] == "theme":
+        purchased = list(settings.get("purchased_themes", []))
+        if item["id"] == "theme_dark" or item["id"] in purchased:
+            raise HTTPException(status_code=400, detail="Already owned")
+    else:  # streak_skin
+        if _skin_owned(item["id"], settings):
+            raise HTTPException(status_code=400, detail="Already owned")
 
     if (current_user.currency or 0) < item["price"]:
         raise HTTPException(status_code=400, detail="Not enough coins")
 
     current_user.currency = max(0, (current_user.currency or 0) - item["price"])
-    purchased.append(req.item_id)
-    settings["purchased_themes"] = purchased
-    current_user.settings = settings
 
+    if item["type"] == "theme":
+        purchased = list(settings.get("purchased_themes", []))
+        purchased.append(item["id"])
+        settings["purchased_themes"] = purchased
+        # Gold Edition bonus: grant Aurum Orb for free
+        if item["id"] == "theme_gold":
+            purchased_skins = list(settings.get("purchased_skins", []))
+            if "skin_c2" not in purchased_skins:
+                purchased_skins.append("skin_c2")
+                settings["purchased_skins"] = purchased_skins
+    else:  # streak_skin
+        purchased_skins = list(settings.get("purchased_skins", []))
+        purchased_skins.append(item["id"])
+        settings["purchased_skins"] = purchased_skins
+
+    current_user.settings = settings
     db.commit()
     db.refresh(current_user)
 
     return {
         "success": True,
         "currency": current_user.currency,
-        "purchased_themes": purchased,
+        "purchased_themes": settings.get("purchased_themes", []),
+        "purchased_skins": settings.get("purchased_skins", []),
     }
 
 
@@ -282,6 +429,28 @@ def activate_theme(
     db.refresh(current_user)
 
     return {"success": True, "active_theme": req.theme}
+
+
+class SkinActivateRequest(BaseModel):
+    skin_id: str = PydanticField(max_length=50)
+
+
+@router.post("/shop/activate-skin")
+def activate_skin(
+    req: SkinActivateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Activate a purchased streak skin."""
+    settings = dict(current_user.settings or {})
+    if not _skin_owned(req.skin_id, settings):
+        raise HTTPException(status_code=400, detail="Skin not owned")
+
+    settings["active_streak_skin"] = req.skin_id
+    current_user.settings = settings
+    db.commit()
+    db.refresh(current_user)
+    return {"success": True, "active_streak_skin": req.skin_id}
 
 
 # ── Promo Codes ───────────────────────────────────────────────────────────────
@@ -327,3 +496,13 @@ def redeem_promo_code(
         "coins_awarded": reward,
         "currency": current_user.currency,
     }
+
+
+@router.post("/joker-streak")
+def use_joker_streak(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Use a joker token to save a dying streak. Must be used during the empty week."""
+    from app.gamification import use_joker_for_streak
+    return use_joker_for_streak(db, current_user)

@@ -3,10 +3,11 @@ import { api } from '../api/client';
 import { Link } from 'react-router-dom';
 import { db } from '../db/schema';
 import { useTranslation } from 'react-i18next';
+import { LiveStreakRow, WeekSlot, SKIN_ACCENTS } from '../components/StreakFlames';
 import {
 	PlusCircle, Activity, TrendingUp, Dumbbell, Star, Coins, Clock,
 	Target, Trophy, Rocket, Medal, Crown, Repeat, Zap, Mountain, Sparkles,
-	ShoppingBag, Palette, Check, Gift, User as UserIcon
+	ShoppingBag, Palette, Check, Gift, User as UserIcon, Flame
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -28,6 +29,10 @@ interface GamificationStats {
 	experience: number;
 	exp_to_next: number;
 	currency: number;
+	streak_reward_week?: string;
+	streak_slots?: Array<{week: string; start_date: string; sessions: number; claimed: boolean}>;
+	unclaimed_streak_weeks?: number;
+	unclaimed_streak_coins?: number;
 }
 
 interface QuestData {
@@ -57,10 +62,20 @@ interface ShopItem {
 	preview: Record<string, string>;
 }
 
+interface SkinShopItem {
+	id: string;
+	name: string;
+	accent: string;
+	owned: boolean;
+	rarity: string;
+}
+
 interface ShopData {
 	items: ShopItem[];
+	skin_items: SkinShopItem[];
 	currency: number;
 	active_theme: string;
+	active_streak_skin: string;
 }
 
 const ICON_MAP: Record<string, any> = {
@@ -69,14 +84,69 @@ const ICON_MAP: Record<string, any> = {
 	weight: Target, mountain: Mountain, sparkles: Sparkles,
 };
 
+// Per-skin styles for the claim button and claimed badge
+interface SkinClaimCfg {
+	btnBg: string; btnColor: string; btnBorder: string;
+	btnRadius: number | string; btnFont?: string; btnSpacing?: string;
+	btnAnim: string;
+	claimedBg: string; claimedBorder: string; claimedColor: string;
+	btnLabel: (weeks: number, coins: number) => string;
+	claimedLabel: (streak: number) => string;
+}
+const SKIN_CLAIM_CFG: Record<string, SkinClaimCfg> = {
+	skin_a: {
+		btnBg: 'linear-gradient(135deg, #FF8C00, #FF4500)', btnColor: '#fff', btnBorder: 'none',
+		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		claimedBg: 'rgba(255,140,0,0.07)', claimedBorder: '1px solid rgba(255,140,0,0.2)', claimedColor: '#FF8C00',
+		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
+	},
+	skin_b: {
+		btnBg: 'linear-gradient(135deg, #7B1FA2, #E040FB)', btnColor: '#fff', btnBorder: 'none',
+		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		claimedBg: 'rgba(170,0,255,0.07)', claimedBorder: '1px solid rgba(170,0,255,0.22)', claimedColor: '#CE93D8',
+		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
+	},
+	skin_c1: {
+		btnBg: 'rgba(255,80,0,0.18)', btnColor: '#FF9500', btnBorder: '1.5px solid rgba(255,80,0,0.38)',
+		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		claimedBg: 'rgba(255,80,0,0.07)', claimedBorder: '1px solid rgba(255,80,0,0.22)', claimedColor: '#FF9500',
+		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
+	},
+	skin_c2: {
+		btnBg: 'rgba(210,160,0,0.18)', btnColor: '#FFD700', btnBorder: '1.5px solid rgba(210,160,0,0.38)',
+		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		claimedBg: 'rgba(210,160,0,0.07)', claimedBorder: '1px solid rgba(210,160,0,0.22)', claimedColor: '#FFD700',
+		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
+	},
+	skin_c3: {
+		btnBg: 'rgba(30,130,255,0.18)', btnColor: '#42A5F5', btnBorder: '1.5px solid rgba(30,130,255,0.38)',
+		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		claimedBg: 'rgba(30,130,255,0.07)', claimedBorder: '1px solid rgba(30,130,255,0.22)', claimedColor: '#42A5F5',
+		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
+	},
+	skin_d: {
+		btnBg: 'transparent', btnColor: '#FF9900', btnBorder: '2px solid #FF6600',
+		btnRadius: 0, btnFont: 'monospace', btnSpacing: '0.06em', btnAnim: 'pxBlink 1.2s steps(2) infinite',
+		claimedBg: 'transparent', claimedBorder: '1px solid rgba(255,102,0,0.28)', claimedColor: '#FF9900',
+		btnLabel: (w, c) => `CLAIM ${w}W · ${c} COINS`,
+		claimedLabel: (s) => `${s}W STREAK — CLAIMED`,
+	},
+};
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function Stats() {
 	const [hasRoutines, setHasRoutines] = useState<boolean | null>(null);
-	const [consistencyTab, setConsistencyTab] = useState<'weeks' | 'days'>('weeks');
+	const [consistencyTab, setConsistencyTab] = useState<'streak' | 'weeks' | 'days'>('streak');
 	const [gamification, setGamification] = useState<GamificationStats | null>(null);
 	const [quests, setQuests] = useState<QuestData[]>([]);
 	const [claiming, setClaiming] = useState<number | null>(null);
+	const [claimingStreak, setClaimingStreak] = useState(false);
 	const [shop, setShop] = useState<ShopData | null>(null);
 	const [buying, setBuying] = useState<string | null>(null);
 	const [promoCode, setPromoCode] = useState('');
@@ -192,13 +262,40 @@ export default function Stats() {
 		if (!promoCode.trim()) return;
 		try {
 			const res = await api.post('/gamification/shop/promo', { code: promoCode.trim() });
-			setPromoMsg({ text: `🎉 +${res.data.coins_awarded.toLocaleString()} coins!`, ok: true });
+			setPromoMsg({ text: `+${res.data.coins_awarded.toLocaleString()} coins!`, ok: true });
 			setPromoCode('');
 			await fetchGamification();
 		} catch (e: any) {
 			setPromoMsg({ text: e?.response?.data?.detail || 'Invalid code', ok: false });
 		}
 		setTimeout(() => setPromoMsg(null), 3000);
+	};
+
+	const claimStreak = async () => {
+		setClaimingStreak(true);
+		try {
+			const res = await api.post('/gamification/streak/claim');
+			if (res.data.streak_coins > 0) {
+				window.dispatchEvent(new CustomEvent('gamification-reward', {
+					detail: {
+						xp_gained: 0, rep_prs: 0, weight_prs: 0,
+						leveled_up: false, new_level: gamification?.level || 1,
+						old_level: gamification?.level || 1,
+						experience: gamification?.experience || 0,
+						exp_to_next: gamification?.exp_to_next || 100,
+						currency: res.data.currency,
+						streak_coins: res.data.streak_coins,
+						streak_weeks: res.data.streak_weeks,
+					}
+				}));
+			}
+			await fetchGamification();
+			await fetchShop();
+		} catch (e) {
+			console.error('Failed to claim streak', e);
+		} finally {
+			setClaimingStreak(false);
+		}
 	};
 
 	// ── Local stats from Dexie ────────────────────────────────────────────────
@@ -286,6 +383,19 @@ export default function Stats() {
 		const totalDuration = durationSessions.reduce((sum, s) => sum + ((s as any).duration_seconds || 0), 0);
 		const avgDuration = durationSessions.length > 0 ? Math.round(totalDuration / durationSessions.length) : 0;
 
+		// 7-week slots for animated streak row (index 6 = current week)
+		const weekSlots: WeekSlot[] = Array.from({ length: 7 }, (_, i) => {
+			const wkBack = 6 - i;
+			const ws = new Date(startOfWeek);
+			ws.setDate(startOfWeek.getDate() - wkBack * 7);
+			return {
+				week: '',
+				start_date: ws.toISOString().split('T')[0],
+				sessions: weeklyCounts[i + 1] ?? 0,  // weeklyCounts[1..7] maps to i=0..6
+				claimed: wkBack !== 0,
+			};
+		});
+
 		return {
 			sessions: weeklyTotalSessions,
 			volume: totalVolume,
@@ -294,7 +404,8 @@ export default function Stats() {
 			streak_weeks: streak,
 			total_duration_seconds: totalDuration,
 			avg_duration_seconds: avgDuration,
-			tracked_duration_sessions: durationSessions.length
+			tracked_duration_sessions: durationSessions.length,
+			weekSlots,
 		};
 	}, []);
 
@@ -348,8 +459,6 @@ export default function Stats() {
 	const dailyData = stats.daily_sessions;
 	const maxWeekly = Math.max(...weeklyData, 1);
 	const maxDaily = Math.max(...dailyData, 1);
-	const streakWeeks = stats.streak_weeks;
-
 	const adjustedDayLabels: string[] = [];
 	const baseLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 	for (let i = 6; i >= 0; i--) {
@@ -363,6 +472,41 @@ export default function Stats() {
 	const activeQuests = quests
 		.filter(q => !q.claimed)
 		.sort((a, b) => (b.completed ? 1 : 0) - (a.completed ? 1 : 0));
+
+	// Current ISO week string (e.g. "2026-W13")
+	const currentISOWeek = (() => {
+		const now = new Date();
+		const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+		d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+		const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+		const wk = Math.ceil((((d.valueOf() - yearStart.valueOf()) / 86400000) + 1) / 7);
+		return `${d.getUTCFullYear()}-W${String(wk).padStart(2, '0')}`;
+	})();
+	const streakAlreadyClaimed = gamification?.streak_reward_week === currentISOWeek;
+
+	// Use server-side streak slots (immutable, not affected by date edits)
+	const weekSlotsDisplay: WeekSlot[] = (gamification?.streak_slots as WeekSlot[] | undefined) ??
+		stats?.weekSlots?.map((slot, i) =>
+			i === 6 ? { ...slot, claimed: streakAlreadyClaimed } : slot
+		) ?? [];
+
+	// Derive streak count from server slots (immune to date edits); fall back to local Dexie count
+	const streakWeeks = (() => {
+		if (gamification?.streak_slots && weekSlotsDisplay.length > 0) {
+			let count = 0;
+			for (let i = weekSlotsDisplay.length - 1; i >= 0; i--) {
+				if (weekSlotsDisplay[i].sessions > 0) count++;
+				else break;
+			}
+			return count;
+		}
+		return stats.streak_weeks;
+	})();
+
+	const unclaimedWeeks = gamification?.unclaimed_streak_weeks ?? 0;
+	const unclaimedCoins = gamification?.unclaimed_streak_coins ?? 0;
+	const activeSkinId = (shop?.active_streak_skin) ?? (user?.settings as any)?.active_streak_skin ?? 'skin_a';
+	const skinAccent = SKIN_ACCENTS[activeSkinId] ?? '#FF8C00';
 
 	// ── Render ────────────────────────────────────────────────────────────────
 	return (
@@ -518,9 +662,24 @@ export default function Stats() {
 					background: 'var(--bg-tertiary)', borderRadius: '8px', padding: '3px',
 				}}>
 					<button
+						onClick={() => setConsistencyTab('streak')}
+						style={{
+							flex: 1, padding: '8px 10px', fontSize: '12px',
+							fontWeight: consistencyTab === 'streak' ? 'bold' : 'normal',
+							borderRadius: '6px', border: 'none', cursor: 'pointer',
+							background: consistencyTab === 'streak' ? 'var(--bg-secondary)' : 'transparent',
+							color: consistencyTab === 'streak' ? skinAccent : 'var(--text-secondary)',
+							transition: 'all 0.2s ease',
+							boxShadow: consistencyTab === 'streak' ? '0 2px 4px rgba(0,0,0,0.2)' : 'none',
+							display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+						}}
+					>
+						<Flame size={12} />Streak
+					</button>
+					<button
 						onClick={() => setConsistencyTab('weeks')}
 						style={{
-							flex: 1, padding: '8px 16px', fontSize: '13px',
+							flex: 1, padding: '8px 10px', fontSize: '12px',
 							fontWeight: consistencyTab === 'weeks' ? 'bold' : 'normal',
 							borderRadius: '6px', border: 'none', cursor: 'pointer',
 							background: consistencyTab === 'weeks' ? 'var(--bg-secondary)' : 'transparent',
@@ -534,7 +693,7 @@ export default function Stats() {
 					<button
 						onClick={() => setConsistencyTab('days')}
 						style={{
-							flex: 1, padding: '8px 16px', fontSize: '13px',
+							flex: 1, padding: '8px 10px', fontSize: '12px',
 							fontWeight: consistencyTab === 'days' ? 'bold' : 'normal',
 							borderRadius: '6px', border: 'none', cursor: 'pointer',
 							background: consistencyTab === 'days' ? 'var(--bg-secondary)' : 'transparent',
@@ -547,7 +706,60 @@ export default function Stats() {
 					</button>
 				</div>
 
-				<div style={{ height: '140px', display: 'flex', alignItems: 'flex-end', gap: '8px', padding: '10px 0' }}>
+				{consistencyTab === 'streak' && weekSlotsDisplay.length > 0 && (
+					<div>
+						{(() => {
+							const cfg = SKIN_CLAIM_CFG[activeSkinId] ?? SKIN_CLAIM_CFG.skin_a;
+							return (
+								<>
+									<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+										<span style={{ fontSize: 13, fontWeight: 700, color: skinAccent }}>{streakWeeks}w streak</span>
+										<Link to="/shop#skins" style={{ fontSize: 11, color: 'var(--text-tertiary)', textDecoration: 'none' }}>More +</Link>
+									</div>
+									<LiveStreakRow skinId={activeSkinId} weeks={weekSlotsDisplay} />
+
+									{unclaimedWeeks > 0 && (
+										<button
+											onClick={claimStreak}
+											disabled={claimingStreak}
+											style={{
+												marginTop: 14, width: '100%', padding: '11px 10px',
+												borderRadius: cfg.btnRadius, background: cfg.btnBg,
+												color: cfg.btnColor, fontWeight: 700, fontSize: 14,
+												border: cfg.btnBorder,
+												fontFamily: cfg.btnFont,
+												letterSpacing: cfg.btnSpacing,
+												cursor: claimingStreak ? 'not-allowed' : 'pointer',
+												opacity: claimingStreak ? 0.7 : 1,
+												display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+												animation: claimingStreak ? 'none' : cfg.btnAnim,
+											}}
+										>
+											{cfg.btnLabel(unclaimedWeeks, unclaimedCoins)}
+										</button>
+									)}
+									{unclaimedWeeks === 0 && streakWeeks > 0 && (
+										<div style={{
+											marginTop: 12, padding: '8px 14px',
+											borderRadius: cfg.btnRadius,
+											background: cfg.claimedBg,
+											border: cfg.claimedBorder,
+											fontFamily: cfg.btnFont,
+											letterSpacing: cfg.btnSpacing,
+											display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+											fontSize: 12, fontWeight: 600, color: cfg.claimedColor,
+										}}>
+											<Check size={13} />
+											{cfg.claimedLabel(streakWeeks)}
+										</div>
+									)}
+								</>
+							);
+						})()}
+					</div>
+				)}
+
+				<div style={{ height: consistencyTab === 'streak' ? 0 : '140px', overflow: 'hidden', display: consistencyTab !== 'streak' ? 'flex' : 'none', alignItems: 'flex-end', gap: '8px', padding: consistencyTab !== 'streak' ? '10px 0' : 0 }}>
 					{consistencyTab === 'weeks' ? (
 						weeklyData.map((count: number, i: number) => {
 							const isCurrentWeek = i === weeklyData.length - 1;
@@ -613,16 +825,6 @@ export default function Stats() {
 					)}
 				</div>
 			</div>
-
-			{/* ─── Streak ──────────────────────────────────────────────────── */}
-			<div className="mt-4 flex justify-between items-center text-sm" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-				<span className="text-secondary">{t('Active Streak')}</span>
-				<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-					<Activity size={16} className="text-accent" />
-					<span className="text-white font-bold" style={{ fontSize: '16px' }}>{streakWeeks} {t('weeks')}</span>
-				</div>
-			</div>
-
 
 			{/* ─── Quests Section (max 3 on home) ──────────────────────────── */}
 			{quests.length > 0 && (
@@ -751,6 +953,7 @@ export default function Stats() {
 					<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
 						<ShoppingBag size={20} color="var(--primary)" />
 						<h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('Shop')}</h2>
+						<Link to="/shop#skins" style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', padding: '4px 10px', borderRadius: 8, border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.08)' }}>More +</Link>
 					</div>
 
 					{/* Theme items */}

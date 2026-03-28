@@ -4,7 +4,7 @@ import { db } from '../db/schema';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
     BarChart2, Flame, Dumbbell, Calendar, TrendingUp,
-    ChevronRight, Star, HelpCircle, X, User as UserIcon, Scale, Activity
+    ChevronRight, Star, HelpCircle, X, User as UserIcon, Scale, Activity, Shield
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -57,6 +57,12 @@ export default function Dashboard() {
     const [otherExerciseId, setOtherExerciseId] = useState<number | null>(null);
     const [cardioByExercise, setCardioByExercise] = useState<Record<number, any>>({});
 
+    // Joker / streak-at-risk state
+    const [jokerTokens, setJokerTokens] = useState(0);
+    const [streakAtRisk, setStreakAtRisk] = useState(false);
+    const [jokerUsing, setJokerUsing] = useState(false);
+    const [jokerMsg, setJokerMsg] = useState<string | null>(null);
+
     // Filters
     const [filterLevel, setFilterLevel] = useState<FilterLevel>('total');
     const [selectedGroup, setSelectedGroup] = useState<string>('');
@@ -104,6 +110,52 @@ export default function Dashboard() {
 
         return { totalSessions: sessions.length, totalVolume, streakWeeks: streak };
     }, []);
+
+    // Fetch joker tokens + detect streak-at-risk (Thursday+, no sessions this week, streak > 0)
+    useEffect(() => {
+        api.get('/gamification/stats').then(res => {
+            setJokerTokens(res.data.joker_tokens || 0);
+        }).catch(() => {});
+
+        const now = new Date();
+        const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon ... 4=Thu ...
+        const isThuOrLater = dayOfWeek === 0 || dayOfWeek >= 4; // Thu=4, Fri=5, Sat=6, Sun=0
+        if (!isThuOrLater) return;
+
+        db.sessions.filter((s: any) => {
+            if (!s.completed_at) return false;
+            const d = new Date(s.completed_at);
+            const cDay = now.getDay();
+            const diff = cDay === 0 ? 6 : cDay - 1;
+            const sow = new Date(now); sow.setHours(0,0,0,0); sow.setDate(now.getDate() - diff);
+            const eow = new Date(sow); eow.setDate(sow.getDate() + 6); eow.setHours(23,59,59,999);
+            return d >= sow && d <= eow;
+        }).count().then(count => {
+            if (count === 0) {
+                // Check if streak > 0
+                db.sessions.filter((s: any) => !!s.completed_at).count().then(total => {
+                    if (total > 0) setStreakAtRisk(true);
+                });
+            }
+        });
+    }, []);
+
+    const useJokerForStreak = async () => {
+        if (jokerUsing || jokerTokens <= 0) return;
+        setJokerUsing(true);
+        try {
+            const res = await api.post('/gamification/joker-streak');
+            setJokerTokens(res.data.joker_tokens);
+            setStreakAtRisk(false);
+            setJokerMsg(`Streak saved! +${res.data.streak_coins} coins`);
+            setTimeout(() => setJokerMsg(null), 4000);
+        } catch (e: any) {
+            setJokerMsg(e?.response?.data?.detail || 'Failed to use joker');
+            setTimeout(() => setJokerMsg(null), 4000);
+        } finally {
+            setJokerUsing(false);
+        }
+    };
 
     // Load exercise/muscle lists for filters
     useEffect(() => {
@@ -273,6 +325,51 @@ export default function Dashboard() {
                         </div>
                         <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>Streak</div>
                     </div>
+                </div>
+            )}
+
+            {/* Streak-at-risk banner */}
+            {streakAtRisk && (overview?.streakWeeks ?? 0) > 0 && (
+                <div style={{
+                    marginBottom: '12px', padding: '12px 16px',
+                    background: 'linear-gradient(135deg, rgba(251,146,60,0.15), rgba(239,68,68,0.1))',
+                    border: '1px solid rgba(251,146,60,0.4)',
+                    borderRadius: '12px',
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                }}>
+                    <Flame size={20} color="#fb923c" style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#fb923c' }}>
+                            {overview?.streakWeeks}w streak at risk!
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                            No sessions this week. Train or use a Joker.
+                        </div>
+                    </div>
+                    {jokerTokens > 0 && (
+                        <button
+                            onClick={useJokerForStreak}
+                            disabled={jokerUsing}
+                            style={{
+                                padding: '6px 12px', borderRadius: '8px', border: 'none',
+                                background: 'rgba(139,92,246,0.25)', color: '#a78bfa',
+                                fontWeight: 700, fontSize: '12px', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
+                            }}
+                        >
+                            <Shield size={13} />
+                            Use Joker ({jokerTokens})
+                        </button>
+                    )}
+                </div>
+            )}
+            {jokerMsg && (
+                <div style={{
+                    marginBottom: '12px', padding: '10px 14px',
+                    background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)',
+                    borderRadius: '10px', fontSize: '13px', color: '#a78bfa', textAlign: 'center',
+                }}>
+                    {jokerMsg}
                 </div>
             )}
 

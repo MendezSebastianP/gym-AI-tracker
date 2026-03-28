@@ -52,6 +52,16 @@ export default function CreateRoutine() {
 		return localStorage.getItem('draftRoutineCoachMsg') || '';
 	});
 
+	// Coin balance for AI features
+	const [coinBalance, setCoinBalance] = useState<number | null>(null);
+	useEffect(() => {
+		if (mode === 'ai') {
+			api.get('/gamification/stats').then(res => {
+				setCoinBalance(res.data.currency ?? 0);
+			}).catch(() => {});
+		}
+	}, [mode]);
+
 	// Training context check
 	const [hasContext, setHasContext] = useState<boolean | null>(null);
 	useEffect(() => {
@@ -242,9 +252,12 @@ export default function CreateRoutine() {
 
 			setFinishingLoading(true);
 			await new Promise(r => setTimeout(r, 400));
+			if (routine.currency !== undefined) setCoinBalance(routine.currency);
 		} catch (e: any) {
 			const detail = e?.response?.data?.detail || e?.message || 'Unknown error';
-			if (e?.response?.status === 429) {
+			if (e?.response?.status === 402) {
+				setAiError(t('Not enough coins.'));
+			} else if (e?.response?.status === 429) {
 				setAiError(t('Rate limit reached. Please try again later.'));
 			} else if (e?.response?.status === 503) {
 				setAiError(t('AI service is not available. Please try again later.'));
@@ -563,8 +576,21 @@ export default function CreateRoutine() {
 							{aiError}
 						</div>
 					)}
-					<button className="btn btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={generateAI}>
+					{coinBalance !== null && coinBalance < 50 && (
+						<div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(255,0,0,0.08)', color: 'var(--error)', fontSize: '12px', marginBottom: '12px', textAlign: 'center' }}>
+							{t('Need 50 coins, you have')} {coinBalance}
+						</div>
+					)}
+					<button
+						className="btn btn-primary"
+						style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (coinBalance !== null && coinBalance < 50) ? 0.5 : 1 }}
+						onClick={generateAI}
+						disabled={loading || (coinBalance !== null && coinBalance < 50)}
+					>
 						<Wand2 size={18} /> {t('Generate Routine')}
+						<span style={{ marginLeft: '4px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,0,0,0.15)', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+							<CoinIcon size={12} /> 50
+						</span>
 					</button>
 				</div>
 			) : (

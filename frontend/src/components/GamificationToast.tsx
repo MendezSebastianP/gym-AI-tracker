@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Star, TrendingUp, Zap, X, Trophy } from 'lucide-react';
+import { Star, TrendingUp, Zap, X, Trophy, Flame, Shield } from 'lucide-react';
 import CoinIcon from './icons/CoinIcon';
 
 interface GamificationReward {
 	xp_gained: number;
+	base_xp?: number;
+	routine_bonus?: number;
+	routine_completed?: boolean;
 	rep_prs: number;
 	weight_prs: number;
 	leveled_up: boolean;
@@ -12,6 +15,12 @@ interface GamificationReward {
 	experience: number;
 	exp_to_next: number;
 	currency: number;
+	xp_capped?: boolean;
+	weekly_xp_sessions?: number;
+	streak_coins?: number;
+	streak_weeks?: number;
+	joker_awarded?: boolean;
+	joker_tokens?: number;
 }
 
 export default function GamificationToast() {
@@ -55,6 +64,10 @@ export default function GamificationToast() {
 		}, 400);
 	};
 
+	const isJokerMilestone = reward.joker_awarded;
+	const isLevelUp = reward.leveled_up;
+	const isSpecial = isJokerMilestone || isLevelUp;
+
 	return (
 		<div
 			style={{
@@ -65,16 +78,22 @@ export default function GamificationToast() {
 				zIndex: 9999,
 				width: '90%',
 				maxWidth: '380px',
-				background: reward.leveled_up
+				background: isJokerMilestone
+					? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(59, 130, 246, 0.12))'
+					: isLevelUp
 					? 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 165, 0, 0.1))'
 					: 'linear-gradient(135deg, rgba(204, 255, 0, 0.12), rgba(99, 102, 241, 0.08))',
-				border: reward.leveled_up
+				border: isJokerMilestone
+					? '1px solid rgba(139, 92, 246, 0.5)'
+					: isLevelUp
 					? '1px solid rgba(255, 215, 0, 0.4)'
 					: '1px solid rgba(204, 255, 0, 0.3)',
 				borderRadius: '16px',
 				padding: '16px 20px',
 				backdropFilter: 'blur(20px)',
-				boxShadow: reward.leveled_up
+				boxShadow: isJokerMilestone
+					? '0 8px 32px rgba(139, 92, 246, 0.25)'
+					: isLevelUp
 					? '0 8px 32px rgba(255, 215, 0, 0.2)'
 					: '0 8px 32px rgba(0, 0, 0, 0.4)',
 				transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s',
@@ -105,8 +124,30 @@ export default function GamificationToast() {
 				<X size={16} />
 			</button>
 
+			{/* Joker milestone header */}
+			{isJokerMilestone && (
+				<div style={{
+					display: 'flex', alignItems: 'center', gap: '8px',
+					marginBottom: '12px', padding: '8px 12px',
+					background: 'linear-gradient(90deg, rgba(139,92,246,0.25), rgba(59,130,246,0.15), rgba(139,92,246,0.25))',
+					backgroundSize: '200% 100%',
+					animation: 'shimmer 2s ease-in-out infinite',
+					borderRadius: '10px'
+				}}>
+					<Shield size={22} color="#a78bfa" />
+					<div>
+						<div style={{ fontWeight: 800, fontSize: '16px', color: '#a78bfa' }}>
+							Joker Earned! 🃏
+						</div>
+						<div style={{ fontSize: '12px', color: 'rgba(167,139,250,0.8)' }}>
+							20-week streak milestone — use it wisely
+						</div>
+					</div>
+				</div>
+			)}
+
 			{/* Level up header */}
-			{reward.leveled_up && (
+			{isLevelUp && !isJokerMilestone && (
 				<div style={{
 					display: 'flex', alignItems: 'center', gap: '8px',
 					marginBottom: '12px', padding: '8px 12px',
@@ -139,12 +180,30 @@ export default function GamificationToast() {
 					<Star size={20} color="var(--gold)" />
 				</div>
 				<div style={{ flex: 1 }}>
-					<div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
-						+{reward.xp_gained} XP
-					</div>
-					<div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-						{reward.experience} / {reward.exp_to_next} to next level
-					</div>
+					{reward.xp_capped ? (
+						<>
+							<div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-secondary)' }}>
+								Weekly XP cap reached ({reward.weekly_xp_sessions}/5)
+							</div>
+							<div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+								PR bonuses still active
+							</div>
+						</>
+					) : (
+						<>
+							<div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
+								+{reward.xp_gained} XP
+								{reward.routine_completed && (
+									<span style={{ marginLeft: '6px', fontSize: '12px', color: 'var(--primary)', fontWeight: 600 }}>
+										(Routine complete!)
+									</span>
+								)}
+							</div>
+							<div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+								{reward.experience} / {reward.exp_to_next} to next level
+							</div>
+						</>
+					)}
 				</div>
 			</div>
 
@@ -178,8 +237,23 @@ export default function GamificationToast() {
 				</div>
 			)}
 
-			{/* Currency earned on level up */}
-			{reward.leveled_up && (
+			{/* Streak coins */}
+			{(reward.streak_coins || 0) > 0 && (
+				<div style={{
+					marginTop: '8px', padding: '6px 10px',
+					background: 'rgba(251, 146, 60, 0.1)',
+					border: '1px solid rgba(251, 146, 60, 0.25)',
+					borderRadius: '8px',
+					display: 'flex', alignItems: 'center', gap: '6px',
+					fontSize: '12px', color: '#fb923c'
+				}}>
+					<Flame size={14} />
+					Week {reward.streak_weeks} streak: +{reward.streak_coins} coins
+				</div>
+			)}
+
+			{/* Coins earned on level up */}
+			{isLevelUp && (
 				<div style={{
 					marginTop: '8px', fontSize: '12px', color: 'var(--gold)',
 					display: 'flex', alignItems: 'center', gap: '4px'

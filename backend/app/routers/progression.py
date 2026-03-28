@@ -2,7 +2,6 @@
 Progression suggestion endpoints.
 
 Mode A: Algorithmic quick suggestions (no AI cost)
-Mode B: AI Coach Chat (OpenAI)
 Mode C: Full Progression Report (algorithmic + AI)
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,10 +14,10 @@ from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.routine import Routine
 from app.models.progression import ProgressionReport, ProgressionFeedback
-from app.limiter import limiter
 
 class ReportRequest(BaseModel):
     user_context: Optional[str] = None
+    use_joker: bool = False
 
 
 router = APIRouter(
@@ -28,11 +27,6 @@ router = APIRouter(
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
-
-class ChatRequest(BaseModel):
-    routine_id: int
-    day_index: Optional[int] = None
-    message: str
 
 
 class FeedbackRequest(BaseModel):
@@ -93,46 +87,6 @@ def get_routine_suggestions(
     return {"suggestions": suggestions}
 
 
-# ── Mode B: AI Coach Chat ───────────────────────────────────────────────────
-
-@router.post("/chat")
-@limiter.limit("5/hour")
-async def coach_chat(
-    request: Request,
-    body: ChatRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Free-form AI coach chat. Sends user message with routine context
-    and progress summary to OpenAI, returns structured suggestions.
-    """
-    routine = db.query(Routine).get(body.routine_id)
-    if not routine or routine.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Routine not found")
-
-    from app.openai_service import coach_chat_ai
-
-    try:
-        result = await coach_chat_ai(
-            db=db,
-            user=current_user,
-            routine=routine,
-            day_index=body.day_index,
-            message=body.message,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI chat failed: {str(e)}")
-
-    return result
-
-
 # ── Mode C: Full Progression Report ─────────────────────────────────────────
 
 @router.get("/report/{routine_id}")
@@ -170,8 +124,7 @@ async def generate_report(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Generate a full progression report: algorithmic analysis for all exercises
-    across all days, enriched with AI narrative and periodization advice.
+    Generate a full progression report. Costs 50 coins (or 1 joker token).
     """
     routine = db.query(Routine).get(routine_id)
     if not routine or routine.user_id != current_user.id:
@@ -179,6 +132,9 @@ async def generate_report(
 
     from app.progression_engine import analyze_routine_day
     from app.openai_service import generate_report_ai
+    from app.gamification import deduct_coins
+
+    deduct_coins(db, current_user, 50, use_joker=body.use_joker if body else False)
 
     # 1. Run algorithmic analysis for all days
     algorithmic_results = {}
@@ -251,7 +207,8 @@ async def generate_report(
     db.commit()
     db.refresh(report)
 
-    return {"report_id": report.id, **report_data}
+    db.refresh(current_user)
+    return {"report_id": report.id, "currency": current_user.currency, **report_data}
 
 
 # ── Feedback tracking ───────────────────────────────────────────────────────

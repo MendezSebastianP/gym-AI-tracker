@@ -149,9 +149,9 @@ export default function Settings() {
 					{!editingProfile ? (
 						<div className="grid grid-cols-3 gap-4">
 							<div className="flex flex-col gap-2">
-								<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+								<div>
 									<span className="text-xs text-secondary">{t('Weight')}</span>
-									<HelpCircle size={12} style={{ color: 'var(--text-tertiary)', cursor: 'help' }} title={t('Editable in sessions only')} />
+									<div className="text-xs" style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>({t('Tracked in sessions')})</div>
 								</div>
 								<span className="font-bold">{user?.weight ? `${user.weight} kg` : '-'}</span>
 							</div>

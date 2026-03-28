@@ -101,15 +101,6 @@ export interface SyncEvent {
 	processed: boolean;
 }
 
-export interface CoachChatMessage {
-	id?: number;
-	routine_id: number;
-	role: 'user' | 'assistant';
-	content: string;
-	suggestions?: any[];
-	created_at: string;
-}
-
 class GymDatabase extends Dexie {
 	users!: Table<User>;
 	exercises!: Table<Exercise>;
@@ -117,7 +108,6 @@ class GymDatabase extends Dexie {
 	sessions!: Table<Session>;
 	sets!: Table<Set>;
 	syncQueue!: Table<SyncEvent>;
-	coachChats!: Table<CoachChatMessage>;
 
 	constructor() {
 		super('GymTrackerDB');
@@ -131,9 +121,13 @@ class GymDatabase extends Dexie {
 		});
 		// v2: added duration_seconds to sessions (no index change needed)
 		this.version(2).stores({});
-		// v3: coach chat persistence
+		// v3: coach chat persistence (now removed)
 		this.version(3).stores({
 			coachChats: '++id, routine_id'
+		});
+		// v4: drop coachChats table
+		this.version(4).stores({
+			coachChats: null
 		});
 	}
 }

@@ -16,6 +16,7 @@ class Session(Base):
     notes = Column(Text, nullable=True)
     duration_seconds = Column(Integer, nullable=True)  # Tracked session duration (user-editable)
     locked_exercises = Column(JSON, default=[])
+    streak_eligible_at = Column(DateTime(timezone=True), nullable=True)  # Set once on first completion, never modified
 
     user = relationship("User")
     routine = relationship("Routine")

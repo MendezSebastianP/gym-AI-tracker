@@ -13,9 +13,11 @@ import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Sessions from './pages/Sessions';
 import Onboarding from './pages/Onboarding';
+import Shop from './pages/Shop';
 import Quests from './pages/Quests';
 import TrainingContext from './pages/TrainingContext';
 import ProgressionReport from './pages/ProgressionReport';
+import Playground from './pages/Playground';
 import { AdminRoute } from './components/AdminRoute';
 import AdminLayout from './components/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -222,6 +224,9 @@ function App() {
 			<Route path="/" element={isAuthenticated ? (isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/home" replace />) : <Landing />} />
 			<Route path="/login" element={<Login />} />
 			<Route path="/register" element={<Register />} />
+			<Route element={<AdminRoute />}>
+				<Route path="/playground" element={<Playground />} />
+			</Route>
 
 			<Route element={<ProtectedRoute />}>
 				<Route path="/onboarding" element={<Onboarding />} />
@@ -239,6 +244,7 @@ function App() {
 
 					<Route path="/settings" element={<Settings />} />
 					<Route path="/settings/questionnaire" element={<TrainingContext />} />
+					<Route path="/shop" element={<Shop />} />
 
 				</Route>
 			</Route>

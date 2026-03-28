@@ -21,6 +21,7 @@ router = APIRouter(
 
 class GenerateRoutineRequest(BaseModel):
     extra_prompt: Optional[str] = None
+    use_joker: bool = False
 
 
 class GenerateRoutineResponse(BaseModel):
@@ -29,6 +30,7 @@ class GenerateRoutineResponse(BaseModel):
     description: str
     coach_message: Optional[str] = None
     days: list
+    currency: Optional[int] = None
 
 
 @router.post("/generate-routine", response_model=GenerateRoutineResponse)
@@ -41,13 +43,12 @@ async def generate_routine(
 ):
     """
     Generate an AI-powered routine suggestion based on user preferences.
-
-    Returns a routine structure (name, description, days) that the frontend
-    can display for review. The user then saves it via POST /api/routines.
-
-    Rate limited to 3 requests per hour per IP.
+    Costs 50 coins (or 1 joker token).
     """
     from app.openai_service import generate_routine_suggestion
+    from app.gamification import deduct_coins
+
+    deduct_coins(db, current_user, 50, use_joker=body.use_joker)
 
     # Fetch user preferences
     preferences = (
@@ -102,6 +103,8 @@ async def generate_routine(
             detail=f"AI generation failed: {str(e)}"
         )
 
+    db.refresh(current_user)
+    result["currency"] = current_user.currency
     return result
 
 
@@ -129,6 +132,7 @@ class ReplaceExercisesRequest(BaseModel):
     current_routine: CurrentRoutineInput
     rejected_exercise_ids: List[int]
     extra_prompt: Optional[str] = None
+    use_joker: bool = False
 
 
 class ReplacementItem(BaseModel):
@@ -154,9 +158,12 @@ async def replace_exercises(
 ):
     """
     Replace specific rejected exercises in an existing AI routine.
-    The AI selects suitable replacements based on the user's prompt and equipment.
+    Costs 15 coins (or 1 joker token).
     """
     from app.openai_service import replace_exercises_ai
+    from app.gamification import deduct_coins
+
+    deduct_coins(db, current_user, 15, use_joker=body.use_joker)
 
     preferences = (
         db.query(UserPreference)
@@ -202,7 +209,8 @@ async def replace_exercises(
             detail=f"AI replacement failed: {str(e)}"
         )
 
-    return result
+    db.refresh(current_user)
+    return {**result, "currency": current_user.currency}
 
 
 # ── AI Fill Day ─────────────────────────────────────────────────────────────
@@ -212,6 +220,7 @@ class FillDayRequest(BaseModel):
     prompt: str
     existing_exercise_ids: List[int] = []
     day_name: Optional[str] = None
+    use_joker: bool = False
 
 
 class FillDayExercise(BaseModel):
@@ -236,10 +245,12 @@ async def fill_day(
 ):
     """
     Given a free-text prompt like "add 3 chest exercises with dumbbells",
-    return exercises scoped to a single day. Uses AI.
-    Rate limited to 3 requests per hour per IP.
+    return exercises scoped to a single day. Costs 25 coins (or 1 joker token).
     """
     from app.openai_service import fill_day_ai
+    from app.gamification import deduct_coins
+
+    deduct_coins(db, current_user, 25, use_joker=body.use_joker)
 
     preferences = (
         db.query(UserPreference)
@@ -288,4 +299,5 @@ async def fill_day(
             detail=f"AI fill-day failed: {str(e)}"
         )
 
-    return result
+    db.refresh(current_user)
+    return {**result, "currency": current_user.currency}

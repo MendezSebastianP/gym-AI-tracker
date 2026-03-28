@@ -52,6 +52,13 @@ export default function ProgressionReport() {
 	const [exerciseNames, setExerciseNames] = useState<Map<number, string>>(new Map());
 
 	const [userContext, setUserContext] = useState((location.state as any)?.userContext || '');
+	const [coinBalance, setCoinBalance] = useState<number | null>(null);
+
+	useEffect(() => {
+		api.get('/gamification/stats').then(res => {
+			setCoinBalance(res.data.currency ?? 0);
+		}).catch(() => {});
+	}, []);
 
 	const routine = useLiveQuery(async () => {
 		if (!id) return null;
@@ -105,13 +112,16 @@ export default function ProgressionReport() {
 	}, [id]);
 
 	// ── Generate ─────────────────────────────────────────────────────────────
+	const canAfford = coinBalance === null || coinBalance >= 50;
+
 	const generateReport = () => {
-		if (!id || generating || !canGenerate) return;
+		if (!id || generating || !canGenerate || !canAfford) return;
 		setGenerating(true);
 		setError(null);
 		api.post(`/progression/report/${id}`, { user_context: userContext.trim() || undefined })
 			.then(res => {
 				const r = res.data as ReportData;
+				if (res.data.currency !== undefined) setCoinBalance(res.data.currency);
 				setCurrentReport(r);
 				setSavedReport(r);
 				setReportAge('just now');
@@ -120,7 +130,11 @@ export default function ProgressionReport() {
 				setAssessmentOpen(true);
 			})
 			.catch(e => {
-				setError(e?.response?.data?.detail || 'Failed to generate report');
+				if (e?.response?.status === 402) {
+					setError(_t('Not enough coins.'));
+				} else {
+					setError(e?.response?.data?.detail || 'Failed to generate report');
+				}
 			})
 			.finally(() => setGenerating(false));
 	};
@@ -399,21 +413,26 @@ export default function ProgressionReport() {
 			{error && (
 				<p style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '12px', textAlign: 'center' }}>{error}</p>
 			)}
+			{!canAfford && (
+				<div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(255,0,0,0.08)', color: 'var(--error)', fontSize: '12px', marginBottom: '12px', textAlign: 'center' }}>
+					{_t('Need 50 coins, you have')} {coinBalance}
+				</div>
+			)}
 			<button
 				onClick={generateReport}
-				disabled={generating || !canGenerate}
+				disabled={generating || !canGenerate || !canAfford}
 				style={{
 					width: '100%', padding: '15px', borderRadius: '12px', border: 'none',
-					background: !canGenerate ? 'var(--bg-secondary)' : 'linear-gradient(135deg, var(--primary) 0%, #00e5b0 100%)',
-					color: !canGenerate ? 'var(--text-tertiary)' : '#000',
-					fontWeight: 800, fontSize: '15px', cursor: !canGenerate ? 'not-allowed' : 'pointer',
+					background: (!canGenerate || !canAfford) ? 'var(--bg-secondary)' : 'linear-gradient(135deg, var(--primary) 0%, #00e5b0 100%)',
+					color: (!canGenerate || !canAfford) ? 'var(--text-tertiary)' : '#000',
+					fontWeight: 800, fontSize: '15px', cursor: (!canGenerate || !canAfford) ? 'not-allowed' : 'pointer',
 					display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
 					letterSpacing: '0.01em',
 					animation: 'genGlow 2.5s ease-in-out infinite',
 				}}
 			>
 				<Sparkles size={17} />
-				Generate Report — <CoinIcon size={15} style={{ color: !canGenerate ? 'var(--text-tertiary)' : 'rgba(0,0,0,0.6)' }} /> 50
+				Generate Report — <CoinIcon size={15} style={{ color: (!canGenerate || !canAfford) ? 'var(--text-tertiary)' : 'rgba(0,0,0,0.6)' }} /> 50
 			</button>
 		</div>
 	);
