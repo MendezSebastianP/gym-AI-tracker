@@ -367,6 +367,7 @@ def compute_unclaimed_streak_data(db: Session, user: User) -> dict:
             "joker_due": False,
         }
 
+    coins_per_week = []
     total_coins = 0
     for target_week in unclaimed:
         target_monday = _week_str_to_monday(target_week)
@@ -380,7 +381,9 @@ def compute_unclaimed_streak_data(db: Session, user: User) -> dict:
                 check_monday -= timedelta(weeks=1)
             else:
                 break
-        total_coins += _streak_coins(streak_at_week)
+        week_coins = _streak_coins(streak_at_week)
+        coins_per_week.append((target_week, week_coins))
+        total_coins += week_coins
 
     joker_due = (
         current_streak >= JOKER_MILESTONE_WEEK
@@ -390,6 +393,7 @@ def compute_unclaimed_streak_data(db: Session, user: User) -> dict:
     return {
         "unclaimed_weeks": len(unclaimed),
         "total_coins": total_coins,
+        "coins_per_week": coins_per_week,  # [(week_str, coins), ...] oldest first
         "current_streak": current_streak,
         "unclaimed_week_strs": unclaimed,
         "joker_due": joker_due,

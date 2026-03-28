@@ -255,6 +255,37 @@ export const STYLES = `
   from { transform: translateX(-50%) translateY(-120%); opacity: 0; }
   to   { transform: translateX(-50%) translateY(0);     opacity: 1; }
 }
+
+/* ─────── CLAIM BURST ANIMATIONS (one-shot on button press) ─────── */
+@keyframes claimBurstA {
+  0%   { transform: scale(1);    box-shadow: none; }
+  18%  { transform: scale(1.16); box-shadow: 0 0 24px rgba(255,100,0,0.85); }
+  40%  { transform: scale(0.91); box-shadow: 0 0 8px rgba(255,100,0,0.4); }
+  65%  { transform: scale(1.06); }
+  82%  { transform: scale(0.98); }
+  100% { transform: scale(1);    box-shadow: none; }
+}
+@keyframes claimBurstB {
+  0%   { transform: scale(1);    filter: brightness(1); }
+  15%  { transform: scale(1.14); filter: brightness(2.2); }
+  38%  { transform: scale(0.92); filter: brightness(1.3); }
+  65%  { transform: scale(1.05); filter: brightness(1.1); }
+  100% { transform: scale(1);    filter: brightness(1); }
+}
+@keyframes claimBurstOrb {
+  0%   { transform: scale(1);    filter: brightness(1); }
+  20%  { transform: scale(1.13); filter: brightness(1.7); }
+  45%  { transform: scale(0.93); filter: brightness(1.2); }
+  70%  { transform: scale(1.05); }
+  100% { transform: scale(1);    filter: brightness(1); }
+}
+@keyframes claimBurstPx {
+  0%        { opacity: 1; transform: scale(1);    }
+  12%, 22%  { opacity: 0; transform: scale(1.1);  }
+  32%, 42%  { opacity: 1; transform: scale(1);    }
+  52%, 62%  { opacity: 0; transform: scale(1.05); }
+  72%, 100% { opacity: 1; transform: scale(1);    }
+}
 `;
 
 // ── Shared layout ─────────────────────────────────────────────────────────────

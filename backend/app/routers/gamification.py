@@ -142,23 +142,27 @@ def claim_streak_reward(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Claim coins for all unclaimed streak weeks at once."""
+    """Claim coins for the oldest unclaimed streak week (one at a time)."""
     data = compute_unclaimed_streak_data(db, current_user)
 
     if data["unclaimed_weeks"] == 0:
         return {
             "claimed_weeks": 0,
             "streak_coins": 0,
+            "remaining": 0,
             "streak_weeks": data["current_streak"],
             "currency": current_user.currency or 0,
             "joker_awarded": False,
         }
 
-    current_user.currency = (current_user.currency or 0) + data["total_coins"]
-    current_user.streak_reward_week = data["unclaimed_week_strs"][-1]
+    # Claim only the oldest unclaimed week
+    oldest_week, week_coins = data["coins_per_week"][0]
+    current_user.currency = (current_user.currency or 0) + week_coins
+    current_user.streak_reward_week = oldest_week
 
+    # Award joker only when claiming the final remaining week
     joker_awarded = False
-    if data["joker_due"]:
+    if data["joker_due"] and data["unclaimed_weeks"] == 1:
         current_user.joker_tokens = (current_user.joker_tokens or 0) + 1
         joker_awarded = True
 
@@ -166,8 +170,9 @@ def claim_streak_reward(
     db.refresh(current_user)
 
     return {
-        "claimed_weeks": data["unclaimed_weeks"],
-        "streak_coins": data["total_coins"],
+        "claimed_weeks": 1,
+        "streak_coins": week_coins,
+        "remaining": data["unclaimed_weeks"] - 1,
         "streak_weeks": data["current_streak"],
         "currency": current_user.currency,
         "joker_awarded": joker_awarded,

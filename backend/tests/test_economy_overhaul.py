@@ -322,7 +322,7 @@ class TestStreakCheckIn:
         assert currency_after == currency_before + 5
 
     def test_five_week_streak_claim_awards_correct_tier(self, client, db_engine):
-        """After 5 consecutive weeks, claiming gives 10 coins for week 5."""
+        """After 5 consecutive weeks, claiming one-at-a-time gives correct tier coins."""
         from app.models.session import Session as SessionModel
         from app.models.user import User
 
@@ -346,13 +346,22 @@ class TestStreakCheckIn:
         finally:
             s.close()
 
-        # Claim all 5 weeks at once
-        r = client.post("/api/gamification/streak/claim", headers=headers)
-        data = r.json()
-        assert data["claimed_weeks"] == 5
+        # Claim 5 weeks one at a time — each call claims the oldest unclaimed week
+        total_coins = 0
+        for i in range(5):
+            r = client.post("/api/gamification/streak/claim", headers=headers)
+            data = r.json()
+            assert data["claimed_weeks"] == 1
+            assert data["remaining"] == 4 - i
+            total_coins += data["streak_coins"]
         assert data["streak_weeks"] >= 5
         # Coins: weeks 1-4 @ 5 coins each + week 5 @ 10 coins = 30
-        assert data["streak_coins"] == 30
+        assert total_coins == 30
+
+        # 6th claim returns nothing
+        r = client.post("/api/gamification/streak/claim", headers=headers)
+        assert r.json()["claimed_weeks"] == 0
+        assert r.json()["remaining"] == 0
 
 
 # ── Joker streak-save endpoint ────────────────────────────────────────────────

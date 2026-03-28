@@ -88,52 +88,58 @@ const ICON_MAP: Record<string, any> = {
 interface SkinClaimCfg {
 	btnBg: string; btnColor: string; btnBorder: string;
 	btnRadius: number | string; btnFont?: string; btnSpacing?: string;
-	btnAnim: string;
+	btnAnim: string; burstAnim: string;
 	claimedBg: string; claimedBorder: string; claimedColor: string;
-	btnLabel: (weeks: number, coins: number) => string;
+	btnLabel: (coins: number) => string;
 	claimedLabel: (streak: number) => string;
 }
 const SKIN_CLAIM_CFG: Record<string, SkinClaimCfg> = {
 	skin_a: {
 		btnBg: 'linear-gradient(135deg, #FF8C00, #FF4500)', btnColor: '#fff', btnBorder: 'none',
 		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		burstAnim: 'claimBurstA 0.48s ease-out forwards',
 		claimedBg: 'rgba(255,140,0,0.07)', claimedBorder: '1px solid rgba(255,140,0,0.2)', claimedColor: '#FF8C00',
-		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		btnLabel: (c) => `Claim week · ${c} coins`,
 		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
 	},
 	skin_b: {
 		btnBg: 'linear-gradient(135deg, #7B1FA2, #E040FB)', btnColor: '#fff', btnBorder: 'none',
 		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		burstAnim: 'claimBurstB 0.44s ease-out forwards',
 		claimedBg: 'rgba(170,0,255,0.07)', claimedBorder: '1px solid rgba(170,0,255,0.22)', claimedColor: '#CE93D8',
-		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		btnLabel: (c) => `Claim week · ${c} coins`,
 		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
 	},
 	skin_c1: {
 		btnBg: 'rgba(255,80,0,0.18)', btnColor: '#FF9500', btnBorder: '1.5px solid rgba(255,80,0,0.38)',
 		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		burstAnim: 'claimBurstOrb 0.46s ease-out forwards',
 		claimedBg: 'rgba(255,80,0,0.07)', claimedBorder: '1px solid rgba(255,80,0,0.22)', claimedColor: '#FF9500',
-		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		btnLabel: (c) => `Claim week · ${c} coins`,
 		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
 	},
 	skin_c2: {
 		btnBg: 'rgba(210,160,0,0.18)', btnColor: '#FFD700', btnBorder: '1.5px solid rgba(210,160,0,0.38)',
 		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		burstAnim: 'claimBurstOrb 0.46s ease-out forwards',
 		claimedBg: 'rgba(210,160,0,0.07)', claimedBorder: '1px solid rgba(210,160,0,0.22)', claimedColor: '#FFD700',
-		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		btnLabel: (c) => `Claim week · ${c} coins`,
 		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
 	},
 	skin_c3: {
 		btnBg: 'rgba(30,130,255,0.18)', btnColor: '#42A5F5', btnBorder: '1.5px solid rgba(30,130,255,0.38)',
 		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
+		burstAnim: 'claimBurstOrb 0.46s ease-out forwards',
 		claimedBg: 'rgba(30,130,255,0.07)', claimedBorder: '1px solid rgba(30,130,255,0.22)', claimedColor: '#42A5F5',
-		btnLabel: (w, c) => `Claim ${w} week${w > 1 ? 's' : ''} · ${c} coins`,
+		btnLabel: (c) => `Claim week · ${c} coins`,
 		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
 	},
 	skin_d: {
 		btnBg: 'transparent', btnColor: '#FF9900', btnBorder: '2px solid #FF6600',
 		btnRadius: 0, btnFont: 'monospace', btnSpacing: '0.06em', btnAnim: 'pxBlink 1.2s steps(2) infinite',
+		burstAnim: 'claimBurstPx 0.5s steps(2) forwards',
 		claimedBg: 'transparent', claimedBorder: '1px solid rgba(255,102,0,0.28)', claimedColor: '#FF9900',
-		btnLabel: (w, c) => `CLAIM ${w}W · ${c} COINS`,
+		btnLabel: (c) => `CLAIM WEEK · ${c} COINS`,
 		claimedLabel: (s) => `${s}W STREAK — CLAIMED`,
 	},
 };
@@ -147,6 +153,8 @@ export default function Stats() {
 	const [quests, setQuests] = useState<QuestData[]>([]);
 	const [claiming, setClaiming] = useState<number | null>(null);
 	const [claimingStreak, setClaimingStreak] = useState(false);
+	const [claimFlash, setClaimFlash] = useState(false);
+	const [claimCooldown, setClaimCooldown] = useState(false);
 	const [shop, setShop] = useState<ShopData | null>(null);
 	const [buying, setBuying] = useState<string | null>(null);
 	const [promoCode, setPromoCode] = useState('');
@@ -272,6 +280,10 @@ export default function Stats() {
 	};
 
 	const claimStreak = async () => {
+		if (claimCooldown || claimingStreak) return;
+		// Trigger one-shot burst animation
+		setClaimFlash(true);
+		setTimeout(() => setClaimFlash(false), 500);
 		setClaimingStreak(true);
 		try {
 			const res = await api.post('/gamification/streak/claim');
@@ -291,6 +303,11 @@ export default function Stats() {
 			}
 			await fetchGamification();
 			await fetchShop();
+			// If more weeks remain, impose 1s cooldown before next claim
+			if ((res.data.remaining ?? 0) > 0) {
+				setClaimCooldown(true);
+				setTimeout(() => setClaimCooldown(false), 1000);
+			}
 		} catch (e) {
 			console.error('Failed to claim streak', e);
 		} finally {
@@ -672,9 +689,24 @@ export default function Stats() {
 							transition: 'all 0.2s ease',
 							boxShadow: consistencyTab === 'streak' ? '0 2px 4px rgba(0,0,0,0.2)' : 'none',
 							display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+							position: 'relative',
 						}}
 					>
 						<Flame size={12} />Streak
+						{unclaimedWeeks > 0 && (
+							<span style={{
+								position: 'absolute', top: -5, right: -4,
+								background: '#E53935', color: '#fff',
+								borderRadius: '50%', minWidth: 16, height: 16,
+								fontSize: 9, fontWeight: 800,
+								display: 'flex', alignItems: 'center', justifyContent: 'center',
+								lineHeight: 1, padding: '0 3px',
+								boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
+								pointerEvents: 'none',
+							}}>
+								{unclaimedWeeks}
+							</span>
+						)}
 					</button>
 					<button
 						onClick={() => setConsistencyTab('weeks')}
@@ -721,7 +753,7 @@ export default function Stats() {
 									{unclaimedWeeks > 0 && (
 										<button
 											onClick={claimStreak}
-											disabled={claimingStreak}
+											disabled={claimingStreak || claimCooldown}
 											style={{
 												marginTop: 14, width: '100%', padding: '11px 10px',
 												borderRadius: cfg.btnRadius, background: cfg.btnBg,
@@ -729,13 +761,15 @@ export default function Stats() {
 												border: cfg.btnBorder,
 												fontFamily: cfg.btnFont,
 												letterSpacing: cfg.btnSpacing,
-												cursor: claimingStreak ? 'not-allowed' : 'pointer',
-												opacity: claimingStreak ? 0.7 : 1,
+												cursor: (claimingStreak || claimCooldown) ? 'not-allowed' : 'pointer',
+												opacity: claimCooldown ? 0.55 : (claimingStreak ? 0.7 : 1),
 												display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-												animation: claimingStreak ? 'none' : cfg.btnAnim,
+												animation: claimFlash
+													? cfg.burstAnim
+													: (claimCooldown || claimingStreak ? 'none' : cfg.btnAnim),
 											}}
 										>
-											{cfg.btnLabel(unclaimedWeeks, unclaimedCoins)}
+											{cfg.btnLabel(unclaimedCoins)}
 										</button>
 									)}
 									{unclaimedWeeks === 0 && streakWeeks > 0 && (
