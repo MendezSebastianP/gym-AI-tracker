@@ -30,6 +30,7 @@ def get_gamification_stats(
         "streak_slots": streak_slots,
         "unclaimed_streak_weeks": unclaimed["unclaimed_weeks"],
         "unclaimed_streak_coins": unclaimed["total_coins"],
+        "unclaimed_next_coins": unclaimed["coins_per_week"][0][1] if unclaimed["unclaimed_weeks"] > 0 else 0,
     }
 
 

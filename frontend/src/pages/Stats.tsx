@@ -33,6 +33,7 @@ interface GamificationStats {
 	streak_slots?: Array<{week: string; start_date: string; sessions: number; claimed: boolean}>;
 	unclaimed_streak_weeks?: number;
 	unclaimed_streak_coins?: number;
+	unclaimed_next_coins?: number;
 }
 
 interface QuestData {
@@ -769,7 +770,7 @@ export default function Stats() {
 													: (claimCooldown || claimingStreak ? 'none' : cfg.btnAnim),
 											}}
 										>
-											{cfg.btnLabel(unclaimedCoins)}
+											{cfg.btnLabel(gamification?.unclaimed_next_coins ?? 0)}
 										</button>
 									)}
 									{unclaimedWeeks === 0 && streakWeeks > 0 && (
