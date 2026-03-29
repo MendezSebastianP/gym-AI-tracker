@@ -30,6 +30,7 @@ def get_weekly_stats(
     total_volume_query = db.query(func.sum(SetModel.weight_kg * SetModel.reps)).join(SessionModel).filter(
         SessionModel.user_id == current_user.id,
         SessionModel.completed_at.isnot(None),
+        func.coalesce(SetModel.set_type, "normal") == "normal",
         SetModel.weight_kg > 0,
         SetModel.reps > 0
     )
@@ -130,6 +131,7 @@ def get_muscle_stats(
         .filter(
             SessionModel.user_id == current_user.id,
             SessionModel.completed_at.isnot(None),
+            func.coalesce(SetModel.set_type, "normal") == "normal",
             SetModel.reps > 0
         )
         .group_by(Exercise.muscle_group)
@@ -181,7 +183,11 @@ def _compute_progress(db, user_id: int, muscle_group: str = None, muscle: str = 
         session_bw = float(session.bodyweight_kg) if session.bodyweight_kg else user_bw
 
         # Get sets for this session
-        sets_query = db.query(SetModel).filter(SetModel.session_id == session.id, SetModel.reps > 0)
+        sets_query = db.query(SetModel).filter(
+            SetModel.session_id == session.id,
+            SetModel.reps > 0,
+            func.coalesce(SetModel.set_type, "normal") == "normal",
+        )
 
         # Apply filters via exercise join
         if muscle_group or muscle or exercise_id:
@@ -251,6 +257,48 @@ def _compute_progress(db, user_id: int, muscle_group: str = None, muscle: str = 
     return result
 
 
+def _compute_effort_trend(db, user_id: int, limit: int = 12) -> List[Dict[str, Any]]:
+    """Reusable effort trend points for any user (0-100 scale)."""
+    safe_limit = max(1, min(limit, 40))
+    rows = (
+        db.query(
+            SessionModel.completed_at,
+            SessionModel.effort_score,
+            SessionModel.self_rated_effort,
+        )
+        .filter(
+            SessionModel.user_id == user_id,
+            SessionModel.completed_at.isnot(None),
+        )
+        .order_by(SessionModel.completed_at.asc())
+        .all()
+    )
+
+    points: List[Dict[str, Any]] = []
+    for completed_at, effort_score, self_rated_effort in rows:
+        effort_value = effort_score
+        if effort_value is None and self_rated_effort is not None:
+            effort_value = float(self_rated_effort) * 10.0
+        if effort_value is None:
+            continue
+
+        clamped = max(0.0, min(100.0, float(effort_value)))
+        points.append({
+            "date": completed_at.date().isoformat() if completed_at else None,
+            "effort": round(clamped, 1),
+        })
+
+    points = points[-safe_limit:]
+    return [
+        {
+            "index": idx + 1,
+            "date": point["date"],
+            "effort": point["effort"],
+        }
+        for idx, point in enumerate(points)
+    ]
+
+
 @router.get("/progress")
 def get_progress(
     muscle_group: str = None,
@@ -261,6 +309,16 @@ def get_progress(
 ):
     """Returns per-session NSS for the authenticated user."""
     return _compute_progress(db, current_user.id, muscle_group, muscle, exercise_id)
+
+
+@router.get("/effort")
+def get_effort_trend(
+    limit: int = 12,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns recent session effort trend points for the authenticated user."""
+    return _compute_effort_trend(db, current_user.id, limit)
 
 
 @router.get("/cardio")
@@ -378,6 +436,18 @@ def get_cardio_exercises_demo(days: int = 100, db: Session = Depends(get_db)):
     return _compute_cardio_exercises(db, demo_user.id, days)
 
 
+@router.get("/effort/demo")
+def get_effort_trend_demo(
+    limit: int = 12,
+    db: Session = Depends(get_db),
+):
+    """Returns recent effort trend points for the demo user (no auth required)."""
+    demo_user = db.query(User).filter(User.email == "demo@gymtracker.app").first()
+    if not demo_user:
+        return []
+    return _compute_effort_trend(db, demo_user.id, limit)
+
+
 @router.get("/cardio/demo")
 def get_cardio_stats_demo(
     days: int = 90,
@@ -403,5 +473,3 @@ def get_progress_demo(
     if not demo_user:
         return []
     return _compute_progress(db, demo_user.id, muscle_group, muscle, exercise_id)
-
-

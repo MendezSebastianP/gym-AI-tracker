@@ -7,6 +7,7 @@ from app.models.session import Session as SessionModel, Set as SetModel
 from app.schemas import SessionResponse, SessionCreate, SessionUpdate, SetResponse, SessionCompleteBulk
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.onboarding import mark_onboarding_step
 
 router = APIRouter(
     prefix="/api/sessions",
@@ -70,13 +71,19 @@ def update_session(
         raise HTTPException(status_code=404, detail="Session not found")
     
     was_completed = db_session.completed_at is not None
+    update_data = session_update.model_dump(exclude_unset=True)
+
+    # Completion is immutable once set, to prevent XP replay by reopen/re-complete cycles.
+    if was_completed and "completed_at" in update_data:
+        raise HTTPException(status_code=409, detail="Completed sessions cannot be reopened or re-completed")
     
-    for key, value in session_update.model_dump(exclude_unset=True).items():
+    for key, value in update_data.items():
         setattr(db_session, key, value)
 
     # Set streak_eligible_at once on first completion — never overwrite
     if not was_completed and db_session.completed_at is not None and db_session.streak_eligible_at is None:
         db_session.streak_eligible_at = datetime.now(timezone.utc)
+        mark_onboarding_step(current_user, "first_session")
 
     db.commit()
     db.refresh(db_session)
@@ -115,15 +122,22 @@ def complete_session_bulk(
 
     was_completed = db_session.completed_at is not None
 
+    if was_completed:
+        # Keep completion timestamp immutable after first completion.
+        if bulk_data.completed_at != db_session.completed_at:
+            raise HTTPException(status_code=409, detail="Completed sessions cannot be reopened or re-completed")
+
     db_session.completed_at = bulk_data.completed_at
     if bulk_data.notes is not None:
         db_session.notes = bulk_data.notes
     if bulk_data.duration_seconds is not None:
         db_session.duration_seconds = bulk_data.duration_seconds
+    db_session.self_rated_effort = bulk_data.self_rated_effort
 
     # Set streak_eligible_at once on first completion — never overwrite
     if not was_completed and db_session.completed_at is not None and db_session.streak_eligible_at is None:
         db_session.streak_eligible_at = datetime.now(timezone.utc)
+        mark_onboarding_step(current_user, "first_session")
 
     if not was_completed and db_session.completed_at is not None:
         if bulk_data.bodyweight_kg is not None:
@@ -147,6 +161,8 @@ def complete_session_bulk(
             distance_km=s.distance_km,
             avg_pace=s.avg_pace,
             incline=s.incline,
+            set_type=s.set_type or "normal",
+            to_failure=bool(s.to_failure),
             completed_at=s.completed_at or bulk_data.completed_at
         )
         db.add(new_set)

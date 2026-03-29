@@ -14,6 +14,7 @@ export interface User {
 	age?: number;
 	priorities?: any;
 	is_admin?: boolean;
+	onboarding_progress?: Record<string, any>;
 }
 
 export interface Exercise {
@@ -72,6 +73,8 @@ export interface Session {
 	notes?: string;
 	locked_exercises?: number[]; // IDs of exercises that are locked/collapsed
 	bodyweight_kg?: number; // Body weight snapshot for this session
+	self_rated_effort?: number | null;
+	effort_score?: number | null;
 	weight_log_id?: number; // Local-only: links to the weight log entry for date sync
 	syncStatus?: 'synced' | 'created' | 'updated' | 'deleted';
 }
@@ -89,6 +92,8 @@ export interface Set {
 	distance_km?: number;
 	avg_pace?: number;
 	incline?: number;
+	set_type?: 'normal' | 'warmup' | 'drop';
+	to_failure?: boolean;
 	completed_at: string;
 	syncStatus?: 'synced' | 'created' | 'updated' | 'deleted';
 }
@@ -129,6 +134,8 @@ class GymDatabase extends Dexie {
 		this.version(4).stores({
 			coachChats: null
 		});
+		// v5: set/session metadata additions (no index changes)
+		this.version(5).stores({});
 	}
 }
 

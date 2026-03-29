@@ -14,7 +14,7 @@ import math
 from dataclasses import dataclass, asdict
 from typing import Optional
 
-from sqlalchemy import desc
+from sqlalchemy import desc, func as sa_func
 from sqlalchemy.orm import Session as DBSession
 
 from app.models.session import Session as SessionModel, Set as SetModel
@@ -154,7 +154,11 @@ def _get_session_history(
     for sess in sessions:
         exercise_sets = (
             db.query(SetModel)
-            .filter(SetModel.session_id == sess.id, SetModel.exercise_id == exercise_id)
+            .filter(
+                SetModel.session_id == sess.id,
+                SetModel.exercise_id == exercise_id,
+                sa_func.coalesce(SetModel.set_type, "normal") == "normal",
+            )
             .order_by(SetModel.set_number)
             .all()
         )
@@ -182,6 +186,58 @@ def _get_session_history(
     return history
 
 
+def _find_swap_alternative(
+    exercise: Exercise, routine: Routine, day_index: int | None, db: DBSession
+) -> tuple[int | None, str | None]:
+    """Find a suitable alternative exercise for a swap suggestion.
+
+    Looks for exercises targeting the same muscle, preferring same equipment.
+    Excludes exercises already in the routine day.
+    Returns (exercise_id, exercise_name) or (None, None).
+    """
+    # Collect exercise IDs already in the routine (all days) to exclude
+    days = routine.days or []
+    existing_ids = set()
+    for day in days:
+        for ex in day.get("exercises", []):
+            eid = ex.get("exercise_id")
+            if eid:
+                existing_ids.add(eid)
+    existing_ids.add(exercise.id)
+
+    if not exercise.muscle:
+        return None, None
+
+    # Query candidates: same primary muscle, system exercises only, exclude existing
+    candidates = (
+        db.query(Exercise)
+        .filter(
+            Exercise.muscle == exercise.muscle,
+            Exercise.id.notin_(existing_ids),
+            Exercise.user_id.is_(None),  # system exercises only
+        )
+        .all()
+    )
+
+    if not candidates:
+        return None, None
+
+    # Score candidates: prefer same equipment, similar difficulty
+    def score(c: Exercise) -> float:
+        s = 0.0
+        if c.equipment and exercise.equipment and c.equipment.lower() == exercise.equipment.lower():
+            s += 2.0
+        if c.is_bodyweight == exercise.is_bodyweight:
+            s += 1.0
+        if c.difficulty_level and exercise.difficulty_level:
+            s -= abs(c.difficulty_level - exercise.difficulty_level) * 0.3
+        return s
+
+    candidates.sort(key=score, reverse=True)
+    best = candidates[0]
+    return best.id, best.name
+
+
 def _get_routine_exercise_config(routine: Routine, day_index: int | None, exercise_id: int) -> dict | None:
     """Get the exercise config from routine JSON for a given exercise."""
     days = routine.days or []
@@ -200,6 +256,9 @@ def _analyze_strength(
     exercise: Exercise,
     routine_config: dict | None,
     experience_tier: str,
+    db: DBSession | None = None,
+    routine: Routine | None = None,
+    day_index: int | None = None,
 ) -> ProgressionSuggestion | None:
     """Apply double progression / linear progression / deload rules for strength exercises."""
     if not history:
@@ -298,12 +357,22 @@ def _analyze_strength(
                 break
 
         if plateau_count >= 4:
+            alt_id, alt_name = (None, None)
+            if db and routine:
+                alt_id, alt_name = _find_swap_alternative(exercise, routine, day_index, db)
+            reason = f"You've been at {current_weight}kg × ~{ref_reps} reps for {plateau_count} sessions."
+            if alt_name:
+                reason += f" Try swapping to {alt_name}."
+            else:
+                reason += " Consider swapping this exercise or trying a different rep range."
             return ProgressionSuggestion(
                 type="exercise_swap",
                 current=current,
                 suggested=current,
-                reason=f"You've been at {current_weight}kg × ~{ref_reps} reps for {plateau_count} sessions. Consider swapping this exercise or trying a different rep range.",
+                reason=reason,
                 confidence=0.7,
+                new_exercise_id=alt_id,
+                new_exercise_name=alt_name,
             )
 
     return None
@@ -317,6 +386,8 @@ def _analyze_bodyweight(
     routine_config: dict | None,
     experience_tier: str,
     db: DBSession,
+    routine: Routine | None = None,
+    day_index: int | None = None,
 ) -> ProgressionSuggestion | None:
     """Check bodyweight progression chains."""
     if not history:
@@ -330,7 +401,7 @@ def _analyze_bodyweight(
     )
     if not chain_entry:
         # Not in a chain — fall back to strength-style analysis (reps-based)
-        return _analyze_strength(history, exercise, routine_config, experience_tier)
+        return _analyze_strength(history, exercise, routine_config, experience_tier, db, routine, day_index)
 
     target_reps = chain_entry.target_reps_to_advance
     target_sets = chain_entry.target_sets_to_advance
@@ -394,12 +465,22 @@ def _analyze_bodyweight(
                 break
 
         if plateau_count >= 4:
+            alt_id, alt_name = (None, None)
+            if routine:
+                alt_id, alt_name = _find_swap_alternative(exercise, routine, day_index, db)
+            reason = f"You've been stuck at ~{ref_reps} reps for {plateau_count} sessions."
+            if alt_name:
+                reason += f" Try swapping to {alt_name}."
+            else:
+                reason += " Consider a variation or a different progression."
             return ProgressionSuggestion(
                 type="exercise_swap",
                 current=current,
                 suggested=current,
-                reason=f"You've been stuck at ~{ref_reps} reps for {plateau_count} sessions. Consider a variation or a different progression.",
+                reason=reason,
                 confidence=0.65,
+                new_exercise_id=alt_id,
+                new_exercise_name=alt_name,
             )
 
     return None
@@ -504,9 +585,9 @@ def analyze_exercise_progression(
     if ex_type == "cardio":
         return _analyze_cardio(history, exercise, routine_config)
     elif exercise.is_bodyweight:
-        return _analyze_bodyweight(history, exercise, routine_config, experience_tier, db)
+        return _analyze_bodyweight(history, exercise, routine_config, experience_tier, db, routine, day_index)
     else:
-        return _analyze_strength(history, exercise, routine_config, experience_tier)
+        return _analyze_strength(history, exercise, routine_config, experience_tier, db, routine, day_index)
 
 
 def analyze_routine_day(

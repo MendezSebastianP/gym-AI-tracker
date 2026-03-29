@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -17,6 +17,8 @@ class Session(Base):
     duration_seconds = Column(Integer, nullable=True)  # Tracked session duration (user-editable)
     locked_exercises = Column(JSON, default=[])
     streak_eligible_at = Column(DateTime(timezone=True), nullable=True)  # Set once on first completion, never modified
+    effort_score = Column(Float, nullable=True)
+    self_rated_effort = Column(Integer, nullable=True)  # 1-10 user rating at session end
 
     user = relationship("User")
     routine = relationship("Routine")
@@ -36,6 +38,8 @@ class Set(Base):
     distance_km = Column(Float, nullable=True)
     avg_pace = Column(Float, nullable=True)       # seconds per km
     incline = Column(Float, nullable=True)        # incline % or resistance level
+    set_type = Column(String, default="normal", server_default="normal")  # normal | warmup | drop
+    to_failure = Column(Boolean, default=False, server_default="false")
     completed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     session = relationship("Session", back_populates="sets")

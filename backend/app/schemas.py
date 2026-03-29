@@ -35,6 +35,7 @@ class UserResponse(UserBase):
     level: int = 1
     experience: int = 0
     currency: int = 0
+    onboarding_progress: Optional[Dict[str, Any]] = None
     model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):
@@ -44,6 +45,7 @@ class UserUpdate(BaseModel):
     gender: Optional[str] = None
     priorities: Optional[Dict[str, Any]] = None
     settings: Optional[Dict[str, Any]] = None
+    onboarding_progress: Optional[Dict[str, Any]] = None
 
 # Exercise
 class ExerciseBase(BaseModel):
@@ -96,6 +98,8 @@ class SetBase(BaseModel):
     distance_km: Optional[float] = None
     avg_pace: Optional[float] = None
     incline: Optional[float] = None
+    set_type: Optional[str] = "normal"
+    to_failure: Optional[bool] = False
     completed_at: Optional[datetime] = None
 
 class SetCreate(SetBase):
@@ -112,6 +116,8 @@ class SetUpdate(BaseModel):
     distance_km: Optional[float] = None
     avg_pace: Optional[float] = None
     incline: Optional[float] = None
+    set_type: Optional[str] = "normal"
+    to_failure: Optional[bool] = False
     completed_at: Optional[datetime] = None
 
 class SetResponse(SetBase):
@@ -132,6 +138,7 @@ class SessionCreate(SessionBase):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
+    self_rated_effort: Optional[int] = None
 
 class CompleteSetItem(BaseModel):
     exercise_id: int
@@ -143,6 +150,8 @@ class CompleteSetItem(BaseModel):
     distance_km: Optional[float] = None
     avg_pace: Optional[float] = None
     incline: Optional[float] = None
+    set_type: Optional[str] = "normal"
+    to_failure: Optional[bool] = False
     completed_at: Optional[datetime] = None
 
 class SessionCompleteBulk(BaseModel):
@@ -150,6 +159,7 @@ class SessionCompleteBulk(BaseModel):
     notes: Optional[str] = None
     duration_seconds: Optional[int] = None
     bodyweight_kg: Optional[float] = None
+    self_rated_effort: Optional[int] = None
     sets: List[CompleteSetItem] = []
 
 class SessionUpdate(SessionBase):
@@ -157,6 +167,7 @@ class SessionUpdate(SessionBase):
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
     bodyweight_kg: Optional[float] = None
+    self_rated_effort: Optional[int] = None
 
 class SessionResponse(SessionBase):
     id: int
@@ -167,6 +178,8 @@ class SessionResponse(SessionBase):
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
     bodyweight_kg: Optional[float] = None
+    effort_score: Optional[float] = None
+    self_rated_effort: Optional[int] = None
     sets: List[SetResponse] = []
     model_config = ConfigDict(from_attributes=True)
 

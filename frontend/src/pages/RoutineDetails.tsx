@@ -102,10 +102,20 @@ export default function RoutineDetails() {
 	const getExerciseContext = (ex: any) => {
 		if (exercisesMap && ex.exercise_id && exercisesMap.has(ex.exercise_id)) {
 			const data = exercisesMap.get(ex.exercise_id);
-			if (!data.equipment && !data.muscle) return null;
+			const equipmentLabel = data.equipment || '';
+			const isBodyweightExercise = new Set([
+				'None (Bodyweight)',
+				'Bodyweight',
+				t('None (Bodyweight)'),
+				t('Bodyweight'),
+			]).has(equipmentLabel);
+			const contextLabel = isBodyweightExercise
+				? t('Bodyweight')
+				: [equipmentLabel, data.muscle].filter(Boolean).join(' · ');
+			if (!contextLabel) return null;
 			return (
 				<span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '4px', color: 'var(--text-tertiary)' }}>
-					{[data.equipment, data.muscle].filter(Boolean).join(' · ')}
+					{contextLabel}
 				</span>
 			);
 		}

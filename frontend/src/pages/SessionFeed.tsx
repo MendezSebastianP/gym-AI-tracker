@@ -36,6 +36,7 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 	);
 
 	const [exercises, setExercises] = useState<any[]>([]);
+	const [expandedExtraSets, setExpandedExtraSets] = useState<Record<number, boolean>>({});
 
 	const routine = allRoutines.find((r: any) => r.id === session?.routine_id);
 
@@ -191,6 +192,11 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 				{exercises.map((ex: any, i: number) => {
 					const exSets = (setsByExercise.get(ex.exercise_id) || []).sort((a: any, b: any) => a.set_number - b.set_number);
 					if (exSets.length === 0) return null;
+					const normalSets = exSets.filter((s: any) => (s.set_type || 'normal') === 'normal');
+					const extraSets = exSets.filter((s: any) => (s.set_type || 'normal') !== 'normal');
+					const showExtraSets = !!expandedExtraSets[ex.exercise_id];
+					const dropCount = extraSets.filter((s: any) => (s.set_type || 'normal') === 'drop').length;
+					const warmupCount = extraSets.filter((s: any) => (s.set_type || 'normal') === 'warmup').length;
 
 					return (
 						<div key={i} style={{
@@ -214,13 +220,14 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 								</button>
 							</div>
 							<div style={{ display: 'grid', gap: '3px' }}>
-								{exSets.map((s: any) => (
+								{normalSets.map((s: any, normalIdx: number) => (
 									<div key={s.id} style={{
 										display: 'flex', alignItems: 'center', gap: '8px',
 										fontSize: '12px', color: 'var(--text-secondary)',
 										padding: '2px 0'
 									}}>
 										<CheckCircle size={12} color="var(--success)" style={{ flexShrink: 0 }} />
+										<span style={{ minWidth: '16px', fontSize: '11px', fontWeight: 700, color: 'var(--text-tertiary)' }}>{normalIdx + 1}.</span>
 										{ex.type === 'Cardio' && s.distance_km ? (
 											<span>{s.distance_km} km in {formatDurationMMSS(s.duration_sec || 0)}{s.distance_km > 0 && s.duration_sec > 0 ? ` (${formatPace(s.duration_sec / s.distance_km)} /km)` : ''}</span>
 										) : ex.type === 'Time' ? (
@@ -233,6 +240,82 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 										)}
 									</div>
 								))}
+
+								{extraSets.length > 0 && (
+									<div style={{ marginTop: '4px' }}>
+										<button
+											className="btn btn-ghost"
+											onClick={() => setExpandedExtraSets((prev) => ({ ...prev, [ex.exercise_id]: !prev[ex.exercise_id] }))}
+											style={{
+												width: '100%',
+												padding: '6px 8px',
+												fontSize: '11px',
+												border: '1px solid rgba(148,163,184,0.35)',
+												background: 'rgba(148,163,184,0.08)',
+												color: 'var(--text-secondary)',
+												display: 'flex',
+												alignItems: 'center',
+												justifyContent: 'space-between',
+												gap: '8px',
+											}}
+										>
+											<span>
+												{showExtraSets ? t('Hide extra sets') : t('Show extra sets')} ({extraSets.length})
+												{dropCount > 0 ? ` · ${dropCount} drop` : ''}
+												{warmupCount > 0 ? ` · ${warmupCount} warmup` : ''}
+											</span>
+											{showExtraSets ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+										</button>
+										{showExtraSets && (
+											<div style={{ display: 'grid', gap: '3px', marginTop: '6px' }}>
+												{extraSets.map((s: any, extraIdx: number) => {
+													const setType = s.set_type || 'normal';
+													const isDrop = setType === 'drop';
+													const tagLabel = isDrop ? 'DROP' : 'WARMUP';
+													return (
+														<div key={s.id} style={{
+															display: 'flex',
+															alignItems: 'center',
+															gap: '8px',
+															fontSize: '12px',
+															color: 'var(--text-secondary)',
+															padding: '2px 0',
+														}}>
+															<span
+																style={{
+																	minWidth: '52px',
+																	display: 'inline-flex',
+																	alignItems: 'center',
+																	justifyContent: 'center',
+																	padding: '2px 6px',
+																	borderRadius: '999px',
+																	fontSize: '10px',
+																	fontWeight: 800,
+																	letterSpacing: '0.4px',
+																	border: isDrop ? '1px solid rgba(245,158,11,0.6)' : '1px solid rgba(96,165,250,0.6)',
+																	background: isDrop ? 'rgba(245,158,11,0.14)' : 'rgba(96,165,250,0.14)',
+																	color: isDrop ? '#fbbf24' : '#93c5fd',
+																}}
+															>
+																{tagLabel} {extraIdx + 1}
+															</span>
+															{ex.type === 'Cardio' && s.distance_km ? (
+																<span>{s.distance_km} km in {formatDurationMMSS(s.duration_sec || 0)}{s.distance_km > 0 && s.duration_sec > 0 ? ` (${formatPace(s.duration_sec / s.distance_km)} /km)` : ''}</span>
+															) : ex.type === 'Time' ? (
+																<span>{s.duration_sec || 0}s</span>
+															) : (
+																<>
+																	<span style={{ minWidth: '50px' }}>{s.weight_kg != null ? `${s.weight_kg} kg` : 'NA'}</span>
+																	<span>× {s.reps} reps</span>
+																</>
+															)}
+														</div>
+													);
+												})}
+											</div>
+										)}
+									</div>
+								)}
 							</div>
 						</div>
 					);

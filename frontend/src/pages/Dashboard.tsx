@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { db } from '../db/schema';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useAuthStore } from '../store/authStore';
 import {
     BarChart2, Flame, Dumbbell, Calendar, TrendingUp,
     ChevronRight, Star, HelpCircle, X, User as UserIcon, Scale, Activity, Shield
@@ -45,6 +46,7 @@ const MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Fu
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
+    const { user } = useAuthStore();
     const [progressData, setProgressData] = useState<ProgressPoint[]>([]);
     const [loading, setLoading] = useState(true);
     const [demoMode, setDemoMode] = useState(false);
@@ -56,6 +58,7 @@ export default function Dashboard() {
     const [activeCardioTab, setActiveCardioTab] = useState<number | 'other' | null>(null);
     const [otherExerciseId, setOtherExerciseId] = useState<number | null>(null);
     const [cardioByExercise, setCardioByExercise] = useState<Record<number, any>>({});
+    const [effortTrend, setEffortTrend] = useState<Array<{ index: number; effort: number; date?: string }>>([]);
 
     // Joker / streak-at-risk state
     const [jokerTokens, setJokerTokens] = useState(0);
@@ -81,7 +84,8 @@ export default function Dashboard() {
     const overview = useLiveQuery(async () => {
         const sessions = await db.sessions.filter((s: any) => !!s.completed_at).toArray();
         const ids = sessions.map((s: any) => s.id!).filter(Boolean);
-        const sets = await db.sets.where('session_id').anyOf(ids).toArray();
+        const allSets = await db.sets.where('session_id').anyOf(ids).toArray();
+        const sets = allSets.filter((s: any) => (s.set_type || 'normal') === 'normal');
         const exAll = await db.exercises.toArray();
         const exMap = new Map(exAll.map((e: any) => [e.id, e]));
 
@@ -110,6 +114,8 @@ export default function Dashboard() {
 
         return { totalSessions: sessions.length, totalVolume, streakWeeks: streak };
     }, []);
+
+    const effortTrackingEnabled = !!user?.settings?.effort_tracking_enabled;
 
     // Fetch joker tokens + detect streak-at-risk (Thursday+, no sessions this week, streak > 0)
     useEffect(() => {
@@ -232,6 +238,67 @@ export default function Dashboard() {
             setCardioByExercise(prev => ({ ...prev, [exId]: res.data }));
         }).catch(() => {});
     }, [activeCardioTab, otherExerciseId, demoMode]);
+
+    // Effort trend (demo uses backend sample; normal mode uses local sessions)
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadEffortTrend = async () => {
+            if (!effortTrackingEnabled) {
+                if (!cancelled) setEffortTrend([]);
+                return;
+            }
+
+            if (demoMode) {
+                try {
+                    const res = await api.get('/stats/effort/demo?limit=12');
+                    const fromApi = Array.isArray(res.data) ? res.data : [];
+                    const demoFallback = [
+                        { index: 1, effort: 54, date: '2025-10-12' },
+                        { index: 2, effort: 61, date: '2025-10-19' },
+                        { index: 3, effort: 58, date: '2025-10-27' },
+                        { index: 4, effort: 66, date: '2025-11-03' },
+                        { index: 5, effort: 72, date: '2025-11-10' },
+                        { index: 6, effort: 69, date: '2025-11-18' },
+                        { index: 7, effort: 76, date: '2025-11-25' },
+                        { index: 8, effort: 81, date: '2025-12-02' },
+                    ];
+                    if (!cancelled) setEffortTrend(fromApi.length > 0 ? fromApi : demoFallback);
+                } catch {
+                    if (!cancelled) {
+                        setEffortTrend([
+                            { index: 1, effort: 54, date: '2025-10-12' },
+                            { index: 2, effort: 61, date: '2025-10-19' },
+                            { index: 3, effort: 58, date: '2025-10-27' },
+                            { index: 4, effort: 66, date: '2025-11-03' },
+                            { index: 5, effort: 72, date: '2025-11-10' },
+                            { index: 6, effort: 69, date: '2025-11-18' },
+                            { index: 7, effort: 76, date: '2025-11-25' },
+                            { index: 8, effort: 81, date: '2025-12-02' },
+                        ]);
+                    }
+                }
+                return;
+            }
+
+            const completedSessions = await db.sessions
+                .filter((s: any) => !!s.completed_at && typeof (s as any).effort_score === 'number')
+                .toArray();
+
+            const mapped = completedSessions
+                .sort((a: any, b: any) => new Date(a.completed_at!).getTime() - new Date(b.completed_at!).getTime())
+                .slice(-12)
+                .map((s: any, i: number) => ({
+                    index: i + 1,
+                    effort: Math.round((s.effort_score || 0) * 10) / 10,
+                }));
+
+            if (!cancelled) setEffortTrend(mapped);
+        };
+
+        loadEffortTrend();
+        return () => { cancelled = true; };
+    }, [demoMode, effortTrackingEnabled]);
 
     const lineColor = demoMode ? '#FFB347' : 'var(--primary)';
     const hasData = progressData.length > 0;
@@ -549,6 +616,34 @@ export default function Dashboard() {
                     </ResponsiveContainer>
                 )}
             </div>
+
+            {effortTrackingEnabled && effortTrend && effortTrend.length > 0 && (
+                <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <Activity size={16} color="#22c55e" />
+                        <h3 style={{ fontWeight: 600, fontSize: '15px' }}>Effort Trend</h3>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
+                        {demoMode ? 'Demo effort trend example (0-100)' : `Last ${effortTrend.length} sessions (0-100)`}
+                    </div>
+                    <ResponsiveContainer width="100%" height={170}>
+                        <LineChart data={effortTrend}>
+                            <XAxis dataKey="index" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
+                            <YAxis domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={30} />
+                            <Tooltip
+                                contentStyle={{
+                                    background: 'rgba(10,10,15,0.95)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: 8,
+                                    fontSize: 12,
+                                }}
+                                formatter={(v: any) => [`${v}`, 'Effort']}
+                            />
+                            <Line type="monotone" dataKey="effort" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 2 }} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+            )}
 
             {/* Body Weight Chart */}
             <div className="card" style={{ marginTop: '20px', padding: '16px' }}>

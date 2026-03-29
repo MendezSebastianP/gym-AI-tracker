@@ -46,6 +46,9 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 
 	// Swipe refs
 	const startVal = useRef(0);
+	const swipeCurrentVal = useRef(0);
+	const swipeAccumPx = useRef(0);
+	const swipeSteps = useRef(0);
 	const lastY = useRef(0);
 	const lastTime = useRef(0);
 	const velocity = useRef(0);
@@ -79,6 +82,9 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 		hasMoved.current = false;
 		gestureDecided.current = false;
 		startVal.current = value;
+		swipeCurrentVal.current = value;
+		swipeAccumPx.current = 0;
+		swipeSteps.current = 0;
 		velocity.current = 0;
 		setSwipeDelta(0);
 	}, [value]);
@@ -104,31 +110,47 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 		if (!gestureDecided.current) return;
 
 		// ── Swipe logic ──────────────────────────────────────────
-		if (mode === 'swipe' || !gestureDecided.current) {
-			const totalDy = touchStartY.current - clientY;
-
-			const now = Date.now();
-			const dt = now - lastTime.current;
-			if (dt > 0) {
-				const instantVel = (lastY.current - clientY) / dt;
-				velocity.current = velocity.current * 0.7 + instantVel * 0.3;
-			}
-			lastY.current = clientY;
-			lastTime.current = now;
-
-			// Adaptive: slow = precise, fast = covers ground
-			const speed = Math.abs(velocity.current);
-			let effectivePx = PX_PER_STEP;
-			if (speed < 0.2) effectivePx = PX_PER_STEP * 1.5;
-			else if (speed > 1.0) effectivePx = PX_PER_STEP * 0.6;
-
-			const steps = Math.round(totalDy / effectivePx);
-			const totalDelta = steps * step;
-			const newVal = Math.max(min, Math.min(max, +(startVal.current + totalDelta).toFixed(2)));
-			onChange(newVal);
-			setSwipeDelta(+(newVal - startVal.current).toFixed(2));
+		// Incremental accumulation keeps direction stable and avoids jitter near step boundaries.
+		const rawDy = lastY.current - clientY;
+		const now = Date.now();
+		const dt = now - lastTime.current;
+		if (dt > 0) {
+			const instantVel = rawDy / dt;
+			velocity.current = velocity.current * 0.72 + instantVel * 0.28;
 		}
-	}, [mode, onChange, min, max, step, PX_PER_STEP]);
+		lastY.current = clientY;
+		lastTime.current = now;
+
+		const speed = Math.abs(velocity.current);
+		const gain = Math.min(2.3, 1.08 + speed * 1.8); // Faster swipe = covers more ground
+		const pxPerStep = Math.max(6, PX_PER_STEP * 0.9);
+		swipeAccumPx.current += rawDy * gain;
+
+		const stepDelta = swipeAccumPx.current > 0
+			? Math.floor(swipeAccumPx.current / pxPerStep)
+			: Math.ceil(swipeAccumPx.current / pxPerStep);
+
+		if (stepDelta !== 0) {
+			swipeAccumPx.current -= stepDelta * pxPerStep;
+			swipeSteps.current += stepDelta;
+		}
+
+		const rawTarget = startVal.current + swipeSteps.current * step;
+		const clamped = Math.max(min, Math.min(max, +rawTarget.toFixed(2)));
+
+		// If clamped at boundaries, re-sync accumulator to prevent bounce/jitter.
+		const clampedSteps = Math.round((clamped - startVal.current) / step);
+		if (clampedSteps !== swipeSteps.current) {
+			swipeSteps.current = clampedSteps;
+			swipeAccumPx.current = 0;
+		}
+
+		if (clamped !== swipeCurrentVal.current) {
+			swipeCurrentVal.current = clamped;
+			onChange(clamped);
+		}
+		setSwipeDelta(+(clamped - startVal.current).toFixed(2));
+	}, [onChange, min, max, step, PX_PER_STEP]);
 
 	// Flag to select all text after React renders the new editText value
 	const shouldSelectAll = useRef(false);
@@ -180,7 +202,7 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 			if (Math.abs(vel) > 0.3) {
 				const cappedVel = Math.sign(vel) * Math.min(Math.abs(vel), 3);
 				let momentumVel = cappedVel * 4;
-				let currentVal = value;
+				let currentVal = swipeCurrentVal.current;
 
 				const tick = () => {
 					momentumVel *= 0.88;
@@ -192,6 +214,7 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 					}
 					const stepDelta = Math.round(momentumVel) * step;
 					currentVal = Math.max(min, Math.min(max, +(currentVal + stepDelta).toFixed(2)));
+					swipeCurrentVal.current = currentVal;
 					onChange(currentVal);
 					momentumRef.current = requestAnimationFrame(tick);
 				};
@@ -201,7 +224,7 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 				setMode('idle');
 			}
 		}
-	}, [mode, value, onChange, min, max, step]);
+	}, [mode, onChange, min, max, step]);
 
 	// ── Drum drag handlers (when drum is open) ───────────────────
 	const onDrumDragStart = useCallback((clientY: number) => {

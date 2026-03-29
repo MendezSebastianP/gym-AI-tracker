@@ -30,6 +30,8 @@ export default function SetLogger({
 			set_number: nextSetNumber,
 			weight_kg: weight,
 			reps: reps,
+			set_type: 'normal',
+			to_failure: false,
 			completed_at: new Date().toISOString(),
 			syncStatus: 'created'
 		});

@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-export default function LanguageSwitcher() {
+export default function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
 	const { i18n } = useTranslation();
 
 	const changeLanguage = (lng: string) => {
@@ -8,32 +8,45 @@ export default function LanguageSwitcher() {
 		localStorage.setItem('i18nextLng', lng);
 	};
 
+	const currentLanguage = i18n.language.split('-')[0];
+
 	return (
-		<div style={{ display: 'flex', gap: '8px', zIndex: 100 }}>
+		<div
+			style={{
+				display: 'inline-flex',
+				gap: compact ? '4px' : '8px',
+				padding: compact ? '4px' : '0',
+				borderRadius: '999px',
+				background: compact ? 'color-mix(in srgb, var(--bg-secondary) 92%, transparent)' : 'transparent',
+				border: compact ? '1px solid var(--border)' : 'none',
+				zIndex: 100,
+			}}
+		>
 			{['en', 'es', 'fr'].map(lng => (
 				<button
 					key={lng}
-					onClick={() => {
-						if (lng === 'en') changeLanguage(lng);
-					}}
-					disabled={lng !== 'en'}
+					onClick={() => changeLanguage(lng)}
 					style={{
-						background: 'none',
-						border: 'none',
-						color: i18n.language === lng ? 'var(--primary)' : 'var(--text-secondary)',
-						fontWeight: i18n.language === lng ? 'bold' : 'normal',
-						cursor: lng === 'en' ? 'pointer' : 'not-allowed',
-						fontSize: '14px',
-						padding: '4px',
-						opacity: lng === 'en' ? 1 : 0.5,
+						background: currentLanguage === lng
+							? 'color-mix(in srgb, var(--primary-glow) 82%, transparent)'
+							: 'transparent',
+						border: currentLanguage === lng
+							? '1px solid var(--primary-border)'
+							: '1px solid transparent',
+						color: currentLanguage === lng ? 'var(--primary)' : 'var(--text-secondary)',
+						fontWeight: currentLanguage === lng ? 700 : 600,
+						cursor: 'pointer',
+						fontSize: compact ? '12px' : '14px',
+						padding: compact ? '6px 9px' : '4px',
+						borderRadius: compact ? '999px' : '6px',
 						display: 'flex',
 						alignItems: 'center',
-						gap: '4px'
+						gap: '4px',
+						transition: 'background 0.2s ease, color 0.2s ease, border-color 0.2s ease',
 					}}
-					title={lng !== 'en' ? 'Coming soon' : undefined}
+					aria-label={`Switch language to ${lng.toUpperCase()}`}
 				>
 					{lng.toUpperCase()}
-					{lng !== 'en' && <span style={{ fontSize: '10px', opacity: 0.7 }}>(Soon)</span>}
 				</button>
 			))}
 		</div>

@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.user_preference import UserPreference
 from pydantic import BaseModel
 from typing import Optional, List, Any
+from app.onboarding import apply_questionnaire_level
 
 router = APIRouter(prefix="/api/preferences", tags=["preferences"])
 
@@ -67,6 +68,9 @@ def update_preferences(
     update_data = prefs.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(pref, key, value)
+
+    if prefs.context_level is not None:
+        apply_questionnaire_level(current_user, prefs.context_level)
         
     db.commit()
     db.refresh(pref)

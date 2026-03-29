@@ -66,7 +66,6 @@ export default function GamificationToast() {
 
 	const isJokerMilestone = reward.joker_awarded;
 	const isLevelUp = reward.leveled_up;
-	const isSpecial = isJokerMilestone || isLevelUp;
 
 	return (
 		<div
@@ -252,7 +251,7 @@ export default function GamificationToast() {
 				</div>
 			)}
 
-			{/* Coins earned on level up */}
+				{/* Coins earned on level up */}
 			{isLevelUp && (
 				<div style={{
 					marginTop: '8px', fontSize: '12px', color: 'var(--gold)',

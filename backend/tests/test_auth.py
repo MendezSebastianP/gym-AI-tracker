@@ -78,3 +78,36 @@ class TestUpdateMe:
         r = client.put("/api/auth/me", json={"settings": {"timer_mode": "timer", "language": "es"}}, headers=headers)
         assert r.status_code == 200
         assert r.json()["settings"]["timer_mode"] == "timer"
+
+    def test_update_settings_cannot_overwrite_server_managed_keys(self, client):
+        headers = register_and_login(client, "settings-managed@example.com")
+        # Seed a redeemed code via real flow
+        r1 = client.post("/api/gamification/shop/promo", json={"code": "PACHO"}, headers=headers)
+        assert r1.status_code == 200
+
+        # Attempt to clear redeemed_codes via /auth/me should be ignored
+        r2 = client.put(
+            "/api/auth/me",
+            json={"settings": {"language": "fr", "redeemed_codes": []}},
+            headers=headers,
+        )
+        assert r2.status_code == 200
+        assert "PACHO" in (r2.json().get("settings", {}).get("redeemed_codes", []))
+
+    def test_onboarding_progress_true_flags_ignored_in_profile_update(self, client):
+        headers = register_and_login(client, "onboarding-secure@example.com")
+        before = client.get("/api/auth/me", headers=headers).json()
+
+        r = client.put(
+            "/api/auth/me",
+            json={"onboarding_progress": {"tutorial_complete": True, "questionnaire_l1": True}},
+            headers=headers,
+        )
+        assert r.status_code == 200
+        after = r.json()
+
+        # Client cannot force reward-bearing onboarding completions anymore.
+        assert after["currency"] == before["currency"]
+        progress = after.get("onboarding_progress", {})
+        assert progress.get("tutorial_complete") is not True
+        assert progress.get("questionnaire_l1") is not True

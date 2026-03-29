@@ -12,6 +12,7 @@ from app.auth import (
 )
 from app.dependencies import get_current_user
 from app.limiter import limiter
+from app.onboarding import mark_onboarding_step, merge_onboarding_progress
 
 router = APIRouter(
     prefix="/api/auth",
@@ -21,6 +22,27 @@ router = APIRouter(
 # Dummy hash used in login to keep response time constant regardless of whether
 # the email exists — prevents timing-based email enumeration (SEC-05)
 _DUMMY_HASH = "$2b$12$fuDzP9mAD1GLGh5ZLU0g0uMH3/UtUNT95LJgs8k02GhpapoYN1Lge"
+
+# Keys managed by backend economy/shop flows and never writable via generic /auth/me updates
+_SERVER_MANAGED_SETTINGS_KEYS = {
+    "purchased_themes",
+    "purchased_skins",
+    "redeemed_codes",
+    "active_theme",
+    "active_streak_skin",
+}
+
+
+def _merge_safe_user_settings(existing: dict | None, patch: dict | None) -> dict:
+    base = dict(existing or {})
+    if not isinstance(patch, dict):
+        return base
+
+    for key, value in patch.items():
+        if key in _SERVER_MANAGED_SETTINGS_KEYS:
+            continue
+        base[key] = value
+    return base
 
 
 def _issue_tokens(db_user: User, db: Session) -> dict:
@@ -118,7 +140,20 @@ def logout(db: Session = Depends(get_db), current_user: User = Depends(get_curre
 
 
 @router.get("/me", response_model=UserResponse)
-def read_users_me(current_user: User = Depends(get_current_user)):
+def read_users_me(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Backfill onboarding step for users who already have routines
+    # but were created before onboarding tracking was introduced.
+    progress = getattr(current_user, "onboarding_progress", {}) or {}
+    if not bool(progress.get("first_routine")):
+        from app.models.routine import Routine
+        has_routines = db.query(Routine.id).filter(Routine.user_id == current_user.id).first() is not None
+        if has_routines:
+            mark_onboarding_step(current_user, "first_routine")
+            db.commit()
+            db.refresh(current_user)
     return current_user
 
 @router.put("/me", response_model=UserResponse)
@@ -127,18 +162,37 @@ def update_user_me(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    profile_touched = False
+
     if user_update.weight is not None:
         current_user.weight = user_update.weight
+        profile_touched = True
     if user_update.height is not None:
         current_user.height = user_update.height
+        profile_touched = True
     if user_update.age is not None:
         current_user.age = user_update.age
+        profile_touched = True
     if user_update.gender is not None:
         current_user.gender = user_update.gender
+        profile_touched = True
     if user_update.priorities is not None:
         current_user.priorities = user_update.priorities
     if user_update.settings is not None:
-        current_user.settings = user_update.settings
+        current_user.settings = _merge_safe_user_settings(current_user.settings, user_update.settings)
+    if user_update.onboarding_progress is not None:
+        # Security hardening: only allow client-driven downgrades (False) for legacy repair flows.
+        # Reward-bearing step completions must come from trusted server events.
+        safe_patch = {}
+        raw_patch = user_update.onboarding_progress
+        if isinstance(raw_patch, dict):
+            for key, value in raw_patch.items():
+                if isinstance(value, bool) and value is False:
+                    safe_patch[key] = False
+        if safe_patch:
+            merge_onboarding_progress(current_user, safe_patch)
+    if profile_touched:
+        mark_onboarding_step(current_user, "profile")
 
     db.commit()
     db.refresh(current_user)

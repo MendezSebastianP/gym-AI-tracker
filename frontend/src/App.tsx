@@ -155,6 +155,8 @@ function App() {
 								} else {
 									await db.sets.update(localSetId, {
 										...setData,
+										set_type: (setData as any).set_type || 'normal',
+										to_failure: !!(setData as any).to_failure,
 										server_id: setServerId,
 										session_id: localSessionId,
 										syncStatus: 'synced'
@@ -163,6 +165,8 @@ function App() {
 							} else {
 								await db.sets.add({
 									...setData,
+									set_type: (setData as any).set_type || 'normal',
+									to_failure: !!(setData as any).to_failure,
 									server_id: setServerId,
 									session_id: localSessionId,
 									syncStatus: 'synced'

@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Flame } from 'lucide-react';
 import CoinIcon from '../components/icons/CoinIcon';
 import {
-	WeekSlot, FlameState, OrbCfg,
 	STYLES, SLOT_SCALES, CRYSTAL_CLIP, PX_COLORS,
 	CFG_C1, CFG_C2, CFG_C3,
 	getState, fmtDate,
 	FlameRow, FlameSlotA, FlameSlotB, FlameSlotOrb, FlameSlotD,
 } from '../components/StreakFlames';
+import type { WeekSlot, FlameState, OrbCfg } from '../components/StreakFlames';
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 

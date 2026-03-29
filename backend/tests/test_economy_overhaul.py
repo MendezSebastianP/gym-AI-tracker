@@ -258,6 +258,30 @@ class TestRoutineCompletion:
         assert gam.get("routine_completed") is not True
         assert gam.get("routine_bonus", 0) == 0
 
+    def test_delete_completed_session_reverts_routine_bonus_and_level(self, client):
+        headers = register_and_login(client, "delete-rollback@example.com")
+        routine_id = _create_routine(client, headers, num_days=1)
+        ex_id = _create_exercise(client, headers, "RC rollback")
+
+        me_before = client.get("/api/auth/me", headers=headers).json()
+        result = _complete_session(client, headers, ex_id, routine_id=routine_id, day_index=0)
+        gam = result.get("gamification", {})
+        session_id = result["id"]
+        xp_gained = gam.get("xp_gained", 0)
+        assert xp_gained == 150  # base 50 + routine bonus 100 (first completed routine cycle)
+
+        me_after_complete = client.get("/api/auth/me", headers=headers).json()
+        assert me_after_complete["level"] >= me_before["level"]
+
+        r_del = client.delete(f"/api/sessions/{session_id}", headers=headers)
+        assert r_del.status_code == 200
+        assert r_del.json()["xp_removed"] == xp_gained
+
+        me_after_delete = client.get("/api/auth/me", headers=headers).json()
+        assert me_after_delete["level"] == me_before["level"]
+        assert me_after_delete["experience"] == me_before["experience"]
+        assert me_after_delete["currency"] == me_before["currency"]
+
 
 # ── Streak check-in rewards ───────────────────────────────────────────────────
 

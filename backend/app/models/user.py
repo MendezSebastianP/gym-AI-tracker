@@ -28,8 +28,8 @@ class User(Base):
     currency = Column(Integer, default=100, server_default="100")
     streak_reward_week = Column(String, nullable=True)  # ISO week e.g. "2026-W13"
     joker_tokens = Column(Integer, default=0, server_default="0")
+    onboarding_progress = Column(JSON, default={}, server_default="{}")
 
     @property
     def is_admin(self) -> bool:
         return self.email == "admon0208"
-

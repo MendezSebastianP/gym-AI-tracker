@@ -74,6 +74,8 @@ export const processSyncQueue = async () => {
 						distance_km: set.distance_km,
 						avg_pace: set.avg_pace,
 						incline: set.incline,
+						set_type: set.set_type || 'normal',
+						to_failure: !!set.to_failure,
 						completed_at: set.completed_at,
 					});
 					await db.sets.update(set.id!, {
@@ -89,6 +91,8 @@ export const processSyncQueue = async () => {
 						distance_km: set.distance_km,
 						avg_pace: set.avg_pace,
 						incline: set.incline,
+						set_type: set.set_type || 'normal',
+						to_failure: !!set.to_failure,
 					});
 					await db.sets.update(set.id!, { syncStatus: 'synced' });
 				}
@@ -139,6 +143,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 				duration_seconds: session.duration_seconds || null,
 				locked_exercises: session.locked_exercises || [],
 				bodyweight_kg: session.bodyweight_kg || null,
+				self_rated_effort: session.self_rated_effort ?? null,
 			});
 			await db.sessions.update(session.id!, { syncStatus: 'synced' });
 			return serverId;
@@ -149,6 +154,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 				notes: session.notes,
 				duration_seconds: session.duration_seconds || null,
 				bodyweight_kg: session.bodyweight_kg || null,
+				self_rated_effort: session.self_rated_effort ?? null,
 				sets: sessionSets.map((s: any) => ({
 					exercise_id: s.exercise_id,
 					set_number: s.set_number,
@@ -159,6 +165,8 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 					distance_km: s.distance_km,
 					avg_pace: s.avg_pace,
 					incline: s.incline,
+					set_type: s.set_type || 'normal',
+					to_failure: !!s.to_failure,
 					completed_at: s.completed_at || session.completed_at
 				}))
 			};
@@ -173,12 +181,19 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 			}
 
 			// Mark everything synced locally
-			await db.sessions.update(session.id!, { syncStatus: 'synced' });
+			await db.sessions.update(session.id!, {
+				syncStatus: 'synced',
+				effort_score: finalRes.data?.effort_score ?? session.effort_score ?? null,
+			});
 
 			for (const s of sessionSets) {
 				if (finalRes.data?.sets) {
 					const serverSets = finalRes.data.sets;
-					const matchingServerSet = serverSets.find((srv: any) => srv.exercise_id === s.exercise_id && srv.set_number === s.set_number);
+					const matchingServerSet = serverSets.find((srv: any) =>
+						srv.exercise_id === s.exercise_id &&
+						srv.set_number === s.set_number &&
+						(srv.set_type || 'normal') === (s.set_type || 'normal')
+					);
 					if (matchingServerSet) {
 						await db.sets.update(s.id!, { syncStatus: 'synced', server_id: matchingServerSet.id });
 					} else {
@@ -200,6 +215,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 					locked_exercises: session.locked_exercises || [],
 					duration_seconds: session.duration_seconds || null,
 					bodyweight_kg: session.bodyweight_kg || null,
+					self_rated_effort: session.self_rated_effort ?? null,
 				});
 				await db.sessions.update(session.id!, { syncStatus: 'synced' });
 
@@ -226,6 +242,8 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 								distance_km: set.distance_km,
 								avg_pace: set.avg_pace,
 								incline: set.incline,
+								set_type: set.set_type || 'normal',
+								to_failure: !!set.to_failure,
 								completed_at: set.completed_at,
 							});
 							await db.sets.update(set.id!, {
@@ -240,6 +258,8 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 								distance_km: set.distance_km,
 								avg_pace: set.avg_pace,
 								incline: set.incline,
+								set_type: set.set_type || 'normal',
+								to_failure: !!set.to_failure,
 							});
 							await db.sets.update(set.id!, { syncStatus: 'synced' });
 						}
@@ -305,6 +325,8 @@ export const syncAllDataBeforeLogout = async () => {
 						distance_km: set.distance_km,
 						avg_pace: set.avg_pace,
 						incline: set.incline,
+						set_type: set.set_type || 'normal',
+						to_failure: !!set.to_failure,
 						completed_at: set.completed_at,
 					});
 					await db.sets.update(set.id!, {
@@ -320,6 +342,8 @@ export const syncAllDataBeforeLogout = async () => {
 						distance_km: set.distance_km,
 						avg_pace: set.avg_pace,
 						incline: set.incline,
+						set_type: set.set_type || 'normal',
+						to_failure: !!set.to_failure,
 					});
 					await db.sets.update(set.id!, { syncStatus: 'synced' });
 				}

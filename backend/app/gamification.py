@@ -60,6 +60,36 @@ def _count_weekly_xp_sessions(db: Session, user_id: int) -> int:
     ).scalar() or 0
 
 
+def _to_utc(dt: datetime | None) -> datetime:
+    if dt is None:
+        return datetime.now(timezone.utc)
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+def _get_week_boundaries_for(anchor: datetime) -> tuple[datetime, datetime]:
+    ts = _to_utc(anchor)
+    monday = ts - timedelta(days=ts.weekday())
+    monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    sunday = monday + timedelta(days=6, hours=23, minutes=59, seconds=59)
+    return monday, sunday
+
+
+def _count_weekly_xp_sessions_at(db: Session, user_id: int, anchor: datetime) -> int:
+    """
+    Count completed sessions in anchor's ISO week up to (and including) anchor time.
+    This approximates the "state at completion time" for rollback calculations.
+    """
+    monday, sunday = _get_week_boundaries_for(anchor)
+    ts = _to_utc(anchor)
+    return db.query(sa_func.count(SessionModel.id)).filter(
+        SessionModel.user_id == user_id,
+        SessionModel.streak_eligible_at.isnot(None),
+        SessionModel.streak_eligible_at >= monday,
+        SessionModel.streak_eligible_at <= sunday,
+        SessionModel.streak_eligible_at <= ts,
+    ).scalar() or 0
+
+
 def _streak_coins(streak_weeks: int) -> int:
     """Return coins for a given streak length based on tier table."""
     for min_week, coins in STREAK_TIERS:
@@ -162,13 +192,56 @@ def _check_routine_completion(db: Session, user_id: int, session_obj) -> bool:
     return False
 
 
+def _did_session_complete_routine_cycle(db: Session, user_id: int, session_obj: SessionModel | None) -> bool:
+    """
+    Determine whether this specific session would have completed its routine cycle
+    at its own completion time.
+    """
+    if not session_obj or not session_obj.routine_id or session_obj.day_index is None:
+        return False
+
+    from app.models.routine import Routine
+    from app.models.routine_completion import RoutineCompletion
+
+    routine = db.get(Routine, session_obj.routine_id)
+    if not routine or not routine.days:
+        return False
+
+    total_days = len(routine.days)
+    if total_days < 1:
+        return False
+
+    completed_at = _to_utc(session_obj.completed_at or session_obj.streak_eligible_at)
+    last_completion = db.query(RoutineCompletion).filter(
+        RoutineCompletion.user_id == user_id,
+        RoutineCompletion.routine_id == routine.id,
+        RoutineCompletion.completed_at < completed_at,
+    ).order_by(RoutineCompletion.completed_at.desc()).first()
+
+    q = db.query(SessionModel.day_index).filter(
+        SessionModel.user_id == user_id,
+        SessionModel.routine_id == routine.id,
+        SessionModel.completed_at.isnot(None),
+        SessionModel.completed_at <= completed_at,
+    )
+    if last_completion:
+        q = q.filter(SessionModel.completed_at > last_completion.completed_at)
+
+    completed_day_indices = {row[0] for row in q.all() if row[0] is not None}
+    expected_indices = set(range(total_days))
+    return completed_day_indices >= expected_indices and session_obj.day_index in expected_indices
+
+
 def _detect_prs(db: Session, user_id: int, session_id: int):
     """
     Compare each exercise in `session_id` against all previous sessions
     for this user.  Returns (rep_prs, weight_prs, total_pr_xp_gained).
     """
     # Get all sets in this session, grouped by exercise
-    current_sets = db.query(SetModel).filter(SetModel.session_id == session_id).all()
+    current_sets = db.query(SetModel).filter(
+        SetModel.session_id == session_id,
+        sa_func.coalesce(SetModel.set_type, "normal") == "normal",
+    ).all()
     if not current_sets:
         return 0, 0, 0
 
@@ -200,7 +273,8 @@ def _detect_prs(db: Session, user_id: int, session_id: int):
             sa_func.max(SetModel.weight_kg).label("max_weight")
         ).filter(
             SetModel.session_id.in_(prev_session_ids),
-            SetModel.exercise_id == ex_id
+            SetModel.exercise_id == ex_id,
+            sa_func.coalesce(SetModel.set_type, "normal") == "normal",
         ).first()
 
         prev_max_reps = prev_best.max_reps if prev_best and prev_best.max_reps else 0
@@ -212,7 +286,8 @@ def _detect_prs(db: Session, user_id: int, session_id: int):
         # Count how many historical sessions actually had this exercise to scale the PR reward
         prev_sessions_count = db.query(sa_func.count(sa_func.distinct(SetModel.session_id))).filter(
             SetModel.session_id.in_(prev_session_ids),
-            SetModel.exercise_id == ex_id
+            SetModel.exercise_id == ex_id,
+            sa_func.coalesce(SetModel.set_type, "normal") == "normal",
         ).scalar() or 0
 
         # Scaling multiplier: Starts at 1.0, increases by 0.05 per past session, caps at 5.0x base PR XP
@@ -262,6 +337,11 @@ def award_session_xp(db: Session, user: User, session_id: int) -> dict:
     rep_prs, weight_prs, pr_xp_gained = _detect_prs(db, user.id, session_id)
 
     session_obj = db.query(SessionModel).get(session_id)
+    effort_score = None
+    if session_obj:
+        from app.effort_score import compute_effort_score
+        effort_score = compute_effort_score(db, user.id, session_obj)
+        session_obj.effort_score = effort_score
 
     # Weekly XP cap: count completed sessions this week (including this one)
     weekly_sessions = _count_weekly_xp_sessions(db, user.id)
@@ -299,6 +379,8 @@ def award_session_xp(db: Session, user: User, session_id: int) -> dict:
 
     db.commit()
     db.refresh(user)
+    if session_obj:
+        db.refresh(session_obj)
 
     return {
         "xp_gained": xp_gained,
@@ -319,6 +401,7 @@ def award_session_xp(db: Session, user: User, session_id: int) -> dict:
         "streak_weeks": streak_weeks,
         "joker_awarded": joker_awarded,
         "joker_tokens": user.joker_tokens or 0,
+        "effort_score": effort_score,
     }
 
 def _week_str_to_monday(week_str: str) -> datetime:
@@ -446,13 +529,25 @@ def remove_session_xp(db: Session, user: User, session_id: int):
     BEFORE the session is physically deleted from the database so we can
     re-run the PR detection and know exactly how much XP it gave.
     """
-    # Recalculate what this session theoretically gave
+    session_obj = db.query(SessionModel).filter(
+        SessionModel.id == session_id,
+        SessionModel.user_id == user.id,
+    ).first()
+    if not session_obj or session_obj.completed_at is None:
+        return 0
+
+    # Recalculate this session's reward using completion-time aware rules.
     rep_prs, weight_prs, pr_xp_gained = _detect_prs(db, user.id, session_id)
 
-    base_xp = BASE_SESSION_XP
-    # Note: we don't try to figure out if it was capped at the time — just use base
+    cap_anchor = _to_utc(session_obj.streak_eligible_at or session_obj.completed_at)
+    weekly_sessions_at_completion = _count_weekly_xp_sessions_at(db, user.id, cap_anchor)
+    xp_capped = weekly_sessions_at_completion > WEEKLY_XP_CAP
 
-    xp_to_remove = base_xp + pr_xp_gained
+    base_xp = 0 if xp_capped else BASE_SESSION_XP
+    routine_completed = _did_session_complete_routine_cycle(db, user.id, session_obj)
+    routine_bonus = ROUTINE_COMPLETE_XP if (routine_completed and not xp_capped) else 0
+
+    xp_to_remove = base_xp + routine_bonus + pr_xp_gained
 
     user.experience -= xp_to_remove
 
@@ -465,6 +560,17 @@ def remove_session_xp(db: Session, user: User, session_id: int):
     # Floor at 0 if doing something weird down at level 1
     if user.level == 1 and user.experience < 0:
         user.experience = 0
+
+    # If this session closed a routine cycle, delete that completion marker too.
+    if routine_completed and session_obj.routine_id is not None:
+        from app.models.routine_completion import RoutineCompletion
+        completion = db.query(RoutineCompletion).filter(
+            RoutineCompletion.user_id == user.id,
+            RoutineCompletion.routine_id == session_obj.routine_id,
+            RoutineCompletion.completed_at >= _to_utc(session_obj.completed_at),
+        ).order_by(RoutineCompletion.completed_at.asc()).first()
+        if completion:
+            db.delete(completion)
 
     db.commit()
     return xp_to_remove
@@ -520,6 +626,7 @@ def _update_quest_progress(db: Session, user: User):
             ).join(SessionModel).filter(
                 SessionModel.user_id == user.id,
                 SessionModel.completed_at.isnot(None),
+                sa_func.coalesce(SetModel.set_type, "normal") != "warmup",
                 *date_filter,
             )
             total = q.scalar()

@@ -72,6 +72,30 @@ class TestSessions:
         assert r.status_code == 200
         assert r.json()["completed_at"] is not None
 
+    def test_cannot_reopen_completed_session(self, client):
+        headers = register_and_login(client, "reopen@example.com")
+        session = self._create_session(client, headers)
+
+        # First completion awards XP.
+        complete_at = _now_iso()
+        r1 = client.put(f"/api/sessions/{session['id']}", json={"completed_at": complete_at}, headers=headers)
+        assert r1.status_code == 200
+        assert r1.json().get("gamification", {}).get("xp_gained", 0) > 0
+
+        me_before = client.get("/api/auth/me", headers=headers).json()
+
+        # Reopening (completed_at -> null) must be rejected.
+        r2 = client.put(f"/api/sessions/{session['id']}", json={"completed_at": None}, headers=headers)
+        assert r2.status_code == 409
+
+        # Re-completing via update path must also be rejected once completed.
+        r3 = client.put(f"/api/sessions/{session['id']}", json={"completed_at": _now_iso()}, headers=headers)
+        assert r3.status_code == 409
+
+        me_after = client.get("/api/auth/me", headers=headers).json()
+        assert me_after["experience"] == me_before["experience"]
+        assert me_after["level"] == me_before["level"]
+
     def test_session_bodyweight_kg_persists(self, client):
         headers = register_and_login(client)
         session = self._create_session(client, headers)

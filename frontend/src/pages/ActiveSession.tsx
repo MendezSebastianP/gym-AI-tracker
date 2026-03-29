@@ -67,6 +67,13 @@ export default function ActiveSession() {
 	const { user } = useAuthStore();
 	const { t, i18n } = useTranslation();
 	const [showHelp, setShowHelp] = useState(false);
+	const [showEffortModal, setShowEffortModal] = useState(false);
+	const [effortRating, setEffortRating] = useState<number | null>(7);
+
+	const failureTrackingEnabled = !!user?.settings?.failure_tracking_enabled;
+	const dropSetsEnabled = !!user?.settings?.drop_sets_enabled;
+	const effortTrackingEnabled = !!user?.settings?.effort_tracking_enabled;
+	const maxDropSets = Math.max(1, Math.min(2, Number(user?.settings?.max_drop_sets) || 1));
 
 	const session = useLiveQuery(() => db.sessions.get(sessionId), [sessionId]);
 	const routine = useLiveQuery(
@@ -129,6 +136,18 @@ export default function ActiveSession() {
 			document.documentElement.style.overscrollBehavior = '';
 		};
 	}, []);
+
+	useEffect(() => {
+		if (!showEffortModal) return;
+		const prevBodyOverflow = document.body.style.overflow;
+		const prevHtmlOverflow = document.documentElement.style.overflow;
+		document.body.style.overflow = 'hidden';
+		document.documentElement.style.overflow = 'hidden';
+		return () => {
+			document.body.style.overflow = prevBodyOverflow;
+			document.documentElement.style.overflow = prevHtmlOverflow;
+		};
+	}, [showEffortModal]);
 
 	const saveBw = (val: number) => {
 		setBwValue(val);
@@ -232,14 +251,18 @@ export default function ActiveSession() {
 
 			for (const ex of missingExercises) {
 				const isLocked = ex.locked === true;
-				const prevExSets = previousSets.filter((s: any) => s.exercise_id === ex.exercise_id);
+				const prevExSets = previousSets
+					.filter((s: any) => s.exercise_id === ex.exercise_id)
+					.sort((a: any, b: any) => a.set_number - b.set_number);
+				const prevNormalSets = prevExSets.filter((s: any) => (s.set_type || 'normal') === 'normal');
 				const detail = detailsMap.get(ex.exercise_id);
 				const defaultWeightDb = (detail as any)?.default_weight_kg || 0;
 				const isTime = detail?.type === 'Time';
 				const isCardio = detail?.type === 'Cardio';
+				const targetSetCount = isCardio ? 1 : Math.max(1, ex.sets || prevNormalSets.length || 3);
 
 				if (isLocked) {
-					const numSets = isCardio ? 1 : (ex.sets || 3);
+					const numSets = targetSetCount;
 					const defaultReps = (isTime || isCardio) ? 0 : (typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10);
 					const defaultWeight = (isTime || isCardio) ? 0 : (ex.weight_kg || defaultWeightDb || 0);
 
@@ -255,15 +278,18 @@ export default function ActiveSession() {
 							avg_pace: undefined,
 							incline: isCardio ? undefined : undefined,
 							completed_at: new Date().toISOString(),
+							set_type: 'normal',
+							to_failure: false,
 							syncStatus: 'created'
 						});
 					}
-				} else if (prevExSets.length > 0) {
-					prevExSets.forEach((prevSet: any, idx: number) => {
+				} else if (prevNormalSets.length > 0) {
+					for (let i = 0; i < targetSetCount; i++) {
+						const prevSet = prevNormalSets[i] || prevNormalSets[prevNormalSets.length - 1];
 						newSets.push({
 							session_id: sessionId,
 							exercise_id: ex.exercise_id,
-							set_number: idx + 1,
+							set_number: i + 1,
 							weight_kg: (ex.weight_kg && ex.weight_kg > 0) ? ex.weight_kg : (prevSet.weight_kg || 0),
 							reps: (ex.reps && !isNaN(parseInt(ex.reps))) ? parseInt(ex.reps.split('-')[0]) : (prevSet.reps || 0),
 							duration_sec: (isTime || isCardio) ? (prevSet.duration_sec || 0) : undefined,
@@ -271,11 +297,13 @@ export default function ActiveSession() {
 							avg_pace: isCardio ? (prevSet.avg_pace || undefined) : undefined,
 							incline: isCardio ? (prevSet.incline || undefined) : undefined,
 							completed_at: new Date().toISOString(),
+							set_type: 'normal',
+							to_failure: false,
 							syncStatus: 'created'
 						});
-					});
+					}
 				} else {
-					const numSets = isCardio ? 1 : (ex.sets || 3);
+					const numSets = targetSetCount;
 					const defaultReps = (isTime || isCardio) ? 0 : (typeof ex.reps === 'string' ? parseInt(ex.reps.split('-')[0]) || 10 : ex.reps || 10);
 					const defaultWeight = (isTime || isCardio) ? 0 : (ex.weight_kg || defaultWeightDb || 0);
 
@@ -291,6 +319,8 @@ export default function ActiveSession() {
 							avg_pace: undefined,
 							incline: isCardio ? undefined : undefined,
 							completed_at: new Date().toISOString(),
+							set_type: 'normal',
+							to_failure: false,
 							syncStatus: 'created'
 						});
 					}
@@ -355,13 +385,14 @@ export default function ActiveSession() {
 		}
 	}, [routine, session, i18n.language]);
 
-	const finishSession = async () => {
+	const completeSession = async (selfRatedEffort: number | null) => {
 		if (!session) return;
 		const end = new Date().toISOString();
 		const newSyncStatus = session.server_id ? 'updated' : 'created';
 		const updates: any = {
 			completed_at: end,
-			syncStatus: newSyncStatus
+			syncStatus: newSyncStatus,
+			self_rated_effort: selfRatedEffort,
 		};
 		// Save duration when track_time is enabled
 		if (user?.settings?.track_time && session.started_at) {
@@ -379,6 +410,14 @@ export default function ActiveSession() {
 		navigate('/sessions');
 	};
 
+	const finishSession = async () => {
+		if (effortTrackingEnabled) {
+			setShowEffortModal(true);
+			return;
+		}
+		await completeSession(null);
+	};
+
 	const updateSet = async (setId: number, field: string, value: any) => {
 		const updates: any = { [field]: value, syncStatus: 'updated' };
 		// Auto-calculate pace for cardio when distance or duration changes
@@ -393,27 +432,93 @@ export default function ActiveSession() {
 		await db.sets.update(setId, updates);
 	};
 
-	const deleteSet = async (setId: number) => {
-		await db.sets.delete(setId);
+	const renumberExerciseSets = async (exerciseId: number) => {
+		const exerciseSets = await db.sets
+			.where('session_id')
+			.equals(sessionId)
+			.and((s: any) => s.exercise_id === exerciseId)
+			.sortBy('set_number');
+
+		for (let i = 0; i < exerciseSets.length; i++) {
+			const setRow = exerciseSets[i];
+			const nextNumber = i + 1;
+			if (setRow.set_number !== nextNumber) {
+				await db.sets.update(setRow.id!, {
+					set_number: nextNumber,
+					syncStatus: setRow.server_id ? 'updated' : (setRow.syncStatus || 'created'),
+				});
+			}
+		}
 	};
 
-	const addSet = async (exerciseId: number) => {
-		const existingSets = sets?.filter((s: any) => s.exercise_id === exerciseId) || [];
-		const nextSetNumber = existingSets.length + 1;
+	const deleteSet = async (setId: number) => {
+		const setToDelete = await db.sets.get(setId);
+		await db.sets.delete(setId);
+		if (setToDelete?.exercise_id) {
+			await renumberExerciseSets(setToDelete.exercise_id);
+		}
+	};
+
+	const addSet = async (exerciseId: number, setType: 'normal' | 'drop' = 'normal') => {
+		const existingSets = [...(sets?.filter((s: any) => s.exercise_id === exerciseId) || [])]
+			.sort((a: any, b: any) => a.set_number - b.set_number);
+
+		const dropCount = existingSets.filter((s: any) => (s.set_type || 'normal') === 'drop').length;
+		if (setType === 'drop' && dropCount >= maxDropSets) return;
+
 		const ex = exercises.find((e: any) => e.exercise_id === exerciseId);
 		const isTime = ex?.type === 'Time';
 		const isCardio = ex?.type === 'Cardio';
-		await db.sets.add({
+		const normalSets = existingSets.filter((s: any) => (s.set_type || 'normal') === 'normal');
+		const firstWorking = normalSets[0];
+		const lastWorking = normalSets[normalSets.length - 1];
+
+		const baseWeight = isTime || isCardio
+			? 0
+			: setType === 'drop'
+				? (lastWorking?.weight_kg || 0) * 0.75
+				: (lastWorking?.weight_kg || firstWorking?.weight_kg || 0);
+		const baseReps = isTime || isCardio
+			? 0
+			: (lastWorking?.reps || firstWorking?.reps || 10);
+
+		const roundedWeight = Math.max(0, Math.round(baseWeight * 2) / 2);
+		const lastNormalIndex = existingSets.reduce(
+			(idx: number, s: any, i: number) => ((s.set_type || 'normal') === 'normal' ? i : idx),
+			-1
+		);
+		const insertIndex = setType === 'normal'
+			? (lastNormalIndex === -1 ? existingSets.length : lastNormalIndex + 1)
+			: existingSets.length;
+
+		const setDraft: any = {
 			session_id: sessionId,
 			exercise_id: exerciseId,
-			set_number: nextSetNumber,
-			weight_kg: (isTime || isCardio) ? 0 : 0,
-			reps: (isTime || isCardio) ? 0 : 10,
+			weight_kg: roundedWeight,
+			reps: baseReps,
 			duration_sec: (isTime || isCardio) ? 0 : undefined,
 			distance_km: isCardio ? 0 : undefined,
 			completed_at: new Date().toISOString(),
-			syncStatus: 'created'
-		});
+			set_type: setType,
+			to_failure: false,
+			syncStatus: 'created',
+		};
+
+		const merged = [...existingSets];
+		merged.splice(insertIndex, 0, setDraft);
+
+		for (let i = 0; i < merged.length; i++) {
+			const item = merged[i];
+			const setNumber = i + 1;
+			if (item.id) {
+				await db.sets.update(item.id, {
+					set_number: setNumber,
+					syncStatus: item.server_id ? 'updated' : (item.syncStatus || 'created'),
+				});
+			} else {
+				await db.sets.add({ ...item, set_number: setNumber });
+			}
+		}
 	};
 
 	const toggleCollapse = async (exerciseId: number) => {
@@ -427,6 +532,8 @@ export default function ActiveSession() {
 
 	const isCompleted = !!session?.completed_at;
 	const isEditable = !isCompleted || editMode;
+	const effortValue = Math.max(1, Math.min(10, effortRating ?? 7));
+	const effortTone = effortValue <= 3 ? 'Easy' : effortValue <= 6 ? 'Moderate' : effortValue <= 8 ? 'Hard' : 'All out';
 
 	const getSessionDuration = () => {
 		if ((session as any)?.duration_seconds && (session as any).duration_seconds > 0) {
@@ -742,6 +849,8 @@ export default function ActiveSession() {
 			<div style={{ display: 'grid', gap: '8px' }}>
 				{exercises.map((ex: any, i: number) => {
 					const exerciseSets = sets?.filter((s: any) => s.exercise_id === ex.exercise_id).sort((a: any, b: any) => a.set_number - b.set_number) || [];
+					const dropSets = exerciseSets.filter((s: any) => (s.set_type || 'normal') === 'drop');
+					const supportsSetTypes = ex.type !== 'Cardio' && ex.type !== 'Time';
 					const isCollapsed = collapsedExercises.includes(ex.exercise_id);
 					const isExerciseLocked = ex.locked === true;
 					const exDoneCount = exerciseSets.filter((s: any) => completedSets.has(`${s.id}`)).length;
@@ -776,6 +885,7 @@ export default function ActiveSession() {
 									{progressionSuggestions.fetched && progressionSuggestions.suggestions.has(ex.exercise_id) && !dismissedSuggestions.has(ex.exercise_id) && (
 										<SuggestionBadge
 											suggestion={progressionSuggestions.suggestions.get(ex.exercise_id)!}
+											exerciseName={ex.name}
 											onApply={(suggestion: ProgressionSuggestion) => {
 												// Apply suggested values to all sets of this exercise
 												const exerciseSetsForApply = sets?.filter((s: any) => s.exercise_id === ex.exercise_id) || [];
@@ -893,8 +1003,8 @@ export default function ActiveSession() {
 
 							{!isCollapsed && (
 								<>
-									<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.5px', padding: '0 8px', gap: '8px' }}>
-										<span style={{ width: '30px' }}>{t('SET')}</span>
+									<div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.5px', padding: '0 8px', gap: '10px' }}>
+										<span style={{ width: '56px', textAlign: 'center', flexShrink: 0 }}>{t('SET')}</span>
 										{ex.type === 'Cardio' ? (
 											<>
 												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>DIST (km)</span>
@@ -905,39 +1015,91 @@ export default function ActiveSession() {
 											<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{t('SECONDS')}</span>
 										) : (
 											<>
-												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{ex.is_bodyweight ? '+KG' : 'KG'}</span>
-												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{t('REPS')}</span>
+												<span style={{ flex: 1, textAlign: 'center', minWidth: '80px' }}>{ex.is_bodyweight ? '+KG' : 'KG'}</span>
+												<span style={{ flex: 1, textAlign: 'center', minWidth: '80px' }}>{t('REPS')}</span>
 											</>
 										)}
-										<span style={{ width: '40px' }}></span>
+										{isEditable && failureTrackingEnabled && (
+											<span style={{ width: '68px', textAlign: 'center', flexShrink: 0 }}>FAILURE</span>
+										)}
+										<span style={{ width: isEditable ? '44px' : '40px', flexShrink: 0 }}></span>
 									</div>
 
 									{exerciseSets.map((s: any) => {
 										const setDone = completedSets.has(`${s.id}`);
+										const setType = s.set_type || 'normal';
+										const isWarmup = setType === 'warmup';
+										const isDrop = setType === 'drop';
 										return (
-											<div key={s.id}>
-												<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: setDone ? 'rgba(0,204,68,0.08)' : 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 ? '0' : '4px', gap: '4px', opacity: setDone ? 0.6 : 1, transition: 'all 0.15s' }}>
-													{isEditable ? (
-														<div
-															onClick={() => setCompletedSets(prev => {
-																const next = new Set(prev);
-																const key = `${s.id}`;
-																if (next.has(key)) next.delete(key); else next.add(key);
-																return next;
-															})}
-															style={{
-																width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-																border: setDone ? '2px solid var(--success)' : '2px solid var(--border)',
-																background: setDone ? 'var(--success)' : 'transparent',
-																display: 'flex', alignItems: 'center', justifyContent: 'center',
-																cursor: 'pointer', transition: 'all 0.15s',
-															}}
-														>
-															{setDone ? <Check size={12} style={{ color: 'white' }} /> : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)' }}>{s.set_number}</span>}
+												<div key={s.id}>
+													<div style={{
+														display: 'flex',
+														justifyContent: 'space-between',
+														alignItems: 'center',
+														padding: '6px 8px',
+														backgroundColor: setDone ? 'rgba(0,204,68,0.08)' : 'rgba(0,0,0,0.2)',
+													borderRadius: '4px',
+													marginBottom: ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 ? '0' : '4px',
+													gap: '4px',
+													opacity: setDone ? 0.6 : 1,
+														transition: 'all 0.15s',
+														borderLeft: isWarmup ? '3px solid #60a5fa' : isDrop ? '3px solid #f59e0b' : undefined,
+													}}>
+														<div style={{ width: '56px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+															{isEditable ? (
+																<div
+																	onClick={() => setCompletedSets(prev => {
+																		const next = new Set(prev);
+																		const key = `${s.id}`;
+																		if (next.has(key)) next.delete(key); else next.add(key);
+																		return next;
+																	})}
+																	style={{
+																		minWidth: isWarmup || isDrop ? 52 : 24,
+																		height: 24,
+																		padding: isWarmup || isDrop ? '0 8px' : 0,
+																		borderRadius: isWarmup || isDrop ? '999px' : '50%',
+																		flexShrink: 0,
+																		border: setDone
+																			? '2px solid var(--success)'
+																			: isWarmup
+																				? '1px solid rgba(96, 165, 250, 0.7)'
+																				: isDrop
+																					? '1px solid rgba(245, 158, 11, 0.7)'
+																					: '2px solid var(--border)',
+																		background: setDone
+																			? 'var(--success)'
+																			: isWarmup
+																				? 'rgba(59,130,246,0.18)'
+																				: isDrop
+																					? 'rgba(245,158,11,0.18)'
+																					: 'transparent',
+																		display: 'flex', alignItems: 'center', justifyContent: 'center',
+																		cursor: 'pointer', transition: 'all 0.15s',
+																	}}
+																>
+																	{setDone ? (
+																		<Check size={12} style={{ color: 'white' }} />
+																	) : isWarmup ? (
+																		<span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.4px', color: '#93c5fd' }}>WARM</span>
+																	) : isDrop ? (
+																		<span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.4px', color: '#fbbf24' }}>DROP</span>
+																	) : (
+																		<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)' }}>{s.set_number}</span>
+																	)}
+																</div>
+															) : (
+																<span style={{ width: '54px', fontWeight: 'bold', fontSize: '14px', display: 'inline-flex', justifyContent: 'center' }}>
+																	{isWarmup ? (
+																		<span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.4px', color: '#93c5fd' }}>WARM</span>
+																	) : isDrop ? (
+																		<span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.4px', color: '#fbbf24' }}>DROP</span>
+																	) : (
+																		s.set_number
+																	)}
+																</span>
+															)}
 														</div>
-													) : (
-														<span style={{ width: '30px', fontWeight: 'bold', fontSize: '14px' }}>{s.set_number}</span>
-													)}
 
 													{isEditable ? (
 														<>
@@ -984,26 +1146,56 @@ export default function ActiveSession() {
 																	sensitivity={28}
 																	showDelta={false}
 																/>
-															) : (
-																<>
-																	<HybridNumber
-																		value={s.weight_kg || 0}
-																		onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
-																		step={ex.is_bodyweight ? 1 : 2.5}
-																		min={0}
-																		max={9999}
-																		sensitivity={14}
-																	/>
-																	<HybridNumber
-																		value={s.reps || 0}
-																		onChange={(v) => updateSet(s.id!, 'reps', v)}
-																		step={1}
-																		min={0}
-																		max={100}
-																		sensitivity={28}
-																	/>
-																</>
-															)}
+																) : (
+																		<>
+																			<div style={{ flex: 1, minWidth: '80px', display: 'flex', justifyContent: 'center' }}>
+																				<HybridNumber
+																					value={s.weight_kg || 0}
+																					onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
+																				step={ex.is_bodyweight ? 1 : 2.5}
+																				min={0}
+																				max={9999}
+																				sensitivity={14}
+																			/>
+																		</div>
+																			<div style={{ flex: 1, minWidth: '80px', display: 'flex', justifyContent: 'center' }}>
+																				<HybridNumber
+																					value={s.reps || 0}
+																					onChange={(v) => updateSet(s.id!, 'reps', v)}
+																				step={1}
+																				min={0}
+																				max={100}
+																					sensitivity={28}
+																				/>
+																			</div>
+																		</>
+																	)}
+																	{failureTrackingEnabled && (
+																		<div style={{ width: '68px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+																			<button
+																				className="btn btn-ghost"
+																				onClick={() => updateSet(s.id!, 'to_failure', !s.to_failure)}
+																				style={{
+																					minWidth: '34px',
+																					height: '34px',
+																					display: 'flex',
+																					alignItems: 'center',
+																					justifyContent: 'center',
+																					flexShrink: 0,
+																					padding: 0,
+																					fontWeight: 800,
+																					fontSize: '12px',
+																					borderRadius: '999px',
+																					border: s.to_failure ? '1px solid rgba(248, 113, 113, 0.9)' : '1px solid var(--border)',
+																					background: s.to_failure ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
+																					color: s.to_failure ? '#f87171' : 'var(--text-tertiary)',
+																				}}
+																				title="Mark to failure"
+																			>
+																				F
+																			</button>
+																		</div>
+																	)}
 															<button
 																className="btn btn-ghost"
 																onClick={() => deleteSet(s.id!)}
@@ -1020,14 +1212,14 @@ export default function ActiveSession() {
 																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{formatDurationMMSS(s.duration_sec || 0)}</span>
 																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.incline || '-'}</span>
 																</>
-															) : ex.type === 'Time' ? (
-																<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.duration_sec || 0}s</span>
-															) : (
-																<>
-																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.weight_kg}</span>
-																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.reps}</span>
-																</>
-															)}
+																) : ex.type === 'Time' ? (
+																		<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.duration_sec || 0}s</span>
+																	) : (
+																		<>
+																			<span style={{ flex: 1, minWidth: '80px', textAlign: 'center' }}>{s.weight_kg}</span>
+																			<span style={{ flex: 1, minWidth: '80px', textAlign: 'center' }}>{s.reps}</span>
+																		</>
+																	)}
 															<span style={{ width: '40px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
 																<CheckCircle size={16} color="var(--success)" />
 															</span>
@@ -1044,13 +1236,31 @@ export default function ActiveSession() {
 									})}
 
 									{isEditable && (
-										<button
-											className="btn btn-secondary"
-											onClick={() => addSet(ex.exercise_id)}
-											style={{ width: '100%', marginTop: '8px', fontSize: '14px', padding: '8px' }}
-										>
-											+ {ex.type === 'Cardio' ? t('Add Interval') : t('Add Set')}
-										</button>
+										<div style={{ display: 'grid', gap: '8px', marginTop: '8px' }}>
+											<button
+												className="btn btn-secondary"
+												onClick={() => addSet(ex.exercise_id)}
+												style={{ width: '100%', fontSize: '14px', padding: '8px' }}
+											>
+												+ {ex.type === 'Cardio' ? t('Add Interval') : t('Add Set')}
+											</button>
+											{dropSetsEnabled && supportsSetTypes && dropSets.length < maxDropSets && (
+												<button
+													className="btn btn-ghost"
+													onClick={() => addSet(ex.exercise_id, 'drop')}
+													style={{
+														width: '100%',
+														padding: '7px 10px',
+														fontSize: '12px',
+														border: '1px dashed rgba(245, 158, 11, 0.7)',
+														color: '#fbbf24',
+														background: 'rgba(245, 158, 11, 0.08)',
+													}}
+												>
+													+ Add Drop Set
+												</button>
+											)}
+										</div>
 									)}
 								</>
 							)}
@@ -1115,6 +1325,101 @@ export default function ActiveSession() {
 							/>
 						</div>
 					)}
+				</div>
+			)}
+
+			{showEffortModal && (
+				<div
+					style={{
+						position: 'fixed',
+						inset: 0,
+						background: 'rgba(0,0,0,0.55)',
+						display: 'flex',
+						alignItems: 'center',
+						justifyContent: 'center',
+						zIndex: 250,
+						padding: '16px',
+					}}
+				>
+					<div
+						style={{
+							width: '100%',
+							maxWidth: '420px',
+							background: 'var(--bg-secondary)',
+							borderRadius: '18px',
+							padding: '18px 14px 16px',
+							border: '1px solid var(--border)',
+						}}
+					>
+						<div style={{ fontSize: '17px', fontWeight: 700, marginBottom: '6px', textAlign: 'center' }}>
+							How hard was this session?
+						</div>
+						<div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', marginBottom: '14px' }}>
+							1 = easy · 10 = all out
+						</div>
+						<div style={{ marginBottom: '14px' }}>
+							<div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' }}>
+								<span style={{ fontSize: '24px', fontWeight: 800, color: '#86efac' }}>{effortValue}</span>
+								<span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>{effortTone}</span>
+							</div>
+							<input
+								type="range"
+								min={1}
+								max={10}
+								step={1}
+								value={effortValue}
+								onChange={(e) => setEffortRating(parseInt(e.target.value, 10))}
+								style={{
+									width: '100%',
+									accentColor: '#22c55e',
+									cursor: 'pointer',
+								}}
+							/>
+							<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+								<span>Easy</span>
+								<span>All out</span>
+							</div>
+							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '4px', marginTop: '6px' }}>
+								{Array.from({ length: 10 }, (_, i) => {
+									const val = i + 1;
+									const active = val === effortValue;
+									return (
+										<div
+											key={val}
+											style={{
+												textAlign: 'center',
+												fontSize: '10px',
+												fontWeight: active ? 800 : 500,
+												color: active ? '#86efac' : 'var(--text-tertiary)',
+											}}
+										>
+											{val}
+										</div>
+									);
+								})}
+							</div>
+						</div>
+						<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+							<button
+								className="btn btn-ghost"
+								onClick={async () => {
+									setShowEffortModal(false);
+									await completeSession(null);
+								}}
+							>
+								Skip
+							</button>
+							<button
+								className="btn btn-primary"
+								onClick={async () => {
+									setShowEffortModal(false);
+									await completeSession(effortValue);
+								}}
+							>
+								Done
+							</button>
+						</div>
+					</div>
 				</div>
 			)}
 		</div>

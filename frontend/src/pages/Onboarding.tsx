@@ -29,6 +29,7 @@ export default function Onboarding() {
 			if (formData.height) payload.height = parseInt(formData.height as string);
 			if (formData.age) payload.age = parseInt(formData.age as string);
 			if (formData.gender) payload.gender = formData.gender;
+			payload.onboarding_progress = { profile: true };
 
 			const res = await api.put('/auth/me', payload);
 

@@ -130,6 +130,20 @@ class TestPromoCode:
         assert r.status_code == 400
         assert "already redeemed" in r.json()["detail"].lower()
 
+    def test_redeem_duplicate_still_blocked_after_settings_update(self, client):
+        headers = register_and_login(client, "promo-settings@example.com")
+
+        first = client.post("/api/gamification/shop/promo", json={"code": "PACHO"}, headers=headers)
+        assert first.status_code == 200
+
+        # Generic /auth/me settings update must not wipe server-managed redeemed_codes.
+        r_update = client.put("/api/auth/me", json={"settings": {"language": "en"}}, headers=headers)
+        assert r_update.status_code == 200
+
+        second = client.post("/api/gamification/shop/promo", json={"code": "PACHO"}, headers=headers)
+        assert second.status_code == 400
+        assert "already redeemed" in second.json()["detail"].lower()
+
 
 class TestBuyAndActivateTheme:
     def test_full_theme_flow(self, client):

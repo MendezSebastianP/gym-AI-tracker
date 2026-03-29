@@ -416,3 +416,153 @@ class TestCardioStats:
         r2 = client.get("/api/stats/cardio/exercises/demo")
         assert r2.status_code == 200
         assert r2.json() == []
+
+
+class TestEffortTrend:
+    def test_effort_unauthenticated(self, client):
+        r = client.get("/api/stats/effort")
+        assert r.status_code == 401
+
+    def test_effort_returns_score_or_self_rating(self, client, db_engine):
+        from sqlalchemy.orm import sessionmaker as sm
+        from app.models.user import User
+        from app.models.session import Session as SessionModel
+
+        headers = register_and_login(client, "efforttrend@example.com")
+
+        Session = sm(bind=db_engine)
+        db = Session()
+        try:
+            user = db.query(User).filter(User.email == "efforttrend@example.com").one()
+
+            # Should use effort_score as-is.
+            s1 = SessionModel(
+                user_id=user.id,
+                started_at=_now() - timedelta(days=3, hours=1),
+                completed_at=_now() - timedelta(days=3),
+                effort_score=73.4,
+                self_rated_effort=5,
+            )
+            # effort_score missing -> fallback to self_rated_effort * 10.
+            s2 = SessionModel(
+                user_id=user.id,
+                started_at=_now() - timedelta(days=2, hours=1),
+                completed_at=_now() - timedelta(days=2),
+                effort_score=None,
+                self_rated_effort=8,
+            )
+            # Missing both -> ignored.
+            s3 = SessionModel(
+                user_id=user.id,
+                started_at=_now() - timedelta(days=1, hours=1),
+                completed_at=_now() - timedelta(days=1),
+                effort_score=None,
+                self_rated_effort=None,
+            )
+            db.add_all([s1, s2, s3])
+            db.commit()
+        finally:
+            db.close()
+
+        r = client.get("/api/stats/effort?limit=12", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2
+        assert data[0]["index"] == 1
+        assert data[0]["effort"] == 73.4
+        assert data[1]["index"] == 2
+        assert data[1]["effort"] == 80.0
+
+    def test_effort_limit_and_clamp(self, client, db_engine):
+        from sqlalchemy.orm import sessionmaker as sm
+        from app.models.user import User
+        from app.models.session import Session as SessionModel
+
+        headers = register_and_login(client, "effortclamp@example.com")
+
+        Session = sm(bind=db_engine)
+        db = Session()
+        try:
+            user = db.query(User).filter(User.email == "effortclamp@example.com").one()
+
+            # Values should be clamped to [0, 100]
+            rows = [
+                SessionModel(
+                    user_id=user.id,
+                    started_at=_now() - timedelta(days=3, hours=1),
+                    completed_at=_now() - timedelta(days=3),
+                    effort_score=-20.0,
+                    self_rated_effort=None,
+                ),
+                SessionModel(
+                    user_id=user.id,
+                    started_at=_now() - timedelta(days=2, hours=1),
+                    completed_at=_now() - timedelta(days=2),
+                    effort_score=130.0,
+                    self_rated_effort=None,
+                ),
+                SessionModel(
+                    user_id=user.id,
+                    started_at=_now() - timedelta(days=1, hours=1),
+                    completed_at=_now() - timedelta(days=1),
+                    effort_score=65.2,
+                    self_rated_effort=None,
+                ),
+            ]
+            db.add_all(rows)
+            db.commit()
+        finally:
+            db.close()
+
+        r = client.get("/api/stats/effort?limit=2", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        # Keep only newest 2 points, re-indexed from 1.
+        assert len(data) == 2
+        assert data[0]["index"] == 1
+        assert data[0]["effort"] == 100.0
+        assert data[1]["index"] == 2
+        assert data[1]["effort"] == 65.2
+
+    def test_effort_demo_endpoint(self, client, db_engine):
+        from sqlalchemy.orm import sessionmaker as sm
+        from app.models.user import User
+        from app.models.session import Session as SessionModel
+
+        Session = sm(bind=db_engine)
+        db = Session()
+        try:
+            demo = User(email="demo@gymtracker.app", password_hash="h", is_active=True, is_demo=True)
+            db.add(demo)
+            db.flush()
+            db.add_all([
+                SessionModel(
+                    user_id=demo.id,
+                    started_at=_now() - timedelta(days=2, hours=1),
+                    completed_at=_now() - timedelta(days=2),
+                    effort_score=61.0,
+                    self_rated_effort=6,
+                ),
+                SessionModel(
+                    user_id=demo.id,
+                    started_at=_now() - timedelta(days=1, hours=1),
+                    completed_at=_now() - timedelta(days=1),
+                    effort_score=None,
+                    self_rated_effort=9,
+                ),
+            ])
+            db.commit()
+        finally:
+            db.close()
+
+        r = client.get("/api/stats/effort/demo?limit=12")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2
+        assert data[0]["effort"] == 61.0
+        assert data[1]["effort"] == 90.0
+
+    def test_effort_demo_no_demo_user(self, client):
+        r = client.get("/api/stats/effort/demo")
+        assert r.status_code == 200
+        assert r.json() == []

@@ -9,6 +9,7 @@ from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.ai_usage_log import AIUsageLog
 from sqlalchemy.sql import func
+from app.onboarding import mark_onboarding_step
 
 router = APIRouter(
     prefix="/api/routines",
@@ -38,6 +39,11 @@ def create_routine(
     db.add(db_routine)
     db.commit()
     db.refresh(db_routine)
+
+    # Always mark this step once the user has at least one routine.
+    # This also repairs older accounts that had routines before onboarding tracking.
+    mark_onboarding_step(current_user, "first_routine")
+    db.commit()
     
     # Handle AI conversion tracking
     if hasattr(routine, 'ai_usage_id') and routine.ai_usage_id:
