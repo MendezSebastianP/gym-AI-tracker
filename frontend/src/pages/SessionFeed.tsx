@@ -46,7 +46,7 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 	useEffect(() => {
 		if (!sets || sets.length === 0) return;
 
-		// Get unique exercise IDs from the actual sets, preserving order
+		// Get unique exercise IDs from the actual sets
 		const seenIds = new Set<number>();
 		const uniqueExIds: number[] = [];
 		for (const s of sets.sort((a: any, b: any) => a.set_number - b.set_number)) {
@@ -56,9 +56,19 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 			}
 		}
 
-		db.exercises.bulkGet(uniqueExIds).then(details => {
+		// Sort by routine day order so history matches the routine/session view
+		const day = routine?.days?.[session?.day_index ?? -1];
+		const routineOrder: number[] = day?.exercises?.map((e: any) => e.exercise_id) ?? [];
+		const orderedExIds = routineOrder.length > 0
+			? [
+				...routineOrder.filter((id: number) => uniqueExIds.includes(id)),
+				...uniqueExIds.filter((id: number) => !routineOrder.includes(id)),
+			]
+			: uniqueExIds;
+
+		db.exercises.bulkGet(orderedExIds).then(details => {
 			const currentLang = i18n.language.split('-')[0];
-			const enriched = uniqueExIds.map(id => {
+			const enriched = orderedExIds.map(id => {
 				const detail = details.find(d => d?.id === id) as any;
 				return {
 					exercise_id: id,
@@ -71,7 +81,7 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 			});
 			setExercises(enriched);
 		});
-	}, [sets, i18n.language]);
+	}, [sets, i18n.language, routine, session?.day_index]);
 
 	if (!session || !sets) {
 		return (
