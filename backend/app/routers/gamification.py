@@ -1,15 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.quest import Quest, UserQuest
 from app.gamification import _update_quest_progress, claim_quest_reward, assign_quests, exp_for_next_level, compute_streak_weeks, _streak_coins, _current_iso_week_str, _get_week_boundaries, compute_unclaimed_streak_data, get_streak_week_slots
+from app.onboarding import claim_onboarding_rewards
 
 router = APIRouter(
     prefix="/api/gamification",
     tags=["gamification"]
 )
+
+
+class OnboardingClaimRequest(BaseModel):
+    step: str | None = None
 
 
 @router.get("/stats")
@@ -64,7 +70,7 @@ def get_quests_demo(db: Session = Depends(get_db)):
 
     result = []
     for uq in user_quests:
-        quest = db.query(Quest).get(uq.quest_id)
+        quest = db.get(Quest, uq.quest_id)
         if not quest:
             continue
         result.append({
@@ -100,7 +106,7 @@ def get_quests(
 
     result = []
     for uq in user_quests:
-        quest = db.query(Quest).get(uq.quest_id)
+        quest = db.get(Quest, uq.quest_id)
         if not quest:
             continue
         result.append({
@@ -177,6 +183,21 @@ def claim_streak_reward(
         "streak_weeks": data["current_streak"],
         "currency": current_user.currency,
         "joker_awarded": joker_awarded,
+    }
+
+
+@router.post("/onboarding/claim")
+def claim_onboarding_reward(
+    body: OnboardingClaimRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = claim_onboarding_rewards(current_user, step=body.step if body else None)
+    db.commit()
+    db.refresh(current_user)
+    return {
+        **result,
+        "currency": current_user.currency or 0,
     }
 
 

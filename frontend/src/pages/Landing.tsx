@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import PublicLegalLinks from '../components/PublicLegalLinks';
 import { LiveStreakRow } from '../components/StreakFlames';
 import type { WeekSlot } from '../components/StreakFlames';
 import CoinIcon from '../components/icons/CoinIcon';
@@ -699,8 +700,8 @@ export default function Landing() {
 				</Link>
 				<div className="landing-nav-actions">
 					<LanguageSwitcher compact />
-					<Link to="/login" className="landing-nav-link">{t('Login')}</Link>
-					<Link to="/register" className="landing-nav-cta">{t('Register')}</Link>
+					<Link to="/login" className="landing-nav-link motion-btn motion-btn--cta motion-btn--soft motion-btn--public">{t('Login')}</Link>
+					<Link to="/register" className="landing-nav-cta motion-btn motion-btn--cta motion-btn--public">{t('Register')}</Link>
 				</div>
 			</nav>
 
@@ -722,10 +723,10 @@ export default function Landing() {
 							{t('Track sets, follow routines, compare progress, and keep the data on your own setup.')}
 						</p>
 						<div className="landing-hero-ctas">
-							<Link to="/register" className="landing-btn-big primary">
-								{t('Create account')} <ArrowRight size={18} />
+							<Link to="/register" className="landing-btn-big primary motion-btn motion-btn--cta motion-btn--public">
+								{t('Create account')} <ArrowRight size={18} className="motion-btn__icon" />
 							</Link>
-							<a href="#landing-product" className="landing-btn-big secondary">
+							<a href="#landing-product" className="landing-btn-big secondary motion-btn motion-btn--cta motion-btn--soft motion-btn--public">
 								{t('See the product')}
 							</a>
 						</div>
@@ -888,14 +889,15 @@ export default function Landing() {
 						<p>{t('If you want a workout tracker that stays useful after the first week, start here.')}</p>
 					</div>
 					<div className="landing-final-cta-actions">
-						<Link to="/register" className="landing-btn-big primary">{t('Register')}</Link>
-						<Link to="/login" className="landing-btn-big secondary">{t('Login')}</Link>
+						<Link to="/register" className="landing-btn-big primary motion-btn motion-btn--cta motion-btn--public">{t('Register')}</Link>
+						<Link to="/login" className="landing-btn-big secondary motion-btn motion-btn--cta motion-btn--soft motion-btn--public">{t('Login')}</Link>
 					</div>
 				</div>
 			</section>
 
 			<footer className="landing-footer">
-				Gym AI Tracker · {t('Offline-first training journal')}
+				<div>Gym AI Tracker · {t('Offline-first training journal')}</div>
+				<PublicLegalLinks centered compact />
 			</footer>
 		</div>
 	);

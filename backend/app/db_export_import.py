@@ -5,195 +5,272 @@ Usage:
   # Export all user data to a JSON file:
   docker compose exec api python -m app.db_export_import export /app/backup.json
 
-  # Import user data from a JSON file (skips existing records by PK):
+  # Import user data from a JSON file (skips existing records by PK/email):
   docker compose exec api python -m app.db_export_import import /app/backup.json
 
 This exports ONLY user-generated data (users, routines, sessions, sets).
 System exercises are NOT exported — they are re-created by seed_data.py.
 """
-import sys
+from __future__ import annotations
+
 import json
-from datetime import datetime
+import sys
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from sqlalchemy.orm import Session
+
 from app.database import SessionLocal
-from app.models.user import User
 from app.models.routine import Routine
-from app.models.session import Session, Set
+from app.models.session import Session as SessionModel, Set as SetModel
+from app.models.user import User
+
+SessionFactory = Callable[[], Session]
 
 
-def export_data(filepath: str):
-    db = SessionLocal()
+def _serialize_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat()
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+@contextmanager
+def _session_scope(session_factory: SessionFactory) -> Generator[Session, None, None]:
+    db = session_factory()
     try:
-        users = db.query(User).all()
-        routines = db.query(Routine).all()
-        sessions = db.query(Session).all()
-        sets = db.query(Set).all()
+        yield db
+    finally:
+        db.close()
+
+def export_data(filepath: str, session_factory: SessionFactory = SessionLocal) -> None:
+    with _session_scope(session_factory) as db:
+        users = db.query(User).order_by(User.id.asc()).all()
+        routines = db.query(Routine).order_by(Routine.id.asc()).all()
+        sessions = db.query(SessionModel).order_by(SessionModel.id.asc()).all()
+        sets = db.query(SetModel).order_by(SetModel.id.asc()).all()
 
         data = {
-            "exported_at": datetime.utcnow().isoformat(),
+            "schema_version": 2,
+            "exported_at": _serialize_datetime(datetime.now(timezone.utc)),
             "users": [],
             "routines": [],
             "sessions": [],
             "sets": [],
         }
 
-        for u in users:
+        for user in users:
             data["users"].append({
-                "id": u.id,
-                "email": u.email,
-                "hashed_password": u.hashed_password,
-                "is_active": u.is_active,
-                "weight": u.weight,
-                "height": u.height,
-                "age": u.age,
-                "priorities": u.priorities,
-                "settings": u.settings,
+                "id": user.id,
+                "email": user.email,
+                "password_hash": user.password_hash,
+                "is_active": user.is_active,
+                "is_admin": user.is_admin,
+                "is_demo": user.is_demo,
+                "settings": user.settings,
+                "weight": user.weight,
+                "height": user.height,
+                "age": user.age,
+                "gender": user.gender,
+                "priorities": user.priorities,
+                "refresh_token_hash": user.refresh_token_hash,
+                "refresh_token_expires_at": _serialize_datetime(user.refresh_token_expires_at),
+                "level": user.level,
+                "experience": user.experience,
+                "currency": user.currency,
+                "streak_reward_week": user.streak_reward_week,
+                "joker_tokens": user.joker_tokens,
+                "onboarding_progress": user.onboarding_progress,
             })
 
-        for r in routines:
+        for routine in routines:
             data["routines"].append({
-                "id": r.id,
-                "user_id": r.user_id,
-                "name": r.name,
-                "description": r.description,
-                "is_favorite": r.is_favorite,
-                "days": r.days,
+                "id": routine.id,
+                "user_id": routine.user_id,
+                "name": routine.name,
+                "description": routine.description,
+                "is_favorite": routine.is_favorite,
+                "archived_at": _serialize_datetime(routine.archived_at),
+                "days": routine.days,
             })
 
-        for s in sessions:
+        for session in sessions:
             data["sessions"].append({
-                "id": s.id,
-                "user_id": s.user_id,
-                "routine_id": s.routine_id,
-                "day_index": s.day_index,
-                "started_at": s.started_at.isoformat() if s.started_at else None,
-                "completed_at": s.completed_at.isoformat() if s.completed_at else None,
-                "notes": s.notes,
-                "locked_exercises": s.locked_exercises,
+                "id": session.id,
+                "user_id": session.user_id,
+                "routine_id": session.routine_id,
+                "day_index": session.day_index,
+                "started_at": _serialize_datetime(session.started_at),
+                "completed_at": _serialize_datetime(session.completed_at),
+                "bodyweight_kg": session.bodyweight_kg,
+                "notes": session.notes,
+                "duration_seconds": session.duration_seconds,
+                "locked_exercises": session.locked_exercises,
+                "streak_eligible_at": _serialize_datetime(session.streak_eligible_at),
+                "effort_score": session.effort_score,
+                "self_rated_effort": session.self_rated_effort,
             })
 
-        for st in sets:
+        for item in sets:
             data["sets"].append({
-                "id": st.id,
-                "session_id": st.session_id,
-                "exercise_id": st.exercise_id,
-                "set_number": st.set_number,
-                "weight_kg": st.weight_kg,
-                "reps": st.reps,
-                "duration_sec": st.duration_sec,
-                "rpe": st.rpe,
-                "completed_at": st.completed_at.isoformat() if st.completed_at else None,
+                "id": item.id,
+                "session_id": item.session_id,
+                "exercise_id": item.exercise_id,
+                "set_number": item.set_number,
+                "weight_kg": item.weight_kg,
+                "reps": item.reps,
+                "duration_sec": item.duration_sec,
+                "rpe": item.rpe,
+                "distance_km": item.distance_km,
+                "avg_pace": item.avg_pace,
+                "incline": item.incline,
+                "set_type": item.set_type,
+                "to_failure": item.to_failure,
+                "completed_at": _serialize_datetime(item.completed_at),
             })
 
-        with open(filepath, "w") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        with open(filepath, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, ensure_ascii=False)
 
-        print(f"✅ Exported {len(data['users'])} users, {len(data['routines'])} routines, "
-              f"{len(data['sessions'])} sessions, {len(data['sets'])} sets to {filepath}")
-    finally:
-        db.close()
+    print(
+        f"✅ Exported {len(data['users'])} users, {len(data['routines'])} routines, "
+        f"{len(data['sessions'])} sessions, {len(data['sets'])} sets to {filepath}"
+    )
 
+def import_data(filepath: str, session_factory: SessionFactory = SessionLocal) -> None:
+    with open(filepath, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
 
-def import_data(filepath: str):
-    db = SessionLocal()
-    try:
-        with open(filepath, "r") as f:
-            data = json.load(f)
-
+    with _session_scope(session_factory) as db:
         added = {"users": 0, "routines": 0, "sessions": 0, "sets": 0}
 
-        # Import users (skip existing by email)
-        existing_emails = {u.email for u in db.query(User).all()}
-        for u_data in data.get("users", []):
-            if u_data["email"] not in existing_emails:
-                user = User(
-                    email=u_data["email"],
-                    hashed_password=u_data["hashed_password"],
-                    is_active=u_data.get("is_active", True),
-                    weight=u_data.get("weight"),
-                    height=u_data.get("height"),
-                    age=u_data.get("age"),
-                    priorities=u_data.get("priorities"),
-                    settings=u_data.get("settings"),
-                )
-                db.add(user)
-                db.flush()
-                added["users"] += 1
+        existing_emails = {user.email for user in db.query(User).all()}
+        for user_data in data.get("users", []):
+            if user_data["email"] in existing_emails:
+                continue
+
+            user = User(
+                email=user_data["email"],
+                password_hash=user_data["password_hash"],
+                is_active=user_data.get("is_active", True),
+                is_admin=user_data.get("is_admin", False),
+                is_demo=user_data.get("is_demo", False),
+                settings=user_data.get("settings") or {},
+                weight=user_data.get("weight"),
+                height=user_data.get("height"),
+                age=user_data.get("age"),
+                gender=user_data.get("gender"),
+                priorities=user_data.get("priorities") or {},
+                refresh_token_hash=user_data.get("refresh_token_hash"),
+                refresh_token_expires_at=_parse_datetime(user_data.get("refresh_token_expires_at")),
+                level=user_data.get("level", 1),
+                experience=user_data.get("experience", 0),
+                currency=user_data.get("currency", 100),
+                streak_reward_week=user_data.get("streak_reward_week"),
+                joker_tokens=user_data.get("joker_tokens", 0),
+                onboarding_progress=user_data.get("onboarding_progress") or {},
+            )
+            db.add(user)
+            db.flush()
+            existing_emails.add(user.email)
+            added["users"] += 1
 
         db.commit()
 
-        # Build user ID mapping (old ID -> new ID) by email
-        user_map = {}
-        all_users = {u.email: u.id for u in db.query(User).all()}
-        for u_data in data.get("users", []):
-            user_map[u_data["id"]] = all_users.get(u_data["email"], u_data["id"])
+        user_map: dict[int, int] = {}
+        all_users = {user.email: user.id for user in db.query(User).all()}
+        for user_data in data.get("users", []):
+            user_map[user_data["id"]] = all_users[user_data["email"]]
 
-        # Import routines (skip existing by ID)
-        existing_routine_ids = {r.id for r in db.query(Routine).all()}
-        routine_map = {}
-        for r_data in data.get("routines", []):
-            if r_data["id"] not in existing_routine_ids:
+        existing_routine_ids = {routine_id for (routine_id,) in db.query(Routine.id).all()}
+        routine_map: dict[int, int] = {}
+        for routine_data in data.get("routines", []):
+            if routine_data["id"] not in existing_routine_ids:
                 routine = Routine(
-                    user_id=user_map.get(r_data["user_id"], r_data["user_id"]),
-                    name=r_data["name"],
-                    description=r_data.get("description"),
-                    is_favorite=r_data.get("is_favorite", False),
-                    days=r_data.get("days", []),
+                    user_id=user_map.get(routine_data["user_id"], routine_data["user_id"]),
+                    name=routine_data["name"],
+                    description=routine_data.get("description"),
+                    is_favorite=routine_data.get("is_favorite", False),
+                    archived_at=_parse_datetime(routine_data.get("archived_at")),
+                    days=routine_data.get("days") or [],
                 )
                 db.add(routine)
                 db.flush()
-                routine_map[r_data["id"]] = routine.id
+                routine_map[routine_data["id"]] = routine.id
                 added["routines"] += 1
             else:
-                routine_map[r_data["id"]] = r_data["id"]
+                routine_map[routine_data["id"]] = routine_data["id"]
 
         db.commit()
 
-        # Import sessions (skip existing by ID)
-        existing_session_ids = {s.id for s in db.query(Session).all()}
-        session_map = {}
-        for s_data in data.get("sessions", []):
-            if s_data["id"] not in existing_session_ids:
-                session = Session(
-                    user_id=user_map.get(s_data["user_id"], s_data["user_id"]),
-                    routine_id=routine_map.get(s_data.get("routine_id"), s_data.get("routine_id")),
-                    day_index=s_data.get("day_index"),
-                    started_at=s_data.get("started_at"),
-                    completed_at=s_data.get("completed_at"),
-                    notes=s_data.get("notes"),
-                    locked_exercises=s_data.get("locked_exercises", []),
+        existing_session_ids = {session_id for (session_id,) in db.query(SessionModel.id).all()}
+        session_map: dict[int, int] = {}
+        for session_data in data.get("sessions", []):
+            if session_data["id"] not in existing_session_ids:
+                session = SessionModel(
+                    user_id=user_map.get(session_data["user_id"], session_data["user_id"]),
+                    routine_id=routine_map.get(session_data.get("routine_id"), session_data.get("routine_id")),
+                    day_index=session_data.get("day_index"),
+                    started_at=_parse_datetime(session_data.get("started_at")),
+                    completed_at=_parse_datetime(session_data.get("completed_at")),
+                    bodyweight_kg=session_data.get("bodyweight_kg"),
+                    notes=session_data.get("notes"),
+                    duration_seconds=session_data.get("duration_seconds"),
+                    locked_exercises=session_data.get("locked_exercises") or [],
+                    streak_eligible_at=_parse_datetime(session_data.get("streak_eligible_at")),
+                    effort_score=session_data.get("effort_score"),
+                    self_rated_effort=session_data.get("self_rated_effort"),
                 )
                 db.add(session)
                 db.flush()
-                session_map[s_data["id"]] = session.id
+                session_map[session_data["id"]] = session.id
                 added["sessions"] += 1
             else:
-                session_map[s_data["id"]] = s_data["id"]
+                session_map[session_data["id"]] = session_data["id"]
 
         db.commit()
 
-        # Import sets (skip existing by ID)
-        existing_set_ids = {s.id for s in db.query(Set).all()}
-        for st_data in data.get("sets", []):
-            if st_data["id"] not in existing_set_ids:
-                new_set = Set(
-                    session_id=session_map.get(st_data["session_id"], st_data["session_id"]),
-                    exercise_id=st_data["exercise_id"],
-                    set_number=st_data["set_number"],
-                    weight_kg=st_data.get("weight_kg"),
-                    reps=st_data.get("reps"),
-                    duration_sec=st_data.get("duration_sec"),
-                    rpe=st_data.get("rpe"),
-                    completed_at=st_data.get("completed_at"),
-                )
-                db.add(new_set)
-                added["sets"] += 1
+        existing_set_ids = {set_id for (set_id,) in db.query(SetModel.id).all()}
+        for item_data in data.get("sets", []):
+            if item_data["id"] in existing_set_ids:
+                continue
+
+            new_set = SetModel(
+                session_id=session_map.get(item_data["session_id"], item_data["session_id"]),
+                exercise_id=item_data["exercise_id"],
+                set_number=item_data["set_number"],
+                weight_kg=item_data.get("weight_kg"),
+                reps=item_data.get("reps"),
+                duration_sec=item_data.get("duration_sec"),
+                rpe=item_data.get("rpe"),
+                distance_km=item_data.get("distance_km"),
+                avg_pace=item_data.get("avg_pace"),
+                incline=item_data.get("incline"),
+                set_type=item_data.get("set_type") or "normal",
+                to_failure=item_data.get("to_failure", False),
+                completed_at=_parse_datetime(item_data.get("completed_at")),
+            )
+            db.add(new_set)
+            added["sets"] += 1
 
         db.commit()
 
-        print(f"✅ Imported {added['users']} users, {added['routines']} routines, "
-              f"{added['sessions']} sessions, {added['sets']} sets from {filepath}")
-    finally:
-        db.close()
+    print(
+        f"✅ Imported {added['users']} users, {added['routines']} routines, "
+        f"{added['sessions']} sessions, {added['sets']} sets from {filepath}"
+    )
 
 
 if __name__ == "__main__":

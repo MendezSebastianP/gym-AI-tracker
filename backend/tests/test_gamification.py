@@ -26,7 +26,7 @@ class TestGamificationStats:
         data = r.json()
         assert data["level"] == 1
         assert data["experience"] == 0
-        assert data["currency"] == 100
+        assert data["currency"] == 10
         assert data["exp_to_next"] > 0
 
     def test_get_stats_demo(self, client):
@@ -121,7 +121,7 @@ class TestPromoCode:
         data = r.json()
         assert data["success"] is True
         assert data["coins_awarded"] == 2_000
-        assert data["currency"] == 2_100  # 100 initial + 2000 promo
+        assert data["currency"] == 2_010  # 10 initial + 2000 promo
 
     def test_redeem_duplicate_code(self, client):
         headers = register_and_login(client)

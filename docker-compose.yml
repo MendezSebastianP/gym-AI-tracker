@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   nginx:
     image: nginx:alpine
@@ -19,6 +17,10 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    environment:
+      - VITE_PUBLIC_OPERATOR_NAME=${VITE_PUBLIC_OPERATOR_NAME:-}
+      - VITE_PUBLIC_SUPPORT_EMAIL=${VITE_PUBLIC_SUPPORT_EMAIL:-}
+      - VITE_PUBLIC_LEGAL_EFFECTIVE_DATE=${VITE_PUBLIC_LEGAL_EFFECTIVE_DATE:-}
     command: sh -c "npm install && npm run dev -- --host"
     ports:
       - "5173:5173"
@@ -34,9 +36,11 @@ services:
     volumes:
       - ./backend:/app
     environment:
+      - APP_ENV=${APP_ENV:-development}
       - DATABASE_URL=${DATABASE_URL}
       - SECRET_KEY=${SECRET_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ADMIN_EMAILS=${ADMIN_EMAILS:-}
     depends_on:
       - postgres
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -45,7 +49,7 @@ services:
     image: postgres:15-alpine
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-gym_tracker}
     volumes:
       - postgres_data:/var/lib/postgresql/data

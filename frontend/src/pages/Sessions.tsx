@@ -121,7 +121,7 @@ export default function Sessions() {
 						</div>
 					</div>
 					<div className="flex gap-2">
-						<button onClick={() => navigate(`/sessions/${activeSession.id}`)} className="btn btn-primary flex-1">
+						<button onClick={() => navigate(`/sessions/${activeSession.id}`)} className="btn btn-primary flex-1 motion-btn motion-btn--cta">
 							{t('Resume Session')}
 						</button>
 						<button onClick={discardSession} className="btn btn-secondary flex-1 flex items-center justify-center gap-2 text-error" style={{ color: 'var(--error)', borderColor: 'var(--error)' }}>
@@ -168,7 +168,7 @@ export default function Sessions() {
 							<div className="text-xl font-semibold mb-1">{nextDay?.day_name || `Day ${nextDayIndex + 1}`}</div>
 							<div className="text-sm text-secondary">{nextDay?.exercises.length || 0} {t('exercises')}</div>
 						</div>
-						<button onClick={startSession} className="btn btn-primary w-full">{t('Start Workout')}</button>
+						<button onClick={startSession} className="btn btn-primary w-full motion-btn motion-btn--cta">{t('Start Workout')}</button>
 					</div>
 				);
 			} else {
@@ -182,7 +182,7 @@ export default function Sessions() {
 			<div className="card" style={{ textAlign: 'center', padding: '32px 16px' }}>
 				<h3 className="text-lg font-semibold mb-2">{t('No active routine')}</h3>
 				<p className="text-secondary mb-4">{t('Create a routine to start tracking your workouts.')}</p>
-				<Link to="/routines/new" className="btn btn-primary">{t('Create Routine')}</Link>
+				<Link to="/routines/new" className="btn btn-primary motion-btn motion-btn--cta">{t('Create Routine')}</Link>
 			</div>
 		);
 	}

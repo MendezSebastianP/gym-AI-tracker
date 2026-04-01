@@ -436,7 +436,7 @@ def _analyze_bodyweight(
             .first()
         )
         if next_entry:
-            next_exercise = db.query(Exercise).get(next_entry.exercise_id)
+            next_exercise = db.get(Exercise, next_entry.exercise_id)
             if next_exercise:
                 return ProgressionSuggestion(
                     type="bw_progression",
@@ -563,11 +563,11 @@ def analyze_exercise_progression(
     Analyse session history for one exercise and return a suggestion (or None).
     This is the main entry point for mode (A) quick suggestions.
     """
-    exercise = db.query(Exercise).get(exercise_id)
+    exercise = db.get(Exercise, exercise_id)
     if not exercise:
         return None
 
-    routine = db.query(Routine).get(routine_id)
+    routine = db.get(Routine, routine_id)
     if not routine:
         return None
 
@@ -600,7 +600,7 @@ def analyze_routine_day(
     Analyse all exercises in a routine day. Returns {exercise_id: suggestion_dict}.
     Used by the batch endpoint.
     """
-    routine = db.query(Routine).get(routine_id)
+    routine = db.get(Routine, routine_id)
     if not routine:
         return {}
 

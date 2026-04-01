@@ -5,7 +5,7 @@ import { api } from '../api/client';
 import { db } from '../db/schema';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ExercisePicker from '../components/ExercisePicker';
-import { Plus, Trash, Trash2, Wand2, GripVertical, Pencil, Bot, RefreshCw } from 'lucide-react';
+import { Plus, Trash, Trash2, Wand2, GripVertical, Pencil, Bot, RefreshCw, ArrowRight } from 'lucide-react';
 import ExerciseSuggestions from '../components/ExerciseSuggestions';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -13,8 +13,11 @@ import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
 import HybridNumber from '../components/HybridNumber';
 import CoinIcon from '../components/icons/CoinIcon';
+import { useAuthStore } from '../store/authStore';
+import { getCoinRecoveryTarget } from '../utils/coinRecovery';
 
 export default function CreateRoutine() {
+	const { user, updateUser } = useAuthStore();
 	const [mode, setMode] = useState<'select' | 'manual' | 'ai'>(() => {
 		const savedMode = localStorage.getItem('draftRoutineMode');
 		if (savedMode === 'manual') {
@@ -54,6 +57,7 @@ export default function CreateRoutine() {
 
 	// Coin balance for AI features
 	const [coinBalance, setCoinBalance] = useState<number | null>(null);
+	const coinRecoveryTarget = getCoinRecoveryTarget(user?.onboarding_progress);
 	useEffect(() => {
 		if (mode === 'ai') {
 			api.get('/gamification/stats').then(res => {
@@ -174,12 +178,15 @@ export default function CreateRoutine() {
 
 		const routineData = { name, days, ai_usage_id: aiUsageId };
 
-		try {
-			if (navigator.onLine) {
-				const res = await api.post('/routines', routineData);
-				// Sync back to local DB? usually happen via sync logic, but we can optimistically add
-				await db.routines.put({ ...res.data, syncStatus: 'synced' });
-			} else {
+			try {
+				if (navigator.onLine) {
+					const res = await api.post('/routines', routineData);
+					// Sync back to local DB? usually happen via sync logic, but we can optimistically add
+					await db.routines.put({ ...res.data, syncStatus: 'synced' });
+					const me = await api.get('/auth/me');
+					updateUser(me.data);
+					await db.users.put(me.data).catch(() => {});
+				} else {
 				// Offline save
 				await db.routines.add({ ...routineData, user_id: 0, syncStatus: 'created' } as any);
 				// Add to sync queue
@@ -445,6 +452,7 @@ export default function CreateRoutine() {
 					{/* AI Wizard — hero card */}
 					<button
 						onClick={() => setMode('ai')}
+						className="motion-btn motion-btn--ai"
 						style={{
 							textAlign: 'left', cursor: 'pointer', border: 'none', padding: 0, background: 'none', width: '100%',
 						}}
@@ -493,7 +501,7 @@ export default function CreateRoutine() {
 						</div>
 					</button>
 
-					<button className="card" onClick={() => setMode('manual')} style={{ textAlign: 'left', cursor: 'pointer' }}>
+					<button className="card motion-btn motion-btn--cta motion-btn--soft" onClick={() => setMode('manual')} style={{ textAlign: 'left', cursor: 'pointer' }}>
 						<h3 style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
 							<Plus size={20} /> {t('Manual Builder')}
 						</h3>
@@ -577,12 +585,24 @@ export default function CreateRoutine() {
 						</div>
 					)}
 					{coinBalance !== null && coinBalance < 50 && (
-						<div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(255,0,0,0.08)', color: 'var(--error)', fontSize: '12px', marginBottom: '12px', textAlign: 'center' }}>
-							{t('Need 50 coins, you have')} {coinBalance}
+						<div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,0,0,0.08)', color: 'var(--error)', fontSize: '12px', marginBottom: '12px', textAlign: 'center', display: 'grid', gap: '10px' }}>
+							<div>{t('Need 50 coins, you have')} {coinBalance}</div>
+							<div style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+								{coinRecoveryTarget.helper}
+							</div>
+							<button
+								type="button"
+								className="btn btn-ghost motion-btn motion-btn--ai motion-btn--soft is-low-coins"
+								style={{ justifySelf: 'center', display: 'inline-flex', alignItems: 'center', gap: '8px', border: '1px solid rgba(255,255,255,0.08)', padding: '8px 12px' }}
+								onClick={() => navigate(coinRecoveryTarget.to)}
+							>
+								<span>{coinRecoveryTarget.label}</span>
+								<ArrowRight size={14} />
+							</button>
 						</div>
 					)}
 					<button
-						className="btn btn-primary"
+						className={`btn btn-primary motion-btn motion-btn--ai ${loading ? 'is-loading' : ''}`.trim()}
 						style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (coinBalance !== null && coinBalance < 50) ? 0.5 : 1 }}
 						onClick={generateAI}
 						disabled={loading || (coinBalance !== null && coinBalance < 50)}
@@ -758,7 +778,7 @@ export default function CreateRoutine() {
 							<Plus size={15} /> Add Training Day
 						</button>
 					</div>
-					<button className="btn btn-primary" style={{ width: '100%', marginTop: '16px' }} onClick={handleSave}>
+					<button className="btn btn-primary motion-btn motion-btn--cta" style={{ width: '100%', marginTop: '16px' }} onClick={handleSave}>
 						Save Routine
 					</button>
 

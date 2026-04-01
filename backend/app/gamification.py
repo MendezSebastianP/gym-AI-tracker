@@ -152,7 +152,7 @@ def _check_routine_completion(db: Session, user_id: int, session_obj) -> bool:
     from app.models.routine import Routine
     from app.models.routine_completion import RoutineCompletion
 
-    routine = db.query(Routine).get(session_obj.routine_id)
+    routine = db.get(Routine, session_obj.routine_id)
     if not routine or not routine.days:
         return False
 
@@ -336,7 +336,7 @@ def award_session_xp(db: Session, user: User, session_id: int) -> dict:
     """
     rep_prs, weight_prs, pr_xp_gained = _detect_prs(db, user.id, session_id)
 
-    session_obj = db.query(SessionModel).get(session_id)
+    session_obj = db.get(SessionModel, session_id)
     effort_score = None
     if session_obj:
         from app.effort_score import compute_effort_score
@@ -586,7 +586,7 @@ def _update_quest_progress(db: Session, user: User):
     ).all()
 
     for uq in active_quests:
-        quest = db.query(Quest).get(uq.quest_id)
+        quest = db.get(Quest, uq.quest_id)
         if not quest:
             continue
 
@@ -672,7 +672,7 @@ def claim_quest_reward(db: Session, user: User, user_quest_id: int) -> dict:
     if uq.claimed:
         return {"error": "Already claimed"}
 
-    quest = db.query(Quest).get(uq.quest_id)
+    quest = db.get(Quest, uq.quest_id)
 
     uq.claimed = True
     user.experience += quest.exp_reward

@@ -204,7 +204,7 @@ export default function SuggestionBadge({ suggestion, exerciseName, onApply, onD
 					<div style={{ display: 'flex', gap: '8px' }}>
 						<button
 							onClick={() => { onApply(suggestion); setExpanded(false); }}
-							className="btn"
+							className="btn motion-btn motion-btn--session"
 							style={{
 								flex: 1,
 								background: color,

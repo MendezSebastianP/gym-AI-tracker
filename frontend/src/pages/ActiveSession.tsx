@@ -15,6 +15,7 @@ import SessionElapsedTimer from '../components/SessionElapsedTimer';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
 import SessionFeed from './SessionFeed';
+import { processSyncQueue } from '../db/sync';
 
 // ─── Cardio helpers ─────────────────────────────────────────────────
 function formatPace(secondsPerKm: number): string {
@@ -64,7 +65,7 @@ export default function ActiveSession() {
 	}, [id, routineName, index, navigate]);
 
 	const editMode = searchParams.get('edit') === 'true';
-	const { user } = useAuthStore();
+	const { user, updateUser } = useAuthStore();
 	const { t, i18n } = useTranslation();
 	const [showHelp, setShowHelp] = useState(false);
 	const [showEffortModal, setShowEffortModal] = useState(false);
@@ -105,6 +106,18 @@ export default function ActiveSession() {
 	const [bwValue, setBwValue] = useState<number>(0);
 	const bwInitialized = useRef(false);
 	const bwTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Edit-mode bodyweight: local state prevents controlled-input re-render mid-typing
+	const [bwEditText, setBwEditText] = useState('');
+	const bwEditTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const bwEditInitRef = useRef(false);
+	useEffect(() => {
+		if (editMode && !bwEditInitRef.current && session) {
+			setBwEditText(String((session as any).bodyweight_kg ?? ''));
+			bwEditInitRef.current = true;
+		}
+		if (!editMode) bwEditInitRef.current = false;
+	}, [editMode, session?.id]);
 
 	useEffect(() => {
 		if (bwInitialized.current || !user) return;
@@ -236,15 +249,28 @@ export default function ActiveSession() {
 				.where('routine_id')
 				.equals(routine.id)
 				.filter(s => !!s.completed_at && s.id !== sessionId)
-				.reverse()
 				.sortBy('started_at');
 
 			if (previousSessions && previousSessions.length > 0) {
-				const lastSession = previousSessions[0];
+				// sortBy returns ascending — take the last (most recent)
+				const lastSession = previousSessions[previousSessions.length - 1];
 				previousSets = await db.sets
 					.where('session_id')
 					.equals(lastSession.id!)
 					.toArray();
+			}
+
+			// If no local data (sync hasn't run yet), fall back to server
+			if (previousSets.length === 0 && navigator.onLine) {
+				try {
+					const res = await api.get(`/sessions?routine_id=${routine.id}&limit=5`);
+					const serverPrev = (res.data as any[])
+						.filter((s: any) => s.completed_at && s.id !== session.server_id)
+						.sort((a: any, b: any) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+					if (serverPrev.length > 0) {
+						previousSets = serverPrev[0].sets || [];
+					}
+				} catch { /* offline or error — proceed with defaults */ }
 			}
 
 			const newSets: any[] = [];
@@ -290,8 +316,8 @@ export default function ActiveSession() {
 							session_id: sessionId,
 							exercise_id: ex.exercise_id,
 							set_number: i + 1,
-							weight_kg: (ex.weight_kg && ex.weight_kg > 0) ? ex.weight_kg : (prevSet.weight_kg || 0),
-							reps: (ex.reps && !isNaN(parseInt(ex.reps))) ? parseInt(ex.reps.split('-')[0]) : (prevSet.reps || 0),
+							weight_kg: prevSet.weight_kg ?? (ex.weight_kg || 0),
+							reps: prevSet.reps || ((ex.reps && !isNaN(parseInt(ex.reps))) ? parseInt(ex.reps.split('-')[0]) : 0),
 							duration_sec: (isTime || isCardio) ? (prevSet.duration_sec || 0) : undefined,
 							distance_km: isCardio ? (prevSet.distance_km || 0) : undefined,
 							avg_pace: isCardio ? (prevSet.avg_pace || undefined) : undefined,
@@ -339,7 +365,7 @@ export default function ActiveSession() {
 	useEffect(() => {
 		const handleVisibilityChange = () => {
 			if (document.visibilityState === 'hidden' && session && !session.completed_at) {
-				import('../db/sync').then(({ processSyncQueue }) => processSyncQueue()).catch(() => {});
+				processSyncQueue().catch(() => {});
 			}
 		};
 		document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -401,10 +427,19 @@ export default function ActiveSession() {
 		await db.sessions.update(sessionId, updates);
 
 		try {
-			const { processSyncQueue } = await import('../db/sync');
 			await processSyncQueue();
 		} catch (e) {
 			console.error("Sync on finish failed", e);
+		}
+
+		if (navigator.onLine) {
+			try {
+				const me = await api.get('/auth/me');
+				updateUser(me.data);
+				await db.users.put(me.data).catch(() => {});
+			} catch (e) {
+				console.error('Failed to refresh user after finishing session', e);
+			}
 		}
 
 		navigate('/sessions');
@@ -623,21 +658,29 @@ export default function ActiveSession() {
 						/>
 					</div>
 
-					{/* Body weight editor */}
+					{/* Body weight editor — local state + debounce avoids mid-typing re-render race */}
 					<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
 						<label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{t('Body Weight (kg)')}</label>
 						<input
 							type="number"
 							inputMode="decimal"
-							value={(session as any).bodyweight_kg ?? ''}
+							value={bwEditText}
 							placeholder={t('Not logged')}
-							onChange={async (e) => {
-								const val = parseFloat(e.target.value);
-								const bwVal = isNaN(val) ? null : val;
-								await db.sessions.update(sessionId, { bodyweight_kg: bwVal, syncStatus: 'updated' } as any);
-								if (session.server_id) {
-									api.put(`/sessions/${session.server_id}`, { bodyweight_kg: bwVal }).catch(() => {});
-								}
+							onChange={(e) => {
+								setBwEditText(e.target.value);
+								const captured = e.target.value;
+								if (bwEditTimeout.current) clearTimeout(bwEditTimeout.current);
+								bwEditTimeout.current = setTimeout(async () => {
+									const val = parseFloat(captured);
+									const bwVal = isNaN(val) ? null : val;
+									await db.sessions.update(sessionId, { bodyweight_kg: bwVal, syncStatus: 'updated' } as any);
+									if (session.server_id) {
+										try {
+											await api.put(`/sessions/${session.server_id}`, { bodyweight_kg: bwVal });
+											if (bwVal != null) updateUser({ weight: Math.round(bwVal) });
+										} catch { /* offline */ }
+									}
+								}, 600);
 							}}
 							className="input"
 							style={{ width: '100%', fontSize: '14px', padding: '12px' }}
@@ -706,7 +749,7 @@ export default function ActiveSession() {
 						</button>
 					)}
 					{isEditable && !isCompleted && (
-						<button className="btn btn-primary" onClick={finishSession} style={{ padding: '8px 16px', fontSize: '14px' }}>
+						<button className="btn btn-primary motion-btn motion-btn--session is-finish" onClick={finishSession} style={{ padding: '8px 16px', fontSize: '14px' }}>
 							{t('Finish')}
 						</button>
 					)}
@@ -758,6 +801,7 @@ export default function ActiveSession() {
 						<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
 							<button
 								onClick={() => { setShowRestTimer(!showRestTimer); if (!showRestTimer) setShowStopwatch(false); }}
+								className="motion-btn motion-btn--session motion-btn--soft"
 								style={{
 									...compactBtn,
 									background: showRestTimer ? 'var(--primary-glow)' : 'var(--bg-tertiary)',
@@ -770,6 +814,7 @@ export default function ActiveSession() {
 							</button>
 							<button
 								onClick={() => { setShowStopwatch(!showStopwatch); if (!showStopwatch) setShowRestTimer(false); }}
+								className="motion-btn motion-btn--session motion-btn--soft"
 								style={{
 									...compactBtn,
 									background: showStopwatch ? 'var(--primary-glow)' : 'var(--bg-tertiary)',
@@ -787,6 +832,7 @@ export default function ActiveSession() {
 									<button
 										onClick={progressionSuggestions.fetch}
 										disabled={loading}
+										className={`motion-btn motion-btn--ai motion-btn--soft ${loading ? 'is-loading' : ''}`.trim()}
 										style={{
 											...compactBtn,
 											color: fetched ? 'var(--accent)' : 'var(--text-secondary)',
@@ -806,6 +852,7 @@ export default function ActiveSession() {
 										if (allCollapsed) setCollapsedExercises([]);
 										else setCollapsedExercises(allExIds);
 									}}
+									className="motion-btn motion-btn--session motion-btn--soft"
 									style={compactBtn}
 								>
 									{allCollapsed ? t('Expand all') : t('Collapse all')}
@@ -820,6 +867,7 @@ export default function ActiveSession() {
 											setCompletedSets(new Set(allSetKeys));
 										}
 									}}
+									className="motion-btn motion-btn--session"
 									style={{
 										...compactBtn,
 										border: globalAllDone ? '1px solid var(--success)' : '1px solid var(--border)',
@@ -961,6 +1009,7 @@ export default function ActiveSession() {
 								{isEditable && (
 									<div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
 										<button
+											className={`motion-btn motion-btn--session ${isExAllDone ? '' : 'motion-btn--soft'}`.trim()}
 											onClick={(e: any) => {
 												e.stopPropagation();
 												setCompletedSets(prev => {
@@ -1237,16 +1286,16 @@ export default function ActiveSession() {
 
 									{isEditable && (
 										<div style={{ display: 'grid', gap: '8px', marginTop: '8px' }}>
-											<button
-												className="btn btn-secondary"
-												onClick={() => addSet(ex.exercise_id)}
-												style={{ width: '100%', fontSize: '14px', padding: '8px' }}
-											>
+										<button
+											className="btn btn-secondary motion-btn motion-btn--session"
+											onClick={() => addSet(ex.exercise_id)}
+											style={{ width: '100%', fontSize: '14px', padding: '8px' }}
+										>
 												+ {ex.type === 'Cardio' ? t('Add Interval') : t('Add Set')}
 											</button>
 											{dropSetsEnabled && supportsSetTypes && dropSets.length < maxDropSets && (
 												<button
-													className="btn btn-ghost"
+													className="btn btn-ghost motion-btn motion-btn--session motion-btn--soft"
 													onClick={() => addSet(ex.exercise_id, 'drop')}
 													style={{
 														width: '100%',

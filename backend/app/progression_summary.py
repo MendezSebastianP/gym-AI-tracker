@@ -64,7 +64,7 @@ def build_progress_summary(
         }
     }
     """
-    routine = db.query(Routine).get(routine_id)
+    routine = db.get(Routine, routine_id)
     if not routine:
         return {"overall": {}, "exercises": [], "user_context": {}}
 
@@ -126,7 +126,7 @@ def build_progress_summary(
     recent_prs = []
 
     for exercise_id in exercise_ids:
-        exercise = db.query(Exercise).get(exercise_id)
+        exercise = db.get(Exercise, exercise_id)
         if not exercise:
             continue
 

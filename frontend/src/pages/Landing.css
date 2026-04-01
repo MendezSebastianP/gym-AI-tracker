@@ -1098,6 +1098,9 @@
   color: var(--text-tertiary);
   text-align: center;
   font-size: 13px;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
 }
 
 @keyframes landingGridDrift {

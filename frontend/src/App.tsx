@@ -1,40 +1,67 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Layout from './components/Layout';
-import Landing from './pages/Landing';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Routines from './pages/Routines';
-import CreateRoutine from './pages/CreateRoutine';
-import RoutineDetails from './pages/RoutineDetails';
-import ActiveSession from './pages/ActiveSession';
-import Stats from './pages/Stats';
-import Dashboard from './pages/Dashboard';
-import Settings from './pages/Settings';
-import Sessions from './pages/Sessions';
-import Onboarding from './pages/Onboarding';
-import Shop from './pages/Shop';
-import Quests from './pages/Quests';
-import TrainingContext from './pages/TrainingContext';
-import ProgressionReport from './pages/ProgressionReport';
-import Playground from './pages/Playground';
 import { AdminRoute } from './components/AdminRoute';
 import AdminLayout from './components/AdminLayout';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminUsers from './pages/admin/AdminUsers';
-import AdminExercises from './pages/admin/AdminExercises';
-import AdminSettings from './pages/admin/AdminSettings';
-
-import { useEffect } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { api } from './api/client';
 import { db } from './db/schema';
 import { useAuthStore } from './store/authStore';
 import { startSyncService, stopSyncService, getPendingDeleteServerIds, processSyncQueue } from './db/sync';
 import i18n from './i18n';
+import OnboardingToast from './components/OnboardingToast';
+import { MotionPreferenceSync, MotionProvider, PublicRouteFrame, StandaloneAppRouteFrame } from './motion/RouteTransition';
+import { getRootShellKey } from './motion/routes';
+
+const Landing = lazy(() => import('./pages/Landing'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const Privacy = lazy(() => import('./pages/Privacy'));
+const Terms = lazy(() => import('./pages/Terms'));
+const Routines = lazy(() => import('./pages/Routines'));
+const CreateRoutine = lazy(() => import('./pages/CreateRoutine'));
+const RoutineDetails = lazy(() => import('./pages/RoutineDetails'));
+const ActiveSession = lazy(() => import('./pages/ActiveSession'));
+const Stats = lazy(() => import('./pages/Stats'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Sessions = lazy(() => import('./pages/Sessions'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
+const Shop = lazy(() => import('./pages/Shop'));
+const Quests = lazy(() => import('./pages/Quests'));
+const TrainingContext = lazy(() => import('./pages/TrainingContext'));
+const ProgressionReport = lazy(() => import('./pages/ProgressionReport'));
+const Playground = lazy(() => import('./pages/Playground'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
+const AdminExercises = lazy(() => import('./pages/admin/AdminExercises'));
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
+
+function RouteLoadingFallback() {
+	return (
+		<div
+			style={{
+				minHeight: '100vh',
+				display: 'grid',
+				placeItems: 'center',
+				padding: '24px',
+				background: 'var(--bg-primary)',
+				color: 'var(--text-secondary)',
+				fontSize: '14px',
+				letterSpacing: '0.04em',
+				textTransform: 'uppercase',
+			}}
+		>
+			Loading...
+		</div>
+	);
+}
 
 function App() {
 	const { isAuthenticated, isAdmin, user } = useAuthStore();
+	const location = useLocation();
 
 	const { needRefresh, updateServiceWorker } = useRegisterSW();
 
@@ -199,10 +226,13 @@ function App() {
 
 		syncUserData();
 	}, [isAuthenticated]);
+	const shellKey = getRootShellKey(location.pathname);
 
 	return (
-		<>
-		{needRefresh[0] && (
+		<MotionProvider>
+			<MotionPreferenceSync />
+			<OnboardingToast />
+			{needRefresh[0] && (
 			<div style={{
 				position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
 				background: 'var(--bg-secondary)', borderBottom: '1px solid var(--overlay-medium)',
@@ -224,48 +254,56 @@ function App() {
 				>✕</button>
 			</div>
 		)}
-		<Routes>
-			<Route path="/" element={isAuthenticated ? (isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/home" replace />) : <Landing />} />
-			<Route path="/login" element={<Login />} />
-			<Route path="/register" element={<Register />} />
-			<Route element={<AdminRoute />}>
-				<Route path="/playground" element={<Playground />} />
-			</Route>
+			<Suspense fallback={<RouteLoadingFallback />}>
+				<AnimatePresence mode="wait" initial={false}>
+					<Routes location={location} key={shellKey}>
+						<Route
+							path="/"
+							element={isAuthenticated ? (isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/home" replace />) : <PublicRouteFrame><Landing /></PublicRouteFrame>}
+						/>
+						<Route path="/login" element={<PublicRouteFrame><Login /></PublicRouteFrame>} />
+						<Route path="/register" element={<PublicRouteFrame><Register /></PublicRouteFrame>} />
+						<Route path="/privacy" element={<PublicRouteFrame><Privacy /></PublicRouteFrame>} />
+						<Route path="/terms" element={<PublicRouteFrame><Terms /></PublicRouteFrame>} />
+						<Route element={<AdminRoute />}>
+							<Route path="/playground" element={<Playground />} />
+						</Route>
 
-			<Route element={<ProtectedRoute />}>
-				<Route path="/onboarding" element={<Onboarding />} />
-				<Route element={<Layout />}>
-					<Route path="/dashboard" element={<Dashboard />} />
-					<Route path="/sessions" element={<Sessions />} />
-					<Route path="/sessions/:id" element={<ActiveSession />} />
-					<Route path="/sessions/:routineName/:index" element={<ActiveSession />} />
-					<Route path="/routines" element={<Routines />} />
-					<Route path="/routines/new" element={<CreateRoutine />} />
-					<Route path="/routines/:id" element={<RoutineDetails />} />
-					<Route path="/routines/:id/report" element={<ProgressionReport />} />
-					<Route path="/home" element={<Stats />} />
-					<Route path="/quests" element={<Quests />} />
+						<Route element={<ProtectedRoute />}>
+							<Route path="/onboarding" element={<StandaloneAppRouteFrame><Onboarding /></StandaloneAppRouteFrame>} />
+							<Route element={<Layout />}>
+								<Route path="/dashboard" element={<Dashboard />} />
+								<Route path="/sessions" element={<Sessions />} />
+								<Route path="/sessions/:id" element={<ActiveSession />} />
+								<Route path="/sessions/:routineName/:index" element={<ActiveSession />} />
+								<Route path="/routines" element={<Routines />} />
+								<Route path="/routines/new" element={<CreateRoutine />} />
+								<Route path="/routines/:id" element={<RoutineDetails />} />
+								<Route path="/routines/:id/report" element={<ProgressionReport />} />
+								<Route path="/home" element={<Stats />} />
+								<Route path="/quests" element={<Quests />} />
 
-					<Route path="/settings" element={<Settings />} />
-					<Route path="/settings/questionnaire" element={<TrainingContext />} />
-					<Route path="/shop" element={<Shop />} />
+								<Route path="/settings" element={<Settings />} />
+								<Route path="/settings/questionnaire" element={<TrainingContext />} />
+								<Route path="/shop" element={<Shop />} />
 
-				</Route>
-			</Route>
+							</Route>
+						</Route>
 
-			{/* Admin Routes */}
-			<Route element={<AdminRoute />}>
-				<Route element={<AdminLayout />}>
-					<Route path="/admin" element={<AdminDashboard />} />
-					<Route path="/admin/users" element={<AdminUsers />} />
-					<Route path="/admin/exercises" element={<AdminExercises />} />
-					<Route path="/admin/settings" element={<AdminSettings />} />
-				</Route>
-			</Route>
+						<Route element={<AdminRoute />}>
+							<Route element={<AdminLayout />}>
+								<Route path="/admin" element={<AdminDashboard />} />
+								<Route path="/admin/users" element={<AdminUsers />} />
+								<Route path="/admin/exercises" element={<AdminExercises />} />
+								<Route path="/admin/settings" element={<AdminSettings />} />
+							</Route>
+						</Route>
 
-			<Route path="*" element={<Navigate to="/" replace />} />
-		</Routes>
-		</>
+						<Route path="*" element={<Navigate to="/" replace />} />
+					</Routes>
+				</AnimatePresence>
+			</Suspense>
+		</MotionProvider>
 	);
 }
 

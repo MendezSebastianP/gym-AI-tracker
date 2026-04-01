@@ -21,7 +21,7 @@ export default function CheckSuggestionsButton({
 		<button
 			onClick={onClick}
 			disabled={loading}
-			className="btn btn-ghost"
+			className={`btn btn-ghost motion-btn motion-btn--ai ${loading ? 'is-loading' : ''}`.trim()}
 			style={{
 				display: 'flex',
 				alignItems: 'center',

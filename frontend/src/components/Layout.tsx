@@ -1,8 +1,19 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { Home, Dumbbell, Calendar, Settings as SettingsIcon, BarChart2 } from 'lucide-react';
 import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Home, Dumbbell, Calendar, Settings as SettingsIcon, BarChart2 } from 'lucide-react';
+import { LayoutGroup, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import GamificationToast from './GamificationToast';
+import { AnimatedAppOutlet } from '../motion/RouteTransition';
+import { motionTokens } from '../motion/routes';
+
+const NAV_ITEMS = [
+	{ to: '/home', labelKey: 'Home', icon: Home },
+	{ to: '/dashboard', labelKey: 'Stats', icon: BarChart2 },
+	{ to: '/sessions', labelKey: 'Sessions', icon: Calendar },
+	{ to: '/routines', labelKey: 'Routines', icon: Dumbbell },
+	{ to: '/settings', labelKey: 'Settings', icon: SettingsIcon },
+] as const;
 
 const Layout = () => {
 	const { t } = useTranslation();
@@ -12,53 +23,51 @@ const Layout = () => {
 		window.scrollTo(0, 0);
 	}, [location.pathname]);
 
-	const isActive = (path: string) => location.pathname === path;
-
 	return (
-		<div className="layout-container" style={{ paddingBottom: '80px' }}>
+		<div className="layout-container" style={{ paddingBottom: '92px' }}>
 			<GamificationToast />
 			<main>
-				<Outlet />
+				<AnimatedAppOutlet />
 			</main>
 
-			{/* Bottom Navigation */}
-			<nav style={{
-				position: 'fixed',
-				bottom: 0,
-				left: 0,
-				right: 0,
-				borderTop: '1px solid var(--border)',
-				padding: '10px 0',
-				display: 'flex',
-				justifyContent: 'space-around',
-				alignItems: 'center',
-				zIndex: 100,
-				backdropFilter: 'blur(10px)',
-				backgroundColor: 'var(--nav-bg)'
-			}}>
-				<NavItem to="/home" icon={<Home size={24} />} label={t("Home")} active={isActive('/home')} />
-				<NavItem to="/dashboard" icon={<BarChart2 size={24} />} label={t("Stats")} active={isActive('/dashboard')} />
-				<NavItem to="/sessions" icon={<Calendar size={24} />} label={t("Sessions")} active={isActive('/sessions')} />
-				<NavItem to="/routines" icon={<Dumbbell size={24} />} label={t("Routines")} active={isActive('/routines')} />
-
-				<NavItem to="/settings" icon={<SettingsIcon size={24} />} label={t("Settings")} active={isActive('/settings')} />
+			<nav className="app-nav">
+				<LayoutGroup>
+					<div className="app-nav-inner">
+						{NAV_ITEMS.map((item) => {
+							const active = location.pathname === item.to;
+							const Icon = item.icon;
+							return (
+								<Link key={item.to} to={item.to} className="app-nav-item">
+									<div className="app-nav-item-frame">
+										{active ? (
+											<motion.span
+												layoutId="app-nav-pill"
+												className="app-nav-pill"
+												transition={motionTokens.spring.nav}
+											/>
+										) : null}
+										<motion.span
+											animate={{ y: active ? -2 : 0, scale: active ? 1.04 : 1 }}
+											transition={{ duration: 0.24, ease: motionTokens.ease.out }}
+										>
+											<Icon size={22} color={active ? 'var(--primary)' : 'var(--text-tertiary)'} />
+										</motion.span>
+										<motion.span
+											className="app-nav-item-label"
+											animate={{ y: active ? 0 : 1, opacity: active ? 1 : 0.82, color: active ? 'var(--primary)' : 'var(--text-tertiary)' }}
+											transition={{ duration: 0.22, ease: motionTokens.ease.out }}
+										>
+											{t(item.labelKey)}
+										</motion.span>
+									</div>
+								</Link>
+							);
+						})}
+					</div>
+				</LayoutGroup>
 			</nav>
 		</div>
 	);
 };
-
-const NavItem = ({ to, icon, label, active }: { to: string, icon: React.ReactNode, label: string, active: boolean }) => (
-	<Link to={to} style={{
-		display: 'flex',
-		flexDirection: 'column',
-		alignItems: 'center',
-		color: active ? 'var(--primary)' : 'var(--text-tertiary)',
-		transition: 'color 0.2s',
-		textDecoration: 'none'
-	}}>
-		{icon}
-		<span style={{ fontSize: '10px', marginTop: '4px' }}>{label}</span>
-	</Link>
-);
 
 export default Layout;

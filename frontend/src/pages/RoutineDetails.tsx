@@ -388,7 +388,7 @@ export default function RoutineDetails() {
 										/>
 									)}
 									<button
-										className="btn btn-primary"
+										className="btn btn-primary motion-btn motion-btn--cta"
 										style={{ padding: '8px 16px', fontSize: '14px' }}
 										onClick={() => startSession(dIndex)}
 									>

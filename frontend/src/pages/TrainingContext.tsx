@@ -34,7 +34,6 @@ export default function TrainingContext() {
 	const [loading, setLoading] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [showConfirmation, setShowConfirmation] = useState(false);
-	const [coinToast, setCoinToast] = useState<string | null>(null);
 
 	const [prefs, setPrefs] = useState<any>({
 		primary_goal: '',
@@ -81,12 +80,6 @@ export default function TrainingContext() {
 		};
 		loadPrefs();
 	}, []);
-
-	useEffect(() => {
-		if (!coinToast) return;
-		const timer = setTimeout(() => setCoinToast(null), 2200);
-		return () => clearTimeout(timer);
-	}, [coinToast]);
 
 	// Build dynamic step list based on chosen level and user profile null fields
 	const steps = useMemo<StepDef[]>(() => {
@@ -188,7 +181,6 @@ export default function TrainingContext() {
 	const saveAndComplete = async () => {
 		setSubmitting(true);
 		try {
-			const previousCoins = user?.currency || 0;
 			await savePrefs(true);
 			// Save any collected profile fields to /auth/me
 			const profilePayload = Object.fromEntries(
@@ -202,17 +194,12 @@ export default function TrainingContext() {
 			const me = await api.get('/auth/me');
 			updateUser(me.data);
 			await db.users.put(me.data);
-			const gained = (me.data.currency || 0) - previousCoins;
-			if (gained > 0) {
-				setCoinToast(`+${gained} coins for completing the questionnaire!`);
-			}
 
 			const proceed = () => {
 				if (isOnboarding) navigate('/routines/new?onboarding=true');
 				else navigate(-1);
 			};
-			if (gained > 0) setTimeout(proceed, 850);
-			else proceed();
+			proceed();
 		} catch (e) {
 			console.error('Failed to complete', e);
 		} finally {
@@ -709,24 +696,6 @@ export default function TrainingContext() {
 
 	return (
 		<div className="container" style={{ paddingBottom: '80px', maxWidth: '600px' }}>
-			{coinToast && (
-				<div style={{
-					position: 'fixed',
-					top: '18px',
-					left: '50%',
-					transform: 'translateX(-50%)',
-					background: 'rgba(34,197,94,0.18)',
-					border: '1px solid rgba(34,197,94,0.45)',
-					color: '#86efac',
-					padding: '8px 12px',
-					borderRadius: '999px',
-					fontSize: '12px',
-					fontWeight: 700,
-					zIndex: 220,
-				}}>
-					{coinToast}
-				</div>
-			)}
 			<div className="card mb-4" style={{ padding: '0', overflow: 'hidden' }}>
 				{/* Header */}
 				<div className="flex justify-between items-center" style={{

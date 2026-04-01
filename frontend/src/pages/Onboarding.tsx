@@ -8,7 +8,7 @@ import { db } from '../db/schema';
 export default function Onboarding() {
 	const { t } = useTranslation();
 	const navigate = useNavigate();
-	const { user } = useAuthStore();
+	const { user, updateUser } = useAuthStore();
 
 	const [formData, setFormData] = useState({
 		height: user?.height || '',
@@ -29,15 +29,14 @@ export default function Onboarding() {
 			if (formData.height) payload.height = parseInt(formData.height as string);
 			if (formData.age) payload.age = parseInt(formData.age as string);
 			if (formData.gender) payload.gender = formData.gender;
-			payload.onboarding_progress = { profile: true };
+				payload.onboarding_progress = { profile: true };
 
-			const res = await api.put('/auth/me', payload);
+				const res = await api.put('/auth/me', payload);
 
-			await db.users.put(res.data);
-			const { checkAuth } = useAuthStore.getState();
-			await checkAuth();
+				await db.users.put(res.data);
+				updateUser(res.data);
 
-			navigate('/settings/questionnaire?onboarding=true');
+				navigate('/settings/questionnaire?onboarding=true');
 		} catch (e) {
 			console.error("Onboarding failed", e);
 		} finally {

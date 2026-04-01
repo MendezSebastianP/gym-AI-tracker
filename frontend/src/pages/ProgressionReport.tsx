@@ -6,6 +6,8 @@ import { ArrowLeft, ArrowRight, TrendingUp, Minus, TrendingDown, Check, Loader2,
 import { api } from '../api/client';
 import { useTranslation } from 'react-i18next';
 import CoinIcon from '../components/icons/CoinIcon';
+import { useAuthStore } from '../store/authStore';
+import { getCoinRecoveryTarget } from '../utils/coinRecovery';
 
 interface ReportSuggestion {
 	type: string;
@@ -32,6 +34,7 @@ export default function ProgressionReport() {
 	const navigate = useNavigate();
 	const { t: _t, i18n } = useTranslation();
 	const location = useLocation();
+	const { user } = useAuthStore();
 
 	// ── Core state ──────────────────────────────────────────────────────────────
 	const [panel, setPanel] = useState<'past' | 'new'>('new');
@@ -53,6 +56,7 @@ export default function ProgressionReport() {
 
 	const [userContext, setUserContext] = useState((location.state as any)?.userContext || '');
 	const [coinBalance, setCoinBalance] = useState<number | null>(null);
+	const coinRecoveryTarget = getCoinRecoveryTarget(user?.onboarding_progress);
 
 	useEffect(() => {
 		api.get('/gamification/stats').then(res => {
@@ -324,6 +328,7 @@ export default function ProgressionReport() {
 					) : (
 						<button
 							onClick={() => applySuggestion(dayName, exId, sug, reportData, appliedSet, setApplied)}
+							className="motion-btn motion-btn--session"
 							style={{ fontSize: '11px', padding: '5px 14px', borderRadius: '6px', background: color, color: applyTextColor, border: 'none', cursor: 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
 						>
 							<Check size={10} /> Apply
@@ -414,13 +419,39 @@ export default function ProgressionReport() {
 				<p style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '12px', textAlign: 'center' }}>{error}</p>
 			)}
 			{!canAfford && (
-				<div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(255,0,0,0.08)', color: 'var(--error)', fontSize: '12px', marginBottom: '12px', textAlign: 'center' }}>
-					{_t('Need 50 coins, you have')} {coinBalance}
+				<div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,0,0,0.08)', color: 'var(--error)', fontSize: '12px', marginBottom: '12px', textAlign: 'center', display: 'grid', gap: '10px' }}>
+					<div>{_t('Need 50 coins, you have')} {coinBalance}</div>
+					<div style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+						{coinRecoveryTarget.helper}
+					</div>
+					<button
+						type="button"
+						onClick={() => navigate(coinRecoveryTarget.to)}
+						className="motion-btn motion-btn--ai motion-btn--soft is-low-coins"
+						style={{
+							justifySelf: 'center',
+							display: 'inline-flex',
+							alignItems: 'center',
+							gap: '8px',
+							padding: '8px 12px',
+							borderRadius: '999px',
+							border: '1px solid rgba(255,255,255,0.08)',
+							background: 'rgba(255,255,255,0.04)',
+							color: 'var(--text-primary)',
+							fontSize: '12px',
+							fontWeight: 700,
+							cursor: 'pointer',
+						}}
+					>
+						<span>{coinRecoveryTarget.label}</span>
+						<ArrowRight size={14} />
+					</button>
 				</div>
 			)}
 			<button
 				onClick={generateReport}
 				disabled={generating || !canGenerate || !canAfford}
+				className={`motion-btn motion-btn--ai ${generating ? 'is-loading' : ''} ${!canAfford ? 'is-low-coins' : ''}`.trim()}
 				style={{
 					width: '100%', padding: '15px', borderRadius: '12px', border: 'none',
 					background: (!canGenerate || !canAfford) ? 'var(--bg-secondary)' : 'linear-gradient(135deg, var(--primary) 0%, #00e5b0 100%)',
@@ -471,6 +502,7 @@ export default function ProgressionReport() {
 										}
 									}
 								}}
+								className="motion-btn motion-btn--session"
 								style={{ marginLeft: 'auto', fontSize: '11px', padding: '6px 14px', borderRadius: '8px', background: 'var(--primary)', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
 							>
 								<Check size={12} /> Apply All

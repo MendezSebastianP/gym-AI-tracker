@@ -3,13 +3,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../api/client';
 import { useTranslation } from 'react-i18next';
-import LanguageSwitcher from '../components/LanguageSwitcher';
+import PublicAuthShell from '../components/PublicAuthShell';
 
 export default function Register() {
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
 	const [error, setError] = useState('');
 	const [loading, setLoading] = useState(false);
+	const [successBridge, setSuccessBridge] = useState(false);
 	const { login } = useAuthStore();
 	const navigate = useNavigate();
 	const { t } = useTranslation();
@@ -22,9 +23,12 @@ export default function Register() {
 		try {
 			const response = await api.post('/auth/register', { email, password });
 			await login(response.data.access_token, response.data.refresh_token);
-			navigate('/onboarding');
+			setSuccessBridge(true);
+			await new Promise((resolve) => window.setTimeout(resolve, 420));
+			navigate('/home');
 		} catch (err: any) {
 			console.error('Registration error:', err);
+			setSuccessBridge(false);
 
 			// Better error messages
 			if (err.response) {
@@ -52,28 +56,25 @@ export default function Register() {
 	};
 
 	return (
-		<div className="container" style={{ justifyContent: 'center', position: 'relative' }}>
-			<div style={{ position: 'absolute', top: '16px', right: '16px' }}>
-				<LanguageSwitcher />
+		<PublicAuthShell
+			eyebrow={t('Start here')}
+			title={t('Create the account. Start the log.')}
+			subtitle={t('Get the same homepage experience, then move straight into routines, sessions, and progress tracking.')}
+			cardClassName={successBridge ? 'is-success-bridge' : ''}
+			altPrompt={
+				<>
+					{t("Already have an account?")} <Link to="/login">{t("Login")}</Link>
+				</>
+			}
+		>
+			<div className="public-auth-form-header">
+				<h2>{t('Register')}</h2>
+				<p>{t('Create your account and we will take you straight into Home.')}</p>
 			</div>
-			<div style={{ marginTop: '40px' }}></div>
-			<Link to="/" className="fade-in" style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary)', fontWeight: 800, display: 'block' }}>Gym AI</Link>
-			<p className="fade-in" style={{ marginBottom: '32px', color: 'var(--text-secondary)' }}>Start your journey today.</p>
 
-			{error && (
-				<div style={{
-					color: 'var(--error)',
-					marginBottom: '16px',
-					padding: '12px',
-					backgroundColor: 'rgba(255, 68, 68, 0.1)',
-					borderRadius: '8px',
-					border: '1px solid var(--error)'
-				}}>
-					{error}
-				</div>
-			)}
+			{error && <div className="public-auth-error">{error}</div>}
 
-			<form onSubmit={handleSubmit} className="fade-in">
+			<form onSubmit={handleSubmit} className="public-auth-form">
 				<div className="input-group">
 					<label className="label">{t("Email")}</label>
 					<input
@@ -99,24 +100,19 @@ export default function Register() {
 						minLength={6}
 						disabled={loading}
 					/>
-					<small style={{ color: 'var(--text-tertiary)', marginTop: '4px', display: 'block' }}>
-						Minimum 6 characters
+					<small style={{ color: 'var(--text-tertiary)', marginTop: '6px', display: 'block' }}>
+						{t('Minimum 6 characters')}
 					</small>
 				</div>
 
 				<button
 					type="submit"
-					className="btn btn-primary"
-					style={{ width: '100%', marginTop: '16px' }}
+					className={`btn public-auth-submit motion-btn motion-btn--cta motion-btn--public ${loading ? 'is-loading' : ''} ${successBridge ? 'is-success-locked' : ''}`.trim()}
 					disabled={loading}
 				>
-					{loading ? 'Creating account...' : t("Register")}
+					{successBridge ? t('Opening Home...') : loading ? t('Creating account...') : t("Register")}
 				</button>
 			</form>
-
-			<p style={{ marginTop: '24px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-				Already have an account? <Link to="/login" style={{ color: 'var(--primary)' }}>{t("Login")}</Link>
-			</p>
-		</div>
+		</PublicAuthShell>
 	);
 }

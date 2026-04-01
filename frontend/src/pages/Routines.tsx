@@ -150,7 +150,7 @@ export default function Routines() {
 						<HelpCircle size={18} color="var(--text-tertiary)" />
 					</button>
 				</div>
-				<Link to="/routines/new" className="btn btn-primary" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+				<Link to="/routines/new" className="btn btn-primary motion-btn motion-btn--cta" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
 					<Plus size={20} />
 					<span>{t('New')}</span>
 				</Link>

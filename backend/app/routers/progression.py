@@ -72,7 +72,7 @@ def get_routine_suggestions(
 ):
     """Get algorithmic suggestions for all exercises in a routine day."""
     # Verify ownership
-    routine = db.query(Routine).get(routine_id)
+    routine = db.get(Routine, routine_id)
     if not routine or routine.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Routine not found")
 
@@ -126,7 +126,7 @@ async def generate_report(
     """
     Generate a full progression report. Costs 50 coins (or 1 joker token).
     """
-    routine = db.query(Routine).get(routine_id)
+    routine = db.get(Routine, routine_id)
     if not routine or routine.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Routine not found")
 

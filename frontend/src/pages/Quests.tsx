@@ -213,6 +213,7 @@ export default function Quests() {
 													<button
 														onClick={() => !isDemo && claimReward(quest.id)}
 														disabled={!!isDemo || claiming === quest.id}
+														className={`motion-btn motion-btn--claim ${isDemo ? '' : 'is-ready'} ${claiming === quest.id ? 'is-bursting' : ''}`.trim()}
 														style={{
 															padding: '6px 16px', fontSize: '12px',
 															fontWeight: 700, borderRadius: '8px',

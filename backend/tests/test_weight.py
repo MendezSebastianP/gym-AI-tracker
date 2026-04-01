@@ -152,7 +152,7 @@ class TestWeightCRUD:
         r = client.delete(f"/api/weight/{log['id']}", headers=headers)
         assert r.status_code == 200
         history = client.get("/api/weight", headers=headers).json()
-        assert all(l["id"] != log["id"] for l in history)
+        assert all(entry["id"] != log["id"] for entry in history)
 
     def test_delete_weight_log_not_found(self, client):
         headers = register_and_login(client)

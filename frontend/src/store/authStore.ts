@@ -104,9 +104,17 @@ export const useAuthStore = create<AuthState>((set) => ({
 
 	// Update user object in store (for immediate local reflection of settings changes)
 	updateUser: (updates: Partial<User>) => {
-		set((state: AuthState) => ({
-			user: state.user ? { ...state.user, ...updates } : null
-		}));
+		set((state: AuthState) => {
+			if (!state.user) {
+				return state;
+			}
+			const nextUser = { ...state.user, ...updates };
+			db.users.put(nextUser).catch(() => {});
+			return {
+				user: nextUser,
+				isAdmin: nextUser.is_admin || false,
+			};
+		});
 	}
 }));
 

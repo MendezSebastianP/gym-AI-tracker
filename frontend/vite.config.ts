@@ -5,6 +5,20 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+	build: {
+		rollupOptions: {
+			output: {
+				manualChunks: {
+					react: ['react', 'react-dom', 'react-router-dom'],
+					data: ['axios', 'dexie', 'dexie-react-hooks', 'zustand'],
+					i18n: ['i18next', 'react-i18next'],
+					charts: ['recharts', 'date-fns'],
+					dnd: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+					icons: ['lucide-react'],
+				},
+			},
+		},
+	},
 	plugins: [
 		react(),
 		VitePWA({

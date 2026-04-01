@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { LiveStreakRow, SKIN_ACCENTS } from '../components/StreakFlames';
 import type { WeekSlot } from '../components/StreakFlames';
 import {
-	PlusCircle, Activity, TrendingUp, Dumbbell, Star, Coins, Clock,
+	TrendingUp, Dumbbell, Star, Coins, Clock,
 	Target, Trophy, Rocket, Medal, Crown, Repeat, Zap, Mountain, Sparkles,
 	ShoppingBag, Palette, Check, Gift, User as UserIcon, Flame
 } from 'lucide-react';
@@ -14,6 +14,7 @@ import { useAuthStore } from '../store/authStore';
 import { useLiveQuery } from 'dexie-react-hooks';
 import CoinIcon from '../components/icons/CoinIcon';
 import StarIcon from '../components/icons/StarIcon';
+import GettingStartedCard from '../components/GettingStartedCard';
 
 function formatPace(secondsPerKm: number): string {
 	if (!secondsPerKm || !isFinite(secondsPerKm)) return '--:--';
@@ -85,39 +86,6 @@ const ICON_MAP: Record<string, any> = {
 	weight: Target, mountain: Mountain, sparkles: Sparkles,
 };
 
-const DEFAULT_ONBOARDING_PROGRESS = {
-	profile: false,
-	questionnaire_l1: false,
-	questionnaire_l2: false,
-	questionnaire_l3: false,
-	first_routine: false,
-	first_session: false,
-	tutorial_complete: false,
-	coins_awarded: [] as string[],
-};
-
-const COINS_BY_STEP: Record<string, number> = {
-	profile: 10,
-	questionnaire_l1: 20,
-	questionnaire_l2: 20,
-	questionnaire_l3: 20,
-	first_routine: 0,
-	first_session: 0,
-	tutorial_complete: 50,
-};
-
-const CHECKLIST_STEPS = [
-	{ key: 'profile', label: 'Set up your profile', required: true },
-	{ key: 'questionnaire_l1', label: 'Basic questionnaire', required: true },
-	{ key: 'questionnaire_l2', label: 'Intermediate questionnaire', required: false },
-	{ key: 'questionnaire_l3', label: 'Advanced questionnaire', required: false },
-	{ key: 'first_routine', label: 'Create your first routine', required: true },
-	{ key: 'first_session', label: 'Complete your first workout', required: true },
-	{ key: 'tutorial_complete', label: 'Complete tutorial', required: false },
-] as const;
-
-const DISPLAY_CHECKLIST_STEPS = CHECKLIST_STEPS.filter((step) => step.key !== 'tutorial_complete');
-
 // Per-skin styles for the claim button and claimed badge
 interface SkinClaimCfg {
 	btnBg: string; btnColor: string; btnBorder: string;
@@ -181,7 +149,6 @@ const SKIN_CLAIM_CFG: Record<string, SkinClaimCfg> = {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function Stats() {
-	const [hasRoutines, setHasRoutines] = useState<boolean | null>(null);
 	const [consistencyTab, setConsistencyTab] = useState<'streak' | 'weeks' | 'days'>('streak');
 	const [gamification, setGamification] = useState<GamificationStats | null>(null);
 	const [quests, setQuests] = useState<QuestData[]>([]);
@@ -193,7 +160,6 @@ export default function Stats() {
 	const [buying, setBuying] = useState<string | null>(null);
 	const [promoCode, setPromoCode] = useState('');
 	const [promoMsg, setPromoMsg] = useState<{ text: string; ok: boolean } | null>(null);
-	const [tutorialToast, setTutorialToast] = useState<string | null>(null);
 	const { t } = useTranslation();
 	const { user, updateUser } = useAuthStore();
 	const [isDemo, setIsDemo] = useState(false);
@@ -250,12 +216,6 @@ export default function Stats() {
 			db.users.put(res.data).catch(() => {});
 		}).catch(() => {});
 	}, [isDemo, updateUser]);
-
-	useEffect(() => {
-		if (!tutorialToast) return;
-		const timer = setTimeout(() => setTutorialToast(null), 2200);
-		return () => clearTimeout(timer);
-	}, [tutorialToast]);
 
 	// ── Claim quest ───────────────────────────────────────────────────────────
 	const claimReward = async (userQuestId: number) => {
@@ -476,99 +436,8 @@ export default function Stats() {
 		};
 	}, []);
 
-	useEffect(() => {
-		const checkRoutines = async () => {
-			const localCount = await db.routines.count();
-			if (localCount > 0) { setHasRoutines(true); return; }
-			if (navigator.onLine) {
-				try {
-					const res = await api.get('/routines');
-					if (res.data && res.data.length > 0) {
-						await db.routines.bulkPut(res.data.map((r: any) => ({ ...r, syncStatus: 'synced' })));
-						setHasRoutines(true);
-						return;
-					}
-				} catch (e) {
-					console.error("Failed to check routines from server", e);
-				}
-			}
-			setHasRoutines(false);
-		};
-		checkRoutines();
-	}, []);
-
-	// Keep this hook before early returns to preserve hook order.
-	useEffect(() => {
-		if (isDemo || !user?.id) return;
-
-		const progress = {
-			...DEFAULT_ONBOARDING_PROGRESS,
-			...((user?.onboarding_progress || {}) as Record<string, any>),
-			coins_awarded: Array.isArray((user?.onboarding_progress as any)?.coins_awarded)
-				? (user?.onboarding_progress as any).coins_awarded
-				: [],
-		};
-		const completedKeys = CHECKLIST_STEPS
-			.filter((step) => Boolean((progress as any)[step.key]))
-			.map((step) => step.key);
-
-		const storageKey = `onboarding_seen_steps_${user.id}`;
-		const raw = localStorage.getItem(storageKey);
-		if (!raw) {
-			localStorage.setItem(storageKey, JSON.stringify(completedKeys));
-			return;
-		}
-
-		let seen = new Set<string>();
-		try {
-			const parsed = JSON.parse(raw);
-			if (Array.isArray(parsed)) {
-				seen = new Set(parsed.filter((v) => typeof v === 'string'));
-			}
-		} catch {
-			seen = new Set();
-		}
-
-		const newCompletions = completedKeys.filter((key) => !seen.has(key));
-		if (newCompletions.length > 0) {
-			const first = newCompletions[0];
-			const step = CHECKLIST_STEPS.find((s) => s.key === first);
-			if (step) {
-				const gained = COINS_BY_STEP[first] || 0;
-				setTutorialToast(
-					gained > 0
-						? `${step.label} completed · +${gained} coins`
-						: `${step.label} completed`
-				);
-			}
-			newCompletions.forEach((key) => seen.add(key));
-			localStorage.setItem(storageKey, JSON.stringify(Array.from(seen)));
-		}
-	}, [isDemo, user?.id, JSON.stringify(user?.onboarding_progress || {})]);
-
 	// ── Loading & Empty states ────────────────────────────────────────────────
-	if (hasRoutines === null || !stats) return <div className="container flex-center fade-in">{t('Loading...')}</div>;
-
-	if (hasRoutines === false) {
-		return (
-			<div className="container" style={{ justifyContent: 'center', textAlign: 'center', height: '80vh' }}>
-				<div style={{ marginBottom: '24px' }}>
-					<Activity size={64} color="var(--primary)" style={{ opacity: 0.8 }} />
-				</div>
-				<h1 className="text-2xl font-bold" style={{ marginBottom: '16px' }}>{t('Welcome to Gym AI')}</h1>
-				<p className="text-secondary" style={{ marginBottom: '32px', lineHeight: '1.6' }}>
-					{t("It looks like you don't have any routines yet. Let's get you set up!")}
-				</p>
-				<Link to="/routines/new" className="btn btn-primary w-full" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-					<PlusCircle size={20} />
-					{t("Create First Routine")}
-				</Link>
-				<p className="text-xs text-tertiary" style={{ marginTop: '32px', lineHeight: '1.5' }}>
-					{t("Tip: You can use our AI wizard to generate a routine for you.")}
-				</p>
-			</div>
-		);
-	}
+	if (!stats) return <div className="container flex-center fade-in">{t('Loading...')}</div>;
 
 	// ── Derived data ──────────────────────────────────────────────────────────
 	const weeklyData = stats.weekly_sessions;
@@ -640,27 +509,6 @@ export default function Stats() {
 	const nextClaimCoins = isDemo ? 21 : (gamification?.unclaimed_next_coins ?? 0);
 	const activeSkinId = isDemo ? 'skin_a' : ((shop?.active_streak_skin) ?? (user?.settings as any)?.active_streak_skin ?? 'skin_a');
 	const skinAccent = SKIN_ACCENTS[activeSkinId] ?? '#FF8C00';
-	const onboardingProgress = {
-		...DEFAULT_ONBOARDING_PROGRESS,
-		...((user?.onboarding_progress || {}) as Record<string, any>),
-		coins_awarded: Array.isArray((user?.onboarding_progress as any)?.coins_awarded)
-			? (user?.onboarding_progress as any).coins_awarded
-			: [],
-	};
-	const checklistCompleted = DISPLAY_CHECKLIST_STEPS.filter((step) => Boolean((onboardingProgress as any)[step.key])).length;
-	const checklistTotal = DISPLAY_CHECKLIST_STEPS.length;
-	const earnedTutorialCoins = (onboardingProgress.coins_awarded as string[]).reduce((sum: number, step: string) => {
-		return sum + (COINS_BY_STEP[step] || 0);
-	}, 0);
-	const totalChecklistCoins = DISPLAY_CHECKLIST_STEPS.reduce((sum, step) => sum + (COINS_BY_STEP[step.key] || 0), 0);
-	const tutorialRequiredDone = Boolean(
-		onboardingProgress.profile &&
-		onboardingProgress.questionnaire_l1 &&
-		onboardingProgress.first_routine &&
-		onboardingProgress.first_session
-	);
-	const activeChecklistStep = DISPLAY_CHECKLIST_STEPS.find((step) => !(onboardingProgress as any)[step.key])?.key;
-
 	// ── Render ────────────────────────────────────────────────────────────────
 	return (
 		<div className="container" style={{ paddingBottom: '80px' }}>
@@ -684,147 +532,17 @@ export default function Stats() {
 				</button>
 			</div>
 
-			{tutorialToast && (
-				<div style={{
-					position: 'fixed',
-					top: '18px',
-					left: '50%',
-					transform: 'translateX(-50%)',
-					background: 'rgba(34,197,94,0.18)',
-					border: '1px solid rgba(34,197,94,0.45)',
-					color: '#86efac',
-					padding: '8px 12px',
-					borderRadius: '999px',
-					fontSize: '12px',
-					fontWeight: 700,
-					zIndex: 240,
-				}}>
-					{tutorialToast}
-				</div>
-			)}
-
-			{!isDemo && !tutorialRequiredDone && (
-				<div className="card" style={{ marginBottom: '16px', padding: '16px', border: '1px solid rgba(204,255,0,0.2)' }}>
-					<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
-						<div style={{ fontWeight: 700, fontSize: '16px' }}>Getting Started</div>
-						<div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{checklistCompleted}/{checklistTotal}</div>
-					</div>
-					<div style={{ height: '8px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: '12px' }}>
-						<div style={{
-							width: `${Math.round((checklistCompleted / checklistTotal) * 100)}%`,
-							height: '100%',
-							background: 'linear-gradient(90deg, rgba(204,255,0,0.75), rgba(34,197,94,0.9))',
-							transition: 'width 0.3s ease',
-						}} />
-					</div>
-					<div style={{
-						marginBottom: '12px',
-						padding: '10px 12px',
-						borderRadius: '10px',
-						border: '1px solid rgba(250,204,21,0.35)',
-						background: 'linear-gradient(135deg, rgba(250,204,21,0.16), rgba(245,158,11,0.12))',
-						display: 'flex',
-						alignItems: 'center',
-						justifyContent: 'space-between',
-						gap: '10px',
-					}}>
-						<div style={{ fontSize: '12px', fontWeight: 700, color: '#fcd34d', lineHeight: 1.4 }}>
-							Finish the checklist to unlock the final bonus
-						</div>
-						<div style={{
-							display: 'inline-flex',
-							alignItems: 'center',
-							gap: '5px',
-							padding: '5px 10px',
-							borderRadius: '999px',
-							border: '1px solid rgba(250,204,21,0.55)',
-							background: 'rgba(250,204,21,0.18)',
-							color: '#fde68a',
-							fontSize: '12px',
-							fontWeight: 800,
-							flexShrink: 0,
-						}}>
-							<CoinIcon size={12} style={{ color: '#fbbf24' }} />
-							+50 coins
-						</div>
-					</div>
-					<div style={{ display: 'grid', gap: '8px' }}>
-						{DISPLAY_CHECKLIST_STEPS.map((step) => {
-							const done = Boolean((onboardingProgress as any)[step.key]);
-							const isActive = activeChecklistStep === step.key;
-							const isLocked = step.key === 'first_session' && !onboardingProgress.first_routine;
-							const coins = COINS_BY_STEP[step.key];
-							return (
-								<div
-									key={step.key}
-									style={{
-										display: 'flex',
-										justifyContent: 'space-between',
-										alignItems: 'center',
-										fontSize: '13px',
-										padding: '8px 10px',
-										borderRadius: '8px',
-										border: isActive ? '1px solid rgba(204,255,0,0.35)' : '1px solid transparent',
-										background: done ? 'rgba(34,197,94,0.08)' : isLocked ? 'rgba(148,163,184,0.08)' : 'rgba(255,255,255,0.02)',
-										opacity: isLocked ? 0.55 : 1,
-									}}
-								>
-									<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-										<span style={{
-											width: '18px',
-											height: '18px',
-											borderRadius: '999px',
-											border: done ? '1px solid rgba(34,197,94,0.7)' : isLocked ? '1px solid rgba(148,163,184,0.4)' : '1px solid var(--border)',
-											background: done ? 'rgba(34,197,94,0.18)' : isActive ? 'rgba(204,255,0,0.18)' : 'transparent',
-											color: done ? '#86efac' : isActive ? 'var(--primary)' : 'var(--text-tertiary)',
-											display: 'inline-flex',
-											alignItems: 'center',
-											justifyContent: 'center',
-											fontSize: '11px',
-											fontWeight: 800,
-											flexShrink: 0,
-										}}>
-											{done ? '✓' : isLocked ? '•' : isActive ? '•' : ''}
-										</span>
-										<span>{step.label}</span>
-									</div>
-									{coins > 0 ? (
-										<div style={{
-											display: 'inline-flex',
-											alignItems: 'center',
-											gap: '4px',
-											padding: '4px 8px',
-											borderRadius: '999px',
-											border: '1px solid rgba(250,204,21,0.4)',
-											background: 'linear-gradient(135deg, rgba(250,204,21,0.2), rgba(245,158,11,0.15))',
-											fontSize: '11px',
-											fontWeight: 800,
-											color: '#fcd34d',
-										}}>
-											<CoinIcon size={12} style={{ color: '#fbbf24' }} />
-											+{coins}
-										</div>
-									) : (
-										<div style={{
-											fontSize: '10px',
-											fontWeight: 700,
-											letterSpacing: '0.3px',
-											color: 'var(--text-tertiary)',
-											border: '1px solid rgba(148,163,184,0.35)',
-											borderRadius: '999px',
-											padding: '3px 8px',
-										}}>
-											Core
-										</div>
-									)}
-								</div>
-							);
-						})}
-					</div>
-					<div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-						Total earned: {earnedTutorialCoins}/{totalChecklistCoins} coins
-					</div>
-				</div>
+			{!isDemo && (
+				<GettingStartedCard
+					progressRaw={user?.onboarding_progress}
+					onClaimed={async (result) => {
+						if (result?.currency !== undefined) {
+							setGamification((current) => current ? { ...current, currency: result.currency } : current);
+						}
+						await fetchGamification();
+						await fetchShop();
+					}}
+				/>
 			)}
 
 			{/* ─── Level Card ──────────────────────────────────────────────── */}
@@ -1033,6 +751,7 @@ export default function Stats() {
 										<button
 											onClick={() => { if (!isDemo) claimStreak(); }}
 											disabled={isDemo || claimingStreak || claimCooldown}
+											className={`motion-btn motion-btn--claim ${isDemo ? '' : 'is-ready'} ${claimFlash ? 'is-bursting' : ''}`.trim()}
 											style={{
 												marginTop: 14, width: '100%', padding: '11px 10px',
 												borderRadius: cfg.btnRadius, background: cfg.btnBg,
@@ -1240,6 +959,7 @@ export default function Stats() {
 														<button
 															onClick={() => !isDemo && claimReward(quest.id)}
 															disabled={!!isDemo || claiming === quest.id}
+															className={`motion-btn motion-btn--claim ${isDemo ? '' : 'is-ready'} ${claiming === quest.id ? 'is-bursting' : ''}`.trim()}
 															style={{
 																padding: '6px 16px', fontSize: '12px',
 																fontWeight: 700, borderRadius: '8px',

@@ -1,12 +1,21 @@
 import pytest
 from unittest.mock import patch, AsyncMock
 import json
+from sqlalchemy.orm import sessionmaker
+from app.models.user import User
 from tests.conftest import register_and_login
 from tests.test_ai_routine import _seed_exercises, _mock_openai_response, MOCK_AI_RESPONSE
 
-def test_ai_usage_tracking_flow(client):
+def test_ai_usage_tracking_flow(client, db_engine):
     headers = register_and_login(client)
     _seed_exercises(client, headers)
+
+    Session = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    with Session() as db:
+        db_user = db.query(User).filter(User.email == "test@example.com").first()
+        assert db_user is not None
+        db_user.is_admin = True
+        db.commit()
     
     # 1. Generate an AI Routine
     mock_response = _mock_openai_response(MOCK_AI_RESPONSE)

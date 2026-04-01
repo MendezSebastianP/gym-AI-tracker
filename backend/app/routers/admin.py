@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import require_admin
 from app.models.ai_usage_log import AIUsageLog
 from app.models.user import User
 from app.models.session import Session as SessionModel
@@ -14,12 +14,9 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 @router.get("/ai/report")
 def get_ai_usage_report(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
-    """
-    Generate a financial and conversion report for AI usage.
-    In a real production app, this would be locked to Admin users only.
-    """
+    """Generate a financial and conversion report for AI usage."""
     # Calculate total costs
     total_cost = db.query(func.sum(AIUsageLog.cost_usd)).scalar() or 0.0
     total_tokens = db.query(func.sum(AIUsageLog.total_tokens)).scalar() or 0
@@ -68,7 +65,7 @@ def get_ai_usage_report(
 @router.get("/users")
 def get_all_users(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """
     Get a list of all registered users with their basic stats.
@@ -96,7 +93,7 @@ def get_all_users(
 def create_global_exercise(
     exercise: ExerciseCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Create a new global exercise (Admin only)"""
     new_ex = Exercise(**exercise.model_dump(), source="global")
@@ -110,7 +107,7 @@ def update_global_exercise(
     exercise_id: int,
     exercise_update: ExerciseUpdateAdmin,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Update a global exercise (Admin only)"""
     db_ex = db.query(Exercise).filter(Exercise.id == exercise_id, Exercise.source == "global").first()
@@ -129,7 +126,7 @@ def update_global_exercise(
 def delete_global_exercise(
     exercise_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Delete a global exercise (Admin only)"""
     db_ex = db.query(Exercise).filter(Exercise.id == exercise_id, Exercise.source == "global").first()

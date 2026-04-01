@@ -55,12 +55,17 @@ def get_weight_history(
         .all()
     )
     result = [
-        {"id": l.id, "weight_kg": l.weight_kg, "measured_at": _aware(l.measured_at).isoformat(), "source": l.source}
-        for l in logs
+        {
+            "id": log.id,
+            "weight_kg": log.weight_kg,
+            "measured_at": _aware(log.measured_at).isoformat(),
+            "source": log.source,
+        }
+        for log in logs
     ]
 
     # Fill gaps: session bodyweight for dates not covered by an explicit log
-    covered = {_aware(l.measured_at).date() for l in logs}
+    covered = {_aware(log.measured_at).date() for log in logs}
     sessions_with_bw = (
         db.query(SessionModel)
         .filter(
@@ -99,7 +104,7 @@ def get_weight_stats(
         return {"current": current_user.weight, "min": None, "max": None, "avg": None, "change_7d": None, "change_30d": None, "count": 0}
 
     current = logs[0].weight_kg
-    weights = [l.weight_kg for l in logs]
+    weights = [log.weight_kg for log in logs]
     now = datetime.now(timezone.utc)
 
     def _as_aware(dt):
@@ -107,7 +112,7 @@ def get_weight_stats(
 
     def change_since(days):
         cutoff = now - timedelta(days=days)
-        older = [l for l in logs if _as_aware(l.measured_at) <= cutoff]
+        older = [log for log in logs if _as_aware(log.measured_at) <= cutoff]
         if older:
             return round(current - older[0].weight_kg, 1)
         return None
@@ -154,7 +159,15 @@ def get_weight_history_demo(days: int = 90, db: Session = Depends(get_db)):
         .order_by(desc(WeightLog.measured_at))
         .all()
     )
-    return [{"id": l.id, "weight_kg": l.weight_kg, "measured_at": l.measured_at.isoformat(), "source": l.source} for l in logs]
+    return [
+        {
+            "id": log.id,
+            "weight_kg": log.weight_kg,
+            "measured_at": log.measured_at.isoformat(),
+            "source": log.source,
+        }
+        for log in logs
+    ]
 
 
 @router.get("/stats/demo")
@@ -172,7 +185,7 @@ def get_weight_stats_demo(db: Session = Depends(get_db)):
     if not logs:
         return {"current": demo_user.weight, "min": None, "max": None, "avg": None, "change_7d": None, "change_30d": None, "count": 0}
     current = logs[0].weight_kg
-    weights = [l.weight_kg for l in logs]
+    weights = [log.weight_kg for log in logs]
     now = datetime.now(timezone.utc)
 
     def _as_aware(dt):
@@ -180,7 +193,7 @@ def get_weight_stats_demo(db: Session = Depends(get_db)):
 
     def change_since(days_back):
         cutoff = now - timedelta(days=days_back)
-        older = [l for l in logs if _as_aware(l.measured_at) <= cutoff]
+        older = [log for log in logs if _as_aware(log.measured_at) <= cutoff]
         return round(current - older[0].weight_kg, 1) if older else None
 
     return {

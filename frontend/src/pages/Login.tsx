@@ -3,13 +3,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../api/client';
 import { useTranslation } from 'react-i18next';
-import LanguageSwitcher from '../components/LanguageSwitcher';
+import PublicAuthShell from '../components/PublicAuthShell';
 
 export default function Login() {
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
 	const [error, setError] = useState('');
 	const [loading, setLoading] = useState(false);
+	const [successBridge, setSuccessBridge] = useState(false);
 	const { login } = useAuthStore();
 	const navigate = useNavigate();
 	const { t } = useTranslation();
@@ -22,9 +23,12 @@ export default function Login() {
 		try {
 			const response = await api.post('/auth/login', { email, password });
 			await login(response.data.access_token, response.data.refresh_token);
+			setSuccessBridge(true);
+			await new Promise((resolve) => window.setTimeout(resolve, 420));
 			navigate('/');
 		} catch (err: any) {
 			console.error('Login error:', err);
+			setSuccessBridge(false);
 
 			// Better error messages
 			if (err.response) {
@@ -49,29 +53,25 @@ export default function Login() {
 	};
 
 	return (
-		<div className="container" style={{ justifyContent: 'center', position: 'relative' }}>
-			<div style={{ position: 'absolute', top: '16px', right: '16px' }}>
-				<LanguageSwitcher />
+		<PublicAuthShell
+			eyebrow={t('Welcome back')}
+			title={t('Pick up where you left off.')}
+			subtitle={t('Open your routines, log the next session, and keep the same training flow you started on the homepage.')}
+			cardClassName={successBridge ? 'is-success-bridge' : ''}
+			altPrompt={
+				<>
+					{t("Don't have an account?")} <Link to="/register">{t("Register")}</Link>
+				</>
+			}
+		>
+			<div className="public-auth-form-header">
+				<h2>{t('Login')}</h2>
+				<p>{t('Sign in to continue logging sessions, charts, and rewards.')}</p>
 			</div>
-			<div style={{ marginTop: '40px' }}></div>
 
-			<Link to="/" className="fade-in" style={{ fontSize: '32px', marginBottom: '8px', color: 'var(--primary)', fontWeight: 800, display: 'block' }}>Gym AI</Link>
-			<p className="fade-in" style={{ marginBottom: '32px', color: 'var(--text-secondary)' }}>Track your gym progress</p>
+			{error && <div className="public-auth-error">{error}</div>}
 
-			{error && (
-				<div style={{
-					color: 'var(--error)',
-					marginBottom: '16px',
-					padding: '12px',
-					backgroundColor: 'rgba(255, 68, 68, 0.1)',
-					borderRadius: '8px',
-					border: '1px solid var(--error)'
-				}}>
-					{error}
-				</div>
-			)}
-
-			<form onSubmit={handleSubmit} className="fade-in">
+			<form onSubmit={handleSubmit} className="public-auth-form">
 				<div className="input-group">
 					<label className="label">{t("Email or Username")}</label>
 					<input
@@ -100,17 +100,12 @@ export default function Login() {
 
 				<button
 					type="submit"
-					className="btn btn-primary"
-					style={{ width: '100%', marginTop: '16px' }}
+					className={`btn public-auth-submit motion-btn motion-btn--cta motion-btn--public ${loading ? 'is-loading' : ''} ${successBridge ? 'is-success-locked' : ''}`.trim()}
 					disabled={loading}
 				>
-					{loading ? 'Logging in...' : t("Login")}
+					{successBridge ? t('Opening Home...') : loading ? t('Logging in...') : t("Login")}
 				</button>
 			</form>
-
-			<p style={{ marginTop: '24px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-				Don't have an account? <Link to="/register" style={{ color: 'var(--primary)' }}>{t("Register")}</Link>
-			</p>
-		</div>
+		</PublicAuthShell>
 	);
 }

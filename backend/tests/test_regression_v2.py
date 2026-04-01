@@ -5,10 +5,15 @@ Regression tests for issues found in v2 (March 2026):
   3. Sync 500 on session create with invalid routine_id
   4. DB export/import round-trip integrity
 """
-import json
-import os
-import pytest
 from datetime import datetime, timezone
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.database import Base
+from app.models.exercise import Exercise
+from app.models.routine import Routine
+from app.models.session import Session as SessionModel, Set as SetModel
+from app.models.user import User
+from app.db_export_import import export_data, import_data
 from tests.conftest import register_and_login
 
 
@@ -185,7 +190,7 @@ class TestRoutineEditAPI:
 
 
 class TestDbExportImport:
-    """Test the export/import utility module compiles and basic logic works."""
+    """Round-trip backup data across two isolated databases."""
 
     def test_export_module_imports(self, client):
         """The export/import module should be importable without errors."""
@@ -193,36 +198,122 @@ class TestDbExportImport:
         assert callable(export_data)
         assert callable(import_data)
 
-    def test_session_data_integrity_preserved(self, client):
-        """All session data should survive a create → fetch round-trip."""
-        headers = register_and_login(client, "export@test.com")
+    def test_export_import_round_trip_preserves_current_schema_fields(self, tmp_path):
+        source_db = tmp_path / "source.db"
+        dest_db = tmp_path / "dest.db"
+        backup_file = tmp_path / "backup.json"
 
-        # Create data
-        r = client.post("/api/routines/", json={"name": "Export Test", "days": []}, headers=headers)
-        routine_id = r.json()["id"]
+        source_engine = create_engine(f"sqlite:///{source_db}", connect_args={"check_same_thread": False})
+        dest_engine = create_engine(f"sqlite:///{dest_db}", connect_args={"check_same_thread": False})
+        Base.metadata.create_all(bind=source_engine)
+        Base.metadata.create_all(bind=dest_engine)
 
-        started = _now_iso()
-        r = client.post("/api/sessions/", json={
-            "started_at": started,
-            "routine_id": routine_id,
-        }, headers=headers)
-        session_id = r.json()["id"]
+        SourceSession = sessionmaker(autocommit=False, autoflush=False, bind=source_engine)
+        DestSession = sessionmaker(autocommit=False, autoflush=False, bind=dest_engine)
 
-        r = client.post("/api/sets/", json={
-            "session_id": session_id,
-            "exercise_id": 1,
-            "set_number": 1,
-            "weight_kg": 100.0,
-            "reps": 5,
-            "completed_at": _now_iso(),
-        }, headers=headers)
-        assert r.status_code == 200
+        completed_at = datetime(2026, 3, 29, 12, 30, tzinfo=timezone.utc)
 
-        # Verify all data can be fetched back intact
-        r = client.get(f"/api/sessions/{session_id}", headers=headers)
-        assert r.status_code == 200
-        data = r.json()
-        assert data["routine_id"] == routine_id
-        assert len(data["sets"]) == 1
-        assert data["sets"][0]["weight_kg"] == 100.0
-        assert data["sets"][0]["reps"] == 5
+        with SourceSession() as db:
+            user = User(
+                email="backup@test.com",
+                password_hash="hashed-password",
+                is_active=True,
+                is_admin=True,
+                settings={"language": "fr", "drop_sets_enabled": True},
+                weight=77,
+                height=181,
+                age=31,
+                gender="male",
+                priorities=["strength"],
+                level=5,
+                experience=480,
+                currency=320,
+                streak_reward_week="2026-W13",
+                joker_tokens=2,
+                onboarding_progress={"profile": True, "first_routine": True},
+            )
+            exercise = Exercise(name="Pull-up", source="global", is_bodyweight=True, bw_ratio=1.0)
+            db.add_all([user, exercise])
+            db.flush()
+
+            routine = Routine(
+                user_id=user.id,
+                name="Backup Routine",
+                description="Round trip",
+                is_favorite=True,
+                archived_at=completed_at,
+                days=[{"day_name": "Pull", "exercises": [{"exercise_id": exercise.id, "sets": 3, "reps": "5", "rest": 120}]}],
+            )
+            db.add(routine)
+            db.flush()
+
+            session = SessionModel(
+                user_id=user.id,
+                routine_id=routine.id,
+                day_index=0,
+                started_at=completed_at,
+                completed_at=completed_at,
+                bodyweight_kg=76.8,
+                notes="Strong day",
+                duration_seconds=2650,
+                locked_exercises=[exercise.id],
+                streak_eligible_at=completed_at,
+                effort_score=73.5,
+                self_rated_effort=8,
+            )
+            db.add(session)
+            db.flush()
+
+            db.add(
+                SetModel(
+                    session_id=session.id,
+                    exercise_id=exercise.id,
+                    set_number=1,
+                    weight_kg=0,
+                    reps=8,
+                    duration_sec=45,
+                    rpe=9.5,
+                    distance_km=0.2,
+                    avg_pace=330.0,
+                    incline=4.0,
+                    set_type="drop",
+                    to_failure=True,
+                    completed_at=completed_at,
+                )
+            )
+            db.commit()
+
+        with DestSession() as db:
+            db.add(Exercise(id=1, name="Pull-up", source="global", is_bodyweight=True, bw_ratio=1.0))
+            db.commit()
+
+        export_data(str(backup_file), session_factory=SourceSession)
+        import_data(str(backup_file), session_factory=DestSession)
+
+        with DestSession() as db:
+            imported_user = db.query(User).filter(User.email == "backup@test.com").first()
+            assert imported_user is not None
+            assert imported_user.is_admin is True
+            assert imported_user.level == 5
+            assert imported_user.currency == 320
+            assert imported_user.onboarding_progress == {"profile": True, "first_routine": True}
+
+            imported_routine = db.query(Routine).filter(Routine.user_id == imported_user.id).first()
+            assert imported_routine is not None
+            assert imported_routine.archived_at is not None
+            assert imported_routine.days[0]["day_name"] == "Pull"
+
+            imported_session = db.query(SessionModel).filter(SessionModel.user_id == imported_user.id).first()
+            assert imported_session is not None
+            assert imported_session.duration_seconds == 2650
+            assert imported_session.effort_score == 73.5
+            assert imported_session.self_rated_effort == 8
+            assert imported_session.locked_exercises == [1]
+
+            imported_set = db.query(SetModel).filter(SetModel.session_id == imported_session.id).first()
+            assert imported_set is not None
+            assert imported_set.distance_km == 0.2
+            assert imported_set.avg_pace == 330.0
+            assert imported_set.incline == 4.0
+            assert imported_set.set_type == "drop"
+            assert imported_set.to_failure is True

@@ -196,12 +196,12 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 			return;
 		}
 
-		// End of swipe — apply momentum
+		// End of swipe — apply momentum (threshold raised so slow drags don't overshoot)
 		if (mode === 'swipe') {
 			const vel = velocity.current;
-			if (Math.abs(vel) > 0.3) {
+			if (Math.abs(vel) > 1.0) {
 				const cappedVel = Math.sign(vel) * Math.min(Math.abs(vel), 3);
-				let momentumVel = cappedVel * 4;
+				let momentumVel = cappedVel * 1.5;
 				let currentVal = swipeCurrentVal.current;
 
 				const tick = () => {

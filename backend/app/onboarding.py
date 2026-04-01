@@ -49,26 +49,11 @@ def normalize_onboarding_progress(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     return progress
 
 
-def _award_step(progress: Dict[str, Any], user: Any, step: str) -> int:
-    reward = STEP_COINS.get(step, 0)
-    awarded = progress.get("coins_awarded", [])
-    if step in awarded:
-        return 0
-
-    awarded.append(step)
-    progress["coins_awarded"] = awarded
-
-    if reward > 0:
-        user.currency = (user.currency or 0) + reward
-
-    return reward
-
-
-def _auto_complete_if_required_done(progress: Dict[str, Any], user: Any) -> int:
+def _auto_complete_if_required_done(progress: Dict[str, Any]) -> bool:
     if all(bool(progress.get(step)) for step in REQUIRED_STEPS) and not progress.get("tutorial_complete"):
         progress["tutorial_complete"] = True
-        return _award_step(progress, user, "tutorial_complete")
-    return 0
+        return True
+    return False
 
 
 def mark_onboarding_step(user: Any, step: str, completed: bool = True) -> int:
@@ -76,17 +61,15 @@ def mark_onboarding_step(user: Any, step: str, completed: bool = True) -> int:
         return 0
 
     progress = normalize_onboarding_progress(getattr(user, "onboarding_progress", None))
-    coins_added = 0
 
     already_completed = bool(progress.get(step))
     progress[step] = bool(completed)
 
     if completed and not already_completed:
-        coins_added += _award_step(progress, user, step)
+        _auto_complete_if_required_done(progress)
 
-    coins_added += _auto_complete_if_required_done(progress, user)
     user.onboarding_progress = progress
-    return coins_added
+    return 0
 
 
 def merge_onboarding_progress(user: Any, patch: Dict[str, Any] | None) -> int:
@@ -94,7 +77,6 @@ def merge_onboarding_progress(user: Any, patch: Dict[str, Any] | None) -> int:
         return 0
 
     progress = normalize_onboarding_progress(getattr(user, "onboarding_progress", None))
-    coins_added = 0
 
     for key, value in patch.items():
         if key == "coins_awarded" or key not in STEP_COINS:
@@ -106,11 +88,10 @@ def merge_onboarding_progress(user: Any, patch: Dict[str, Any] | None) -> int:
         progress[key] = value
 
         if value and not already_completed:
-            coins_added += _award_step(progress, user, key)
+            _auto_complete_if_required_done(progress)
 
-    coins_added += _auto_complete_if_required_done(progress, user)
     user.onboarding_progress = progress
-    return coins_added
+    return 0
 
 
 def apply_questionnaire_level(user: Any, context_level: int | None) -> int:
@@ -123,20 +104,55 @@ def apply_questionnaire_level(user: Any, context_level: int | None) -> int:
         return 0
 
     progress = normalize_onboarding_progress(getattr(user, "onboarding_progress", None))
-    coins_added = 0
 
     if level >= 1 and not progress.get("questionnaire_l1"):
         progress["questionnaire_l1"] = True
-        coins_added += _award_step(progress, user, "questionnaire_l1")
 
     if level >= 2 and not progress.get("questionnaire_l2"):
         progress["questionnaire_l2"] = True
-        coins_added += _award_step(progress, user, "questionnaire_l2")
 
     if level >= 3 and not progress.get("questionnaire_l3"):
         progress["questionnaire_l3"] = True
-        coins_added += _award_step(progress, user, "questionnaire_l3")
 
-    coins_added += _auto_complete_if_required_done(progress, user)
+    _auto_complete_if_required_done(progress)
     user.onboarding_progress = progress
-    return coins_added
+    return 0
+
+
+def claim_onboarding_rewards(user: Any, step: str | None = None) -> Dict[str, Any]:
+    progress = normalize_onboarding_progress(getattr(user, "onboarding_progress", None))
+    _auto_complete_if_required_done(progress)
+
+    claimed_steps = list(progress.get("coins_awarded", []))
+    claimed_lookup = set(claimed_steps)
+    newly_claimed: list[str] = []
+    coins_awarded = 0
+
+    if step is not None:
+        reward = STEP_COINS.get(step, 0)
+        if reward > 0 and bool(progress.get(step)) and step not in claimed_lookup:
+            claimed_steps.append(step)
+            claimed_lookup.add(step)
+            newly_claimed.append(step)
+            coins_awarded += reward
+    else:
+        for current_step, reward in STEP_COINS.items():
+            if reward <= 0 or not progress.get(current_step) or current_step in claimed_lookup:
+                continue
+
+            claimed_steps.append(current_step)
+            claimed_lookup.add(current_step)
+            newly_claimed.append(current_step)
+            coins_awarded += reward
+
+    if coins_awarded > 0:
+        user.currency = (user.currency or 0) + coins_awarded
+
+    progress["coins_awarded"] = claimed_steps
+    user.onboarding_progress = progress
+
+    return {
+        "coins_awarded": coins_awarded,
+        "claimed_steps": newly_claimed,
+        "onboarding_progress": progress,
+    }

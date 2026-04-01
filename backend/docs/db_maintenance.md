@@ -31,9 +31,9 @@ docker compose exec api python -m app.db_export_import import /app/backup_YYYYMM
 | Table         | Exported? | Notes                             |
 | ------------- | --------- | --------------------------------- |
 | `users`       | ✅ Yes     | Including hashed passwords        |
-| `routines`    | ✅ Yes     | Including days/exercises JSON     |
-| `sessions`    | ✅ Yes     | Both drafts and completed         |
-| `sets`        | ✅ Yes     | All set data                      |
+| `routines`    | ✅ Yes     | Including archived state + day JSON |
+| `sessions`    | ✅ Yes     | Drafts, completions, effort, streak metadata |
+| `sets`        | ✅ Yes     | Strength + cardio + set-type fields |
 | `exercises`   | ❌ No      | System exercises are re-seeded    |
 | `sync_events` | ❌ No      | Transient, not needed for restore |
 
@@ -68,3 +68,5 @@ docker compose exec api python -m app.db_export_import import /app/backup.json
 - **Routines/Sessions/Sets**: Skipped if the primary key ID already exists.  
 - ID mappings are maintained so FK relationships stay valid.
 - The import is safe to run multiple times (idempotent).
+- Imports expect the exercise catalog to exist first. Always run `python -m app.seed_data` before restore.
+- The backup utility is intended for full reset / rebuild flows. Do not treat it as a merge tool for unrelated live datasets.

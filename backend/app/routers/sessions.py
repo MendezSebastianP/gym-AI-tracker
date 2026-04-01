@@ -18,11 +18,14 @@ router = APIRouter(
 def get_sessions(
     skip: int = 0,
     limit: int = 20,
+    routine_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    sessions = db.query(SessionModel).filter(SessionModel.user_id == current_user.id)\
-        .order_by(SessionModel.started_at.desc()).offset(skip).limit(limit).all()
+    query = db.query(SessionModel).filter(SessionModel.user_id == current_user.id)
+    if routine_id is not None:
+        query = query.filter(SessionModel.routine_id == routine_id)
+    sessions = query.order_by(SessionModel.started_at.desc()).offset(skip).limit(limit).all()
     return sessions
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -79,6 +82,10 @@ def update_session(
     
     for key, value in update_data.items():
         setattr(db_session, key, value)
+
+    # Keep user.weight in sync when bodyweight_kg is explicitly set
+    if 'bodyweight_kg' in update_data and update_data['bodyweight_kg'] is not None:
+        current_user.weight = round(update_data['bodyweight_kg'])
 
     # Set streak_eligible_at once on first completion — never overwrite
     if not was_completed and db_session.completed_at is not None and db_session.streak_eligible_at is None:

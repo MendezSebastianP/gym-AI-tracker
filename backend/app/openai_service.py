@@ -135,12 +135,16 @@ def _filter_exercises_by_equipment(exercises: list, preferences) -> list:
         equip_list = ["bodyweight only"]  # Empty list = strict bodyweight
 
     # If they selected all equipment, send everything
-    has_all = all(
-        item.lower() in equip_list
-        for item in ["dumbbells", "barbells and plates", "power rack / squat stand",
-                      "bench (flat or adjustable)", "pull-up bar", "dip station / rings",
-                      "resistance bands"]
-    )
+    all_equipment_options = [
+        "dumbbells",
+        "barbells and plates",
+        "power rack / squat stand",
+        "bench (flat or adjustable)",
+        "pull-up bar",
+        "dip station / rings",
+        "resistance bands",
+    ]
+    has_all = all(item.lower() in equip_list for item in all_equipment_options)
     if has_all:
         return exercises
 

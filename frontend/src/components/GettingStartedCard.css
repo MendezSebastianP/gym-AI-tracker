@@ -1,0 +1,725 @@
+.getting-started-card {
+	margin-bottom: 16px;
+	padding: 18px;
+	border: 1px solid rgba(204, 255, 0, 0.16);
+	background:
+		radial-gradient(circle at top right, rgba(16, 185, 129, 0.09), transparent 32%),
+		linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+	box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
+}
+
+.getting-started-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 16px;
+	margin-bottom: 10px;
+}
+
+.getting-started-kicker {
+	font-size: 11px;
+	font-weight: 800;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: rgba(204, 255, 0, 0.78);
+	margin-bottom: 4px;
+}
+
+.getting-started-title {
+	font-size: 18px;
+	font-weight: 800;
+	color: var(--text-primary);
+}
+
+.getting-started-summary {
+	margin-top: 6px;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--text-tertiary);
+}
+
+.getting-started-summary.is-ready {
+	color: #fde68a;
+}
+
+.getting-started-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-shrink: 0;
+}
+
+.getting-started-count {
+	padding: 8px 12px;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	background: rgba(255, 255, 255, 0.04);
+	font-size: 12px;
+	font-weight: 800;
+	color: var(--text-secondary);
+}
+
+.getting-started-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	background: rgba(255, 255, 255, 0.04);
+	color: var(--text-secondary);
+	font-size: 12px;
+	font-weight: 800;
+	cursor: pointer;
+}
+
+.getting-started-toggle svg {
+	transition: transform 0.2s ease;
+}
+
+.getting-started-toggle.is-open svg {
+	transform: rotate(180deg);
+}
+
+.getting-started-progress-track {
+	height: 10px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.08);
+	overflow: hidden;
+	margin-bottom: 12px;
+}
+
+.getting-started-progress-fill {
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, rgba(204, 255, 0, 0.84), rgba(16, 185, 129, 0.92));
+	transition: width 0.35s ease;
+}
+
+.getting-started-claim-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	border: none;
+	border-radius: 999px;
+	background: linear-gradient(135deg, rgba(204, 255, 0, 0.95), rgba(250, 204, 21, 0.92));
+	color: #111;
+	font-size: 13px;
+	font-weight: 900;
+	cursor: pointer;
+	box-shadow: 0 14px 24px rgba(204, 255, 0, 0.18);
+}
+
+.getting-started-claim-button:disabled {
+	opacity: 0.6;
+	cursor: wait;
+}
+
+.getting-started-steps {
+	display: grid;
+	gap: 8px;
+}
+
+.getting-started-collapsed-preview {
+	display: grid;
+	gap: 8px;
+}
+
+.getting-started-collapsed-label {
+	padding-left: 2px;
+	font-size: 11px;
+	font-weight: 800;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.5);
+}
+
+.getting-started-collapsed-list {
+	display: grid;
+	gap: 8px;
+}
+
+.getting-started-collapsed-note {
+	padding-left: 2px;
+	font-size: 11px;
+	font-weight: 700;
+	color: #fde68a;
+}
+
+.getting-started-step {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	border-radius: 12px;
+	background: rgba(255, 255, 255, 0.025);
+	border: 1px solid transparent;
+	transition: border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.getting-started-step.is-collapsed-preview {
+	background: rgba(255, 255, 255, 0.03);
+	padding-block: 9px;
+}
+
+.getting-started-step.is-active {
+	border-color: rgba(204, 255, 0, 0.28);
+	background: rgba(204, 255, 0, 0.06);
+}
+
+.getting-started-step.is-done {
+	background: rgba(34, 197, 94, 0.06);
+}
+
+.getting-started-step.is-collecting {
+	animation: gettingStartedClaimSweep 0.9s ease-out;
+}
+
+.getting-started-step.is-locked {
+	opacity: 0.56;
+}
+
+.getting-started-step.is-substep {
+	margin-left: 28px;
+	padding-left: 14px;
+	background: rgba(255, 255, 255, 0.018);
+	border-color: rgba(255, 255, 255, 0.03);
+}
+
+.getting-started-final-step {
+	background:
+		radial-gradient(circle at top right, rgba(250, 204, 21, 0.14), transparent 42%),
+		linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+	border-color: rgba(250, 204, 21, 0.18);
+}
+
+.getting-started-final-step.is-ready {
+	animation: gettingStartedClaimPulse 1.8s ease-in-out infinite;
+	border-color: rgba(250, 204, 21, 0.34);
+	box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.08), 0 16px 28px rgba(245, 158, 11, 0.14);
+}
+
+.getting-started-final-step.is-claimed {
+	background:
+		radial-gradient(circle at top right, rgba(148, 163, 184, 0.14), transparent 42%),
+		linear-gradient(135deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+	border-color: rgba(148, 163, 184, 0.24);
+	animation: none;
+	box-shadow: none;
+}
+
+.getting-started-step-main {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	color: var(--text-primary);
+}
+
+.getting-started-step-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.getting-started-step-label {
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.getting-started-step-helper {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--text-tertiary);
+}
+
+.getting-started-step.is-substep .getting-started-step-label {
+	font-size: 12px;
+}
+
+.getting-started-final-main {
+	align-items: flex-start;
+}
+
+.getting-started-final-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.getting-started-final-title {
+	font-size: 13px;
+	font-weight: 800;
+	color: var(--text-primary);
+}
+
+.getting-started-final-text {
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--text-secondary);
+}
+
+.getting-started-step-indicator {
+	width: 20px;
+	height: 20px;
+	border-radius: 999px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--border);
+	font-size: 11px;
+	font-weight: 800;
+	color: var(--text-tertiary);
+	flex-shrink: 0;
+}
+
+.getting-started-step-indicator.is-active {
+	background: rgba(204, 255, 0, 0.16);
+	color: var(--primary);
+	border-color: rgba(204, 255, 0, 0.28);
+}
+
+.getting-started-step-indicator.is-done {
+	background: rgba(34, 197, 94, 0.18);
+	color: #86efac;
+	border-color: rgba(34, 197, 94, 0.36);
+}
+
+.getting-started-final-indicator {
+	border-color: rgba(250, 204, 21, 0.28);
+	background: rgba(250, 204, 21, 0.1);
+	color: #fde68a;
+}
+
+.getting-started-step-reward,
+.getting-started-step-core {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 5px 9px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 800;
+	flex-shrink: 0;
+}
+
+.getting-started-step-reward {
+	position: relative;
+	overflow: visible;
+	appearance: none;
+	color: #fcd34d;
+	border: 1px solid rgba(250, 204, 21, 0.34);
+	background: rgba(250, 204, 21, 0.1);
+	transition:
+		transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+		box-shadow 0.26s ease,
+		border-color 0.26s ease,
+		background 0.26s ease,
+		filter 0.26s ease;
+}
+
+.getting-started-step-reward.is-ready {
+	color: #fef08a;
+	background:
+		linear-gradient(135deg, rgba(255, 240, 180, 0.2), rgba(250, 204, 21, 0.24), rgba(245, 158, 11, 0.18)),
+		rgba(250, 204, 21, 0.12);
+	cursor: pointer;
+	box-shadow:
+		0 10px 20px rgba(245, 158, 11, 0.12),
+		0 0 0 1px rgba(255, 236, 165, 0.1) inset;
+	animation: gettingStartedReadyInvite 2.2s ease-in-out infinite;
+}
+
+.getting-started-step-reward.is-ready::before {
+	content: '';
+	position: absolute;
+	inset: -28% auto -28% -22%;
+	width: 34%;
+	border-radius: 999px;
+	background: linear-gradient(90deg, transparent, rgba(255, 244, 180, 0.78), transparent);
+	transform: translateX(-120%) rotate(16deg);
+	animation: gettingStartedRewardSweep 2.8s linear infinite;
+}
+
+.getting-started-step-reward.is-ready::after {
+	content: '';
+	position: absolute;
+	inset: auto 16% -10px;
+	height: 10px;
+	border-radius: 999px;
+	background: radial-gradient(circle, rgba(250, 204, 21, 0.34), rgba(250, 204, 21, 0));
+	filter: blur(8px);
+	opacity: 0.75;
+	animation: gettingStartedRewardAura 2.2s ease-in-out infinite;
+}
+
+.getting-started-step-reward.is-ready:hover {
+	transform: translateY(-2px) scale(1.03);
+	box-shadow:
+		0 16px 28px rgba(245, 158, 11, 0.2),
+		0 0 0 1px rgba(255, 236, 165, 0.14) inset;
+}
+
+.getting-started-step-reward.is-claiming {
+	background:
+		linear-gradient(135deg, rgba(255, 247, 214, 0.92), rgba(250, 204, 21, 0.86), rgba(245, 158, 11, 0.88));
+	color: #1f1800;
+	border-color: rgba(255, 236, 165, 0.78);
+	box-shadow:
+		0 0 0 1px rgba(255, 248, 214, 0.2) inset,
+		0 18px 34px rgba(245, 158, 11, 0.28);
+	animation: gettingStartedClaimCharge 0.68s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.getting-started-step-reward.is-collecting {
+	animation: gettingStartedRewardResolve 0.95s cubic-bezier(0.22, 1, 0.36, 1);
+	box-shadow:
+		0 0 0 1px rgba(250, 204, 21, 0.14),
+		0 16px 28px rgba(245, 158, 11, 0.2);
+}
+
+.getting-started-step-reward.is-claimed {
+	color: #cbd5e1;
+	border-color: rgba(148, 163, 184, 0.24);
+	background: rgba(148, 163, 184, 0.1);
+	box-shadow: none;
+	filter: saturate(0.3);
+}
+
+.getting-started-step-reward:disabled {
+	cursor: wait;
+}
+
+.getting-started-step-reward-ring {
+	position: absolute;
+	inset: -3px;
+	border-radius: inherit;
+	border: 1px solid rgba(255, 240, 188, 0);
+	opacity: 0;
+	pointer-events: none;
+}
+
+.getting-started-step-reward.is-claiming .getting-started-step-reward-ring,
+.getting-started-step-reward.is-collecting .getting-started-step-reward-ring {
+	opacity: 1;
+	animation: gettingStartedRewardRing 0.8s ease-out forwards;
+}
+
+.getting-started-step-reward-coin {
+	flex-shrink: 0;
+	position: relative;
+	z-index: 1;
+}
+
+.getting-started-step-reward-value {
+	position: relative;
+	z-index: 1;
+	letter-spacing: 0.01em;
+}
+
+.getting-started-step-reward.is-ready .getting-started-step-reward-coin {
+	animation: gettingStartedCoinInvite 1.5s ease-in-out infinite;
+}
+
+.getting-started-step-reward.is-claiming .getting-started-step-reward-coin {
+	animation: gettingStartedCoinLaunch 0.68s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+}
+
+.getting-started-coin-burst {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+.getting-started-coin-burst span {
+	position: absolute;
+	width: 8px;
+	height: 8px;
+	border-radius: 999px;
+	background: radial-gradient(circle, #fff3b0 0%, #facc15 50%, rgba(250, 204, 21, 0) 72%);
+	box-shadow: 0 0 12px rgba(250, 204, 21, 0.4);
+	animation: gettingStartedCoinBurst 0.9s ease-out forwards;
+}
+
+.getting-started-coin-burst span:nth-child(1) {
+	--dx: -18px;
+	--dy: -20px;
+	animation-delay: 0s;
+}
+
+.getting-started-coin-burst span:nth-child(2) {
+	--dx: 0px;
+	--dy: -28px;
+	animation-delay: 0.04s;
+}
+
+.getting-started-coin-burst span:nth-child(3) {
+	--dx: 18px;
+	--dy: -18px;
+	animation-delay: 0.08s;
+}
+
+.getting-started-coin-burst span:nth-child(4) {
+	--dx: -26px;
+	--dy: -4px;
+	animation-delay: 0.02s;
+}
+
+.getting-started-coin-burst span:nth-child(5) {
+	--dx: 26px;
+	--dy: -6px;
+	animation-delay: 0.1s;
+}
+
+.getting-started-final-side {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 10px;
+}
+
+.getting-started-final-reward {
+	min-width: 86px;
+	justify-content: center;
+}
+
+.getting-started-step-core {
+	color: var(--text-tertiary);
+	border: 1px solid rgba(148, 163, 184, 0.28);
+	background: rgba(148, 163, 184, 0.06);
+}
+
+.getting-started-footer {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	margin-top: 12px;
+	font-size: 12px;
+	color: var(--text-tertiary);
+}
+
+.getting-started-footer-ready {
+	color: #fde68a;
+	font-weight: 800;
+}
+
+.getting-started-error {
+	margin-top: 10px;
+	font-size: 12px;
+	color: #fca5a5;
+}
+
+@keyframes gettingStartedClaimPulse {
+	0%,
+	100% {
+		transform: translateY(0);
+		box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.12), 0 16px 28px rgba(245, 158, 11, 0.14);
+	}
+	50% {
+		transform: translateY(-1px);
+		box-shadow: 0 0 0 10px rgba(250, 204, 21, 0), 0 20px 30px rgba(245, 158, 11, 0.18);
+	}
+}
+
+@keyframes gettingStartedClaimSweep {
+	0% {
+		transform: translateY(0) scale(1);
+	}
+	35% {
+		transform: translateY(-1px) scale(1.01);
+	}
+	100% {
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes gettingStartedReadyInvite {
+	0%,
+	100% {
+		transform: translateY(0);
+		box-shadow:
+			0 10px 20px rgba(245, 158, 11, 0.12),
+			0 0 0 1px rgba(255, 236, 165, 0.08) inset;
+	}
+	50% {
+		transform: translateY(-1px) scale(1.015);
+		box-shadow:
+			0 16px 26px rgba(245, 158, 11, 0.2),
+			0 0 0 1px rgba(255, 236, 165, 0.16) inset;
+	}
+}
+
+@keyframes gettingStartedRewardSweep {
+	0% {
+		transform: translateX(-120%) rotate(16deg);
+	}
+	100% {
+		transform: translateX(340%) rotate(16deg);
+	}
+}
+
+@keyframes gettingStartedRewardAura {
+	0%,
+	100% {
+		opacity: 0.45;
+		transform: scaleX(0.82);
+	}
+	50% {
+		opacity: 0.85;
+		transform: scaleX(1);
+	}
+}
+
+@keyframes gettingStartedClaimCharge {
+	0% {
+		transform: translateY(0) scale(1);
+		filter: saturate(1);
+	}
+	38% {
+		transform: translateY(1px) scale(0.94);
+		filter: saturate(1.1);
+	}
+	72% {
+		transform: translateY(-2px) scale(1.05);
+		filter: saturate(1.2);
+	}
+	100% {
+		transform: translateY(0) scale(1.01);
+		filter: saturate(1);
+	}
+}
+
+@keyframes gettingStartedRewardResolve {
+	0% {
+		transform: scale(1);
+		filter: saturate(1.15);
+	}
+	28% {
+		transform: translateY(-2px) scale(1.08);
+		filter: saturate(1.28);
+	}
+	62% {
+		transform: translateY(0) scale(0.98);
+		filter: saturate(0.92);
+	}
+	100% {
+		transform: scale(1);
+		filter: saturate(1);
+	}
+}
+
+@keyframes gettingStartedCoinInvite {
+	0%,
+	100% {
+		transform: translateY(0) scale(1);
+	}
+	50% {
+		transform: translateY(-2px) scale(1.12) rotate(-6deg);
+	}
+}
+
+@keyframes gettingStartedCoinLaunch {
+	0% {
+		transform: translateY(0) scale(1) rotate(0deg);
+	}
+	45% {
+		transform: translateY(-7px) scale(1.18) rotate(-12deg);
+	}
+	100% {
+		transform: translateY(0) scale(1.02) rotate(0deg);
+	}
+}
+
+@keyframes gettingStartedRewardRing {
+	0% {
+		transform: scale(0.94);
+		opacity: 0.6;
+		border-color: rgba(255, 240, 188, 0.7);
+	}
+	100% {
+		transform: scale(1.18);
+		opacity: 0;
+		border-color: rgba(255, 240, 188, 0);
+	}
+}
+
+@keyframes gettingStartedCoinBurst {
+	0% {
+		transform: translate(-50%, -50%) scale(0.35);
+		opacity: 0;
+	}
+	20% {
+		opacity: 1;
+	}
+	100% {
+		transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1);
+		opacity: 0;
+	}
+}
+
+@media (max-width: 640px) {
+	.getting-started-card {
+		padding: 16px;
+	}
+
+	.getting-started-header,
+	.getting-started-footer,
+	.getting-started-step {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.getting-started-header-actions {
+		width: 100%;
+		justify-content: space-between;
+	}
+
+	.getting-started-count,
+	.getting-started-toggle,
+	.getting-started-final-side,
+	.getting-started-claim-button,
+	.getting-started-step-reward,
+	.getting-started-step-core {
+		width: 100%;
+		justify-content: center;
+	}
+
+	.getting-started-step {
+		gap: 10px;
+	}
+
+	.getting-started-step.is-substep {
+		margin-left: 14px;
+		padding-left: 12px;
+	}
+
+	.getting-started-step-main {
+		width: 100%;
+	}
+
+	.getting-started-collapsed-note {
+		padding-left: 2px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.getting-started-toggle svg,
+	.getting-started-final-step.is-ready,
+	.getting-started-step.is-collecting,
+	.getting-started-step-reward.is-ready,
+	.getting-started-step-reward.is-claiming,
+	.getting-started-step-reward.is-collecting,
+	.getting-started-step-reward::before,
+	.getting-started-step-reward::after,
+	.getting-started-step-reward-ring,
+	.getting-started-step-reward-coin,
+	.getting-started-coin-burst span {
+		animation: none;
+		transition: none;
+	}
+}

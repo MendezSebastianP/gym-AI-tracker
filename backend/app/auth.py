@@ -2,11 +2,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-import os
 import secrets
 import hashlib
+from app.config import get_env
 
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+SECRET_KEY = get_env("SECRET_KEY", "supersecretkey", required_in_production=True)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15  # Short-lived access token
 REFRESH_TOKEN_EXPIRE_DAYS = 30    # Long-lived refresh token
