@@ -51,4 +51,6 @@ export GIT_CONFIG_GLOBAL=/tmp/.gc
 git config --global --add safe.directory /app
 git fetch https://github.com/MendezSebastianP/gym-AI-tracker.git main
 git reset --hard FETCH_HEAD
+# Restore ownership so host user (trota, uid 1000) can run git commands
+chown -R 1000:1000 /app/.git
 exec /bin/bash /app/deploy/redeploy.sh --post-pull
