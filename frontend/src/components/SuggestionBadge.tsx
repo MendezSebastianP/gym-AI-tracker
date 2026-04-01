@@ -93,7 +93,7 @@ export default function SuggestionBadge({ suggestion, exerciseName, onApply, onD
 			{/* Trigger button — small inline lightbulb + label */}
 			<button
 				ref={triggerRef}
-				onClick={() => setExpanded(!expanded)}
+				onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
 				style={{
 					background: 'none',
 					border: 'none',

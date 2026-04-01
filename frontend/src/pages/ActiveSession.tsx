@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
@@ -589,6 +590,7 @@ export default function ActiveSession() {
 	}
 
 	return (
+		<>
 		<div className="container fade-in" style={{ paddingBottom: '100px' }}>
 			{isCompleted && editMode && (
 				<div style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--text-primary)', padding: '16px', marginBottom: '16px', borderRadius: '8px', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
@@ -830,7 +832,11 @@ export default function ActiveSession() {
 								if (fetched && suggestions.size === 0) return null;
 								return (
 									<button
-										onClick={progressionSuggestions.fetch}
+										onClick={async () => {
+									await progressionSuggestions.fetch();
+									// Collapse all so suggestion badges are immediately visible
+									setCollapsedExercises(allExIds);
+								}}
 										disabled={loading}
 										className={`motion-btn motion-btn--ai motion-btn--soft ${loading ? 'is-loading' : ''}`.trim()}
 										style={{
@@ -934,35 +940,56 @@ export default function ActiveSession() {
 										<SuggestionBadge
 											suggestion={progressionSuggestions.suggestions.get(ex.exercise_id)!}
 											exerciseName={ex.name}
-											onApply={(suggestion: ProgressionSuggestion) => {
-												// Apply suggested values to all sets of this exercise
-												const exerciseSetsForApply = sets?.filter((s: any) => s.exercise_id === ex.exercise_id) || [];
-												exerciseSetsForApply.forEach((s: any) => {
-													if (suggestion.suggested.weight !== undefined) {
-														db.sets.update(s.id!, { weight_kg: suggestion.suggested.weight, syncStatus: 'updated' as any });
+												onApply={(suggestion: ProgressionSuggestion) => {
+													const exerciseSetsForApply = sets?.filter((s: any) => s.exercise_id === ex.exercise_id) || [];
+													const isSwap = (suggestion.type === 'exercise_swap' || suggestion.type === 'bw_progression') && suggestion.new_exercise_id;
+												
+													if (isSwap) {
+														// Swap exercise_id on all session sets for this exercise
+														exerciseSetsForApply.forEach((s: any) => {
+															db.sets.update(s.id!, { exercise_id: suggestion.new_exercise_id, syncStatus: 'updated' as any });
+														});
+													} else {
+														// Regular weight / reps update
+														exerciseSetsForApply.forEach((s: any) => {
+															if (suggestion.suggested.weight !== undefined) {
+																db.sets.update(s.id!, { weight_kg: suggestion.suggested.weight, syncStatus: 'updated' as any });
+															}
+															if (suggestion.suggested.reps !== undefined) {
+																const repsVal = typeof suggestion.suggested.reps === 'string'
+																	? parseInt(suggestion.suggested.reps.split('-')[0]) || 0
+																	: suggestion.suggested.reps;
+																db.sets.update(s.id!, { reps: repsVal, syncStatus: 'updated' as any });
+															}
+														});
 													}
-													if (suggestion.suggested.reps !== undefined) {
-														const repsVal = typeof suggestion.suggested.reps === 'string'
-															? parseInt(suggestion.suggested.reps.split('-')[0]) || 0
-															: suggestion.suggested.reps;
-														db.sets.update(s.id!, { reps: repsVal, syncStatus: 'updated' as any });
-													}
-												});
-												// Also update routine definition
-												if (routine && session?.day_index !== undefined) {
-													const updatedDays = JSON.parse(JSON.stringify(routine.days));
-													const dayExercises = updatedDays[session.day_index]?.exercises;
-													if (dayExercises) {
-														const routineEx = dayExercises.find((e: any) => e.exercise_id === ex.exercise_id);
-														if (routineEx) {
-															if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
-															if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
-															if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
+												
+													// Update routine definition
+													if (routine && session?.day_index !== undefined) {
+														const updatedDays = JSON.parse(JSON.stringify(routine.days));
+														const dayExercises = updatedDays[session.day_index]?.exercises;
+														if (dayExercises) {
+															const routineExIdx = dayExercises.findIndex((e: any) => e.exercise_id === ex.exercise_id);
+															if (routineExIdx >= 0) {
+																if (isSwap) {
+																	dayExercises[routineExIdx] = {
+																		...dayExercises[routineExIdx],
+																		exercise_id: suggestion.new_exercise_id,
+																		...(suggestion.suggested.weight !== undefined ? { weight_kg: suggestion.suggested.weight } : {}),
+																		...(suggestion.suggested.reps !== undefined ? { reps: String(suggestion.suggested.reps) } : {}),
+																		...(suggestion.suggested.sets !== undefined ? { sets: suggestion.suggested.sets } : {}),
+																	};
+																} else {
+																	const routineEx = dayExercises[routineExIdx];
+																	if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
+																	if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
+																	if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
+																}
+															}
 														}
+														db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
+														api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => { });
 													}
-													db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
-													api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => { });
-												}
 												// Save feedback
 												api.post('/progression/feedback', {
 													exercise_id: ex.exercise_id,
@@ -1377,100 +1404,101 @@ export default function ActiveSession() {
 				</div>
 			)}
 
-			{showEffortModal && (
+		</div>
+		{showEffortModal && createPortal(
+			<div
+				style={{
+					position: 'fixed',
+					inset: 0,
+					background: 'rgba(0,0,0,0.55)',
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					zIndex: 250,
+					padding: '16px',
+				}}
+			>
 				<div
 					style={{
-						position: 'fixed',
-						inset: 0,
-						background: 'rgba(0,0,0,0.55)',
-						display: 'flex',
-						alignItems: 'center',
-						justifyContent: 'center',
-						zIndex: 250,
-						padding: '16px',
+						width: '100%',
+						maxWidth: '420px',
+						background: 'var(--bg-secondary)',
+						borderRadius: '18px',
+						padding: '18px 14px 16px',
+						border: '1px solid var(--border)',
 					}}
 				>
-					<div
-						style={{
-							width: '100%',
-							maxWidth: '420px',
-							background: 'var(--bg-secondary)',
-							borderRadius: '18px',
-							padding: '18px 14px 16px',
-							border: '1px solid var(--border)',
-						}}
-					>
-						<div style={{ fontSize: '17px', fontWeight: 700, marginBottom: '6px', textAlign: 'center' }}>
-							How hard was this session?
+					<div style={{ fontSize: '17px', fontWeight: 700, marginBottom: '6px', textAlign: 'center' }}>
+						How hard was this session?
+					</div>
+					<div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', marginBottom: '14px' }}>
+						1 = easy · 10 = all out
+					</div>
+					<div style={{ marginBottom: '14px' }}>
+						<div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' }}>
+							<span style={{ fontSize: '24px', fontWeight: 800, color: '#86efac' }}>{effortValue}</span>
+							<span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>{effortTone}</span>
 						</div>
-						<div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', marginBottom: '14px' }}>
-							1 = easy · 10 = all out
+						<input
+							type="range"
+							min={1}
+							max={10}
+							step={1}
+							value={effortValue}
+							onChange={(e) => setEffortRating(parseInt(e.target.value, 10))}
+							style={{
+								width: '100%',
+								accentColor: '#22c55e',
+								cursor: 'pointer',
+							}}
+						/>
+						<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+							<span>Easy</span>
+							<span>All out</span>
 						</div>
-						<div style={{ marginBottom: '14px' }}>
-							<div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' }}>
-								<span style={{ fontSize: '24px', fontWeight: 800, color: '#86efac' }}>{effortValue}</span>
-								<span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>{effortTone}</span>
-							</div>
-							<input
-								type="range"
-								min={1}
-								max={10}
-								step={1}
-								value={effortValue}
-								onChange={(e) => setEffortRating(parseInt(e.target.value, 10))}
-								style={{
-									width: '100%',
-									accentColor: '#22c55e',
-									cursor: 'pointer',
-								}}
-							/>
-							<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-								<span>Easy</span>
-								<span>All out</span>
-							</div>
-							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '4px', marginTop: '6px' }}>
-								{Array.from({ length: 10 }, (_, i) => {
-									const val = i + 1;
-									const active = val === effortValue;
-									return (
-										<div
-											key={val}
-											style={{
-												textAlign: 'center',
-												fontSize: '10px',
-												fontWeight: active ? 800 : 500,
-												color: active ? '#86efac' : 'var(--text-tertiary)',
-											}}
-										>
-											{val}
-										</div>
-									);
-								})}
-							</div>
-						</div>
-						<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-							<button
-								className="btn btn-ghost"
-								onClick={async () => {
-									setShowEffortModal(false);
-									await completeSession(null);
-								}}
-							>
-								Skip
-							</button>
-							<button
-								className="btn btn-primary"
-								onClick={async () => {
-									setShowEffortModal(false);
-									await completeSession(effortValue);
-								}}
-							>
-								Done
-							</button>
+						<div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '4px', marginTop: '6px' }}>
+							{Array.from({ length: 10 }, (_, i) => {
+								const val = i + 1;
+								const active = val === effortValue;
+								return (
+									<div
+										key={val}
+										style={{
+											textAlign: 'center',
+											fontSize: '10px',
+											fontWeight: active ? 800 : 500,
+											color: active ? '#86efac' : 'var(--text-tertiary)',
+										}}
+									>
+										{val}
+									</div>
+								);
+							})}
 						</div>
 					</div>
+					<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+						<button
+							className="btn btn-ghost"
+							onClick={async () => {
+								setShowEffortModal(false);
+								await completeSession(null);
+							}}
+						>
+							Skip
+						</button>
+						<button
+							className="btn btn-primary"
+							onClick={async () => {
+								setShowEffortModal(false);
+								await completeSession(effortValue);
+							}}
+						>
+							Done
+						</button>
+					</div>
 				</div>
-			)}
-		</div>
+			</div>
+		, document.body)}
+		</>
 	);
 }

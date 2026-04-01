@@ -436,12 +436,12 @@ export default function Stats() {
 		};
 	}, []);
 
-	// ── Loading & Empty states ────────────────────────────────────────────────
-	if (!stats) return <div className="container flex-center fade-in">{t('Loading...')}</div>;
-
 	// ── Derived data ──────────────────────────────────────────────────────────
-	const weeklyData = stats.weekly_sessions;
-	const dailyData = stats.daily_sessions;
+	// stats comes from Dexie (IndexedDB) and may load slightly after the API-
+	// driven gamification data. Don't block the whole page on it — the level
+	// bar and quests can show immediately; charts/counts wait for stats.
+	const weeklyData = stats?.weekly_sessions ?? [0, 0, 0, 0, 0, 0, 0, 0];
+	const dailyData = stats?.daily_sessions ?? [0, 0, 0, 0, 0, 0, 0];
 	const maxWeekly = Math.max(...weeklyData, 1);
 	const maxDaily = Math.max(...dailyData, 1);
 	const adjustedDayLabels: string[] = [];
@@ -501,7 +501,7 @@ export default function Stats() {
 			}
 			return count;
 		}
-		return stats.streak_weeks;
+		return stats?.streak_weeks ?? 0;
 	})();
 
 	const unclaimedWeeks = isDemo ? 2 : (gamification?.unclaimed_streak_weeks ?? 0);
@@ -633,7 +633,7 @@ export default function Stats() {
 			)}
 
 			{/* ── Stats Cards ─────────────────────────────────────────────── */}
-			{user?.settings?.track_time && (stats.avg_duration_seconds > 0 || stats.total_duration_seconds > 0) && (
+			{user?.settings?.track_time && stats && (stats.avg_duration_seconds > 0 || stats.total_duration_seconds > 0) && (
 				<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
 					{stats.avg_duration_seconds > 0 && (
 						<div className="card text-center p-4" style={{ marginBottom: 0 }}>

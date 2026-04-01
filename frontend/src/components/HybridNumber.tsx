@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 /* ── Hybrid Input: tap=drum, hold+drag=swipe, double-tap=keyboard ── */
 
@@ -14,11 +15,12 @@ export interface HybridNumProps {
 	showDelta?: boolean;
 }
 
-export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5, sensitivity = 14, label, showHint = false, showDelta = true }: HybridNumProps) {
+export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5, sensitivity = 14, label, showHint = false, showDelta = false }: HybridNumProps) {
 	const [mode, setMode] = useState<'idle' | 'drum' | 'swipe' | 'edit'>('idle');
 	const [scrollOffset, setScrollOffset] = useState(0);
 	const [swipeDelta, setSwipeDelta] = useState(0);
 	const [editText, setEditText] = useState('');
+	const [drumPos, setDrumPos] = useState({ top: 0, left: 0 });
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	// Items for drum
@@ -122,8 +124,8 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 		lastTime.current = now;
 
 		const speed = Math.abs(velocity.current);
-		const gain = Math.min(2.3, 1.08 + speed * 1.8); // Faster swipe = covers more ground
-		const pxPerStep = Math.max(6, PX_PER_STEP * 0.9);
+		const gain = Math.min(2.0, 1.0 + speed * 1.4); // Faster swipe = covers more ground
+		const pxPerStep = Math.max(10, PX_PER_STEP * 1.0);
 		swipeAccumPx.current += rawDy * gain;
 
 		const stepDelta = swipeAccumPx.current > 0
@@ -374,6 +376,17 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 		if (holdTimer.current) clearTimeout(holdTimer.current);
 	}, []);
 
+	// Calculate fixed position for portal drum when it opens
+	useEffect(() => {
+		if (mode === 'drum' && hybridRef.current) {
+			const rect = hybridRef.current.getBoundingClientRect();
+			setDrumPos({
+				top: rect.bottom + 6,
+				left: rect.left + rect.width / 2,
+			});
+		}
+	}, [mode]);
+
 	const commitEdit = () => {
 		const parsed = parseFloat(editText);
 		if (!isNaN(parsed)) {
@@ -507,7 +520,7 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 			)}
 
 			{/* Drum overlay */}
-			{mode === 'drum' && (
+			{mode === 'drum' && createPortal(
 				<>
 					<div
 						onTouchEnd={(e) => {
@@ -540,8 +553,8 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 						onTouchEnd={handleDrumTouchEnd}
 						onMouseDown={handleDrumMouseDown}
 						style={{
-							position: 'absolute', top: '100%', left: '50%',
-							transform: 'translateX(-50%)', zIndex: 50, marginTop: 6,
+						position: 'fixed', top: drumPos.top, left: drumPos.left,
+						transform: 'translateX(-50%)', zIndex: 50,
 							background: 'var(--bg-secondary)',
 							border: '1px solid var(--border)',
 							borderRadius: 'var(--radius-md)',
@@ -578,7 +591,8 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 							pointerEvents: 'none', zIndex: 2,
 						}} />
 					</div>
-				</>
+				</>,
+				document.body
 			)}
 		</div>
 	);

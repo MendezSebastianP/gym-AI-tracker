@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, History, HelpCircle, User, Trash2, X } from 'lucide-react';
+import { Zap, History, HelpCircle, User, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
@@ -110,7 +110,7 @@ export default function Sessions() {
 			nextSessionCard = (
 				<div className="card" style={{ borderLeft: '4px solid var(--accent)', background: 'linear-gradient(to right, rgba(0,255,255,0.05), transparent)' }}>
 					<h2 className="text-lg font-bold mb-2 flex items-center gap-2">
-						<Play size={20} className="text-accent" fill="currentColor" />
+						<Zap size={16} className="text-accent" />
 						{t('Resume Workout')}
 					</h2>
 					<div className="mb-4">
@@ -160,7 +160,7 @@ export default function Sessions() {
 				nextSessionCard = (
 					<div className="card" style={{ borderLeft: '4px solid var(--primary)', background: 'linear-gradient(to right, rgba(204, 255, 0, 0.05), transparent)' }}>
 						<h2 className="text-lg font-bold mb-2 flex items-center gap-2">
-							<Play size={20} className="text-primary" fill="currentColor" />
+							<Zap size={16} className="text-primary" />
 							{t("Up Next")}
 						</h2>
 						<div className="mb-4">
@@ -168,7 +168,7 @@ export default function Sessions() {
 							<div className="text-xl font-semibold mb-1">{nextDay?.day_name || `Day ${nextDayIndex + 1}`}</div>
 							<div className="text-sm text-secondary">{nextDay?.exercises.length || 0} {t('exercises')}</div>
 						</div>
-						<button onClick={startSession} className="btn btn-primary w-full motion-btn motion-btn--cta">{t('Start Workout')}</button>
+						<button onClick={startSession} className="btn btn-primary w-full motion-btn">{t('Start Workout')}</button>
 					</div>
 				);
 			} else {

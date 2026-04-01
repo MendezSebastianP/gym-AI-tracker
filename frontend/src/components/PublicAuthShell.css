@@ -348,16 +348,29 @@
 @media (max-width: 920px) {
 	.public-auth-layout {
 		grid-template-columns: 1fr;
-		gap: 24px;
-		padding-top: 28px;
+		gap: 20px;
+		padding-top: 20px;
 	}
 
+	/* Form card appears first on mobile */
+	.public-auth-card-wrap { order: -1; }
+
+	/* Story section is compact below the card */
 	.public-auth-story {
 		max-width: 100%;
+		gap: 10px;
 	}
 
 	.public-auth-story h1 {
 		max-width: 100%;
+		font-size: clamp(1.6rem, 6vw, 2.4rem);
+	}
+
+	/* Hide verbose story content on mobile — keep badge + title only */
+	.public-auth-story p,
+	.public-auth-points,
+	.public-auth-home-cta {
+		display: none;
 	}
 }
 

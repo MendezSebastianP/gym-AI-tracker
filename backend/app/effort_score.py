@@ -139,7 +139,10 @@ def _progression_factor(db: DBSession, user_id: int, session: SessionModel, curr
     if comparable == 0:
         return 50.0
 
-    return (progressed / comparable) * 100.0
+    # Scale: 0% progressed = 50 (neutral/maintaining), 100% progressed = 100.
+    # Returning 0 for maintaining was misleading — it made identical sessions
+    # score differently depending on whether prior history existed.
+    return 50.0 + (progressed / comparable) * 50.0
 
 
 def compute_effort_score(db: DBSession, user_id: int, session: SessionModel) -> float:
