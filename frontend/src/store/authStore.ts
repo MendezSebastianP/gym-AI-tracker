@@ -4,6 +4,21 @@ import { db } from '../db/schema';
 import type { User } from '../db/schema';
 import { syncAllDataBeforeLogout } from '../db/sync';
 
+/**
+ * Bypass Dexie's closed-state entirely by deleting the DB with the native IndexedDB API.
+ * Safe to call at any time — even when Dexie is in an unusable state.
+ */
+export const hardReset = async () => {
+	localStorage.clear();
+	await new Promise<void>((resolve) => {
+		const req = indexedDB.deleteDatabase('GymTrackerDB');
+		req.onsuccess = () => resolve();
+		req.onerror = () => resolve();
+		req.onblocked = () => resolve();
+	});
+	window.location.replace('/login');
+};
+
 interface AuthState {
 	user: User | null;
 	token: string | null;
@@ -71,34 +86,47 @@ export const useAuthStore = create<AuthState>((set) => ({
 
 
 	checkAuth: async () => {
-		const token = localStorage.getItem('token');
-		if (!token) {
-			set({ isLoading: false, isAuthenticated: false });
-			return;
-		}
-		// If already authenticated with user data, skip redundant server call
-		const state = useAuthStore.getState();
-		if (state.isAuthenticated && state.user) {
-			set({ isLoading: false });
-			return;
-		}
-
 		try {
-			const response = await api.get('/auth/me');
-			set({ user: response.data, isAuthenticated: true, isAdmin: response.data.is_admin || false, isLoading: false });
-		} catch (error) {
-			// If offline, try to load from local DB
-			if (!navigator.onLine) {
-				const user = await db.users.toCollection().first();
-				if (user) {
-					set({ user, isAuthenticated: true, isAdmin: user.is_admin || false, isLoading: false });
-					return;
-				}
+			const token = localStorage.getItem('token');
+			if (!token) {
+				set({ isLoading: false, isAuthenticated: false });
+				return;
+			}
+			// If already authenticated with user data, skip redundant server call
+			const state = useAuthStore.getState();
+			if (state.isAuthenticated && state.user) {
+				set({ isLoading: false });
+				return;
 			}
 
-			console.error("Auth check failed", error);
-			localStorage.removeItem('token');
-			set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });
+			try {
+				const response = await api.get('/auth/me');
+				set({ user: response.data, isAuthenticated: true, isAdmin: response.data.is_admin || false, isLoading: false });
+			} catch (error) {
+				// If offline, try to load from local DB
+				if (!navigator.onLine) {
+					try {
+						const user = await db.users.toCollection().first();
+						if (user) {
+							set({ user, isAuthenticated: true, isAdmin: user.is_admin || false, isLoading: false });
+							return;
+						}
+					} catch (dbErr) {
+						// DB is in a broken/closed state — hard reset to unblock the user
+						console.error("DB broken during offline auth check — hard resetting", dbErr);
+						await hardReset();
+						return;
+					}
+				}
+
+				console.error("Auth check failed", error);
+				localStorage.removeItem('token');
+				set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });
+			}
+		} catch (fatal) {
+			// Catch-all: any unexpected error (e.g. DB closed, version mismatch)
+			console.error("Fatal error in checkAuth — hard resetting", fatal);
+			await hardReset();
 		}
 	},
 

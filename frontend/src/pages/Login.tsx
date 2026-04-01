@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore, hardReset } from '../store/authStore';
 import { api } from '../api/client';
 import { useTranslation } from 'react-i18next';
 import PublicAuthShell from '../components/PublicAuthShell';
@@ -106,6 +106,20 @@ export default function Login() {
 					{successBridge ? t('Opening Home...') : loading ? t('Logging in...') : t("Login")}
 				</button>
 			</form>
+
+			<div style={{ marginTop: '20px', textAlign: 'center' }}>
+				<button
+					type="button"
+					onClick={() => hardReset()}
+					style={{
+						background: 'none', border: 'none', cursor: 'pointer',
+						fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'underline',
+						padding: '4px',
+					}}
+				>
+					{t('App stuck or not loading? Reset local data')}
+				</button>
+			</div>
 		</PublicAuthShell>
 	);
 }
