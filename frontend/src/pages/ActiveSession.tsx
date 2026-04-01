@@ -248,7 +248,7 @@ export default function ActiveSession() {
 			const previousSessions = await db.sessions
 				.where('routine_id')
 				.equals(routine.id)
-				.filter(s => !!s.completed_at && s.id !== sessionId)
+				.filter(s => !!s.completed_at && s.id !== sessionId && s.day_index === session.day_index)
 				.sortBy('started_at');
 
 			if (previousSessions && previousSessions.length > 0) {
@@ -265,7 +265,7 @@ export default function ActiveSession() {
 				try {
 					const res = await api.get(`/sessions?routine_id=${routine.id}&limit=5`);
 					const serverPrev = (res.data as any[])
-						.filter((s: any) => s.completed_at && s.id !== session.server_id)
+						.filter((s: any) => s.completed_at && s.id !== session.server_id && s.day_index === session.day_index)
 						.sort((a: any, b: any) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
 					if (serverPrev.length > 0) {
 						previousSets = serverPrev[0].sets || [];
