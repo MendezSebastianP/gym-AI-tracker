@@ -4,7 +4,7 @@ import { api } from '../api/client';
 let isSyncing = false;
 
 export const processSyncQueue = async () => {
-	if (!navigator.onLine || isSyncing) return;
+	if (!navigator.onLine || isSyncing || !db.isOpen()) return;
 	isSyncing = true;
 
 	try {
@@ -286,6 +286,7 @@ export const syncAllDataBeforeLogout = async () => {
 		console.warn("Cannot sync before logout: offline");
 		return;
 	}
+	if (!db.isOpen()) return;
 
 	try {
 		// 1. Process any pending sync queue events first
