@@ -9,7 +9,6 @@ import { User, Edit3, Save, X, Database, Globe, LogOut, ClipboardList, HelpCircl
 import { Link } from 'react-router-dom';
 import { DropSetFeatureIcon, EffortFeatureIcon, FailureFeatureIcon } from '../components/icons/TrainingFeatureIcons';
 import PublicLegalLinks from '../components/PublicLegalLinks';
-import { publicSite, supportMailto } from '../config/publicSite';
 
 export default function Settings() {
 	const { t, i18n } = useTranslation();
@@ -582,20 +581,7 @@ export default function Settings() {
 
 			<div className="card mb-4 p-4" style={{ display: 'grid', gap: '10px' }}>
 				<div style={{ fontWeight: 700 }}>{t('Privacy')} & {t('Terms')}</div>
-				<div style={{ fontSize: '13px', lineHeight: 1.6, color: 'var(--text-secondary)' }}>
-					Public launch pages for storage, AI disclosure, support, and service terms.
-				</div>
 				<PublicLegalLinks showSupport compact />
-				<div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-					Operator: {publicSite.operatorName}
-					{supportMailto ? (
-						<>
-							{' '}· <a href={supportMailto} style={{ color: 'var(--primary)', textDecoration: 'none' }}>{publicSite.supportEmail}</a>
-						</>
-					) : (
-						' · Configure VITE_PUBLIC_SUPPORT_EMAIL before the public deploy.'
-					)}
-				</div>
 			</div>
 
 			{/* Logout */}

@@ -161,12 +161,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 	}
 }));
 
-// Listen for logout events from other tabs
+// Listen for logout events from other tabs — hard redirect instead of calling
+// logout(), because the other tab may have already deleted/modified the shared DB
 if (typeof window !== 'undefined') {
 	window.addEventListener('storage', (event) => {
 		if ((event.key === 'token' || event.key === 'refresh_token') && !event.newValue) {
-			console.log('Token removed in another tab. Logging out...');
-			useAuthStore.getState().logout();
+			window.location.replace('/login');
 		}
 	});
 }
