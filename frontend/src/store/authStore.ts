@@ -71,14 +71,19 @@ export const useAuthStore = create<AuthState>((set) => ({
 			]);
 		} catch (_) { /* best-effort */ }
 
-		// Server logout — fire and forget (tokens expire naturally if this fails)
-		api.post('/auth/logout').catch(() => {});
+		// No server logout call — access token expires in 15min, refresh in 7d.
+		// The server call required a valid access token which is often expired by
+		// logout time, causing a visible 401 in the browser console.
 
 		// Immediate local cleanup
 		localStorage.removeItem('token');
 		localStorage.removeItem('refresh_token');
-		try { db.close(); } catch (_) { /* ignore */ }
-		indexedDB.deleteDatabase('GymTrackerDB');
+		try {
+			await Promise.race([
+				db.delete(),
+				new Promise<void>(resolve => setTimeout(resolve, 1000)),
+			]);
+		} catch (_) { /* ignore */ }
 		set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });
 	},
 
