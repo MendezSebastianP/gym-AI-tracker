@@ -62,27 +62,23 @@ export const useAuthStore = create<AuthState>((set) => ({
 	},
 
 	logout: async () => {
-		// Sync pending data — capped at 4s so logout never hangs
+		// Sync unsynced data before wiping — 1.5s cap keeps logout snappy
+		// (normal case: everything already synced, resolves in <200ms)
 		try {
 			await Promise.race([
 				syncAllDataBeforeLogout(),
-				new Promise<void>(resolve => setTimeout(resolve, 4000)),
+				new Promise<void>(resolve => setTimeout(resolve, 1500)),
 			]);
-		} catch (e) {
-			console.error("Sync before logout failed", e);
-		}
+		} catch (_) { /* best-effort */ }
 
-		// Revoke refresh token on server — fire and forget, never blocks logout
+		// Server logout — fire and forget (tokens expire naturally if this fails)
 		api.post('/auth/logout').catch(() => {});
 
+		// Immediate local cleanup
 		localStorage.removeItem('token');
 		localStorage.removeItem('refresh_token');
-		try {
-			await db.delete();
-			await db.open();
-		} catch (e) {
-			console.error("Failed to clear local DB on logout", e);
-		}
+		try { db.close(); } catch (_) { /* ignore */ }
+		indexedDB.deleteDatabase('GymTrackerDB');
 		set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });
 	},
 

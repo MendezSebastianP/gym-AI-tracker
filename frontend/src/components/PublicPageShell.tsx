@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './LanguageSwitcher';
 import PublicLegalLinks from './PublicLegalLinks';
 import { publicSite } from '../config/publicSite';
+import { useAuthStore } from '../store/authStore';
 import '../pages/Legal.css';
 
 interface PublicPageShellProps {
@@ -15,6 +16,7 @@ interface PublicPageShellProps {
 
 export default function PublicPageShell({ eyebrow, title, description, children }: PublicPageShellProps) {
 	const { t } = useTranslation();
+	const { isAuthenticated } = useAuthStore();
 
 	return (
 		<div className="legal-page-shell">
@@ -31,9 +33,15 @@ export default function PublicPageShell({ eyebrow, title, description, children 
 				</Link>
 				<div className="legal-page-nav-actions">
 					<LanguageSwitcher compact />
-					<Link to="/" className="legal-page-nav-link">{t('Home')}</Link>
-					<Link to="/login" className="legal-page-nav-link">{t('Login')}</Link>
-					<Link to="/register" className="legal-page-nav-cta">{t('Register')}</Link>
+					{isAuthenticated ? (
+						<Link to="/home" className="legal-page-nav-cta">{t('Back to app')}</Link>
+					) : (
+						<>
+							<Link to="/" className="legal-page-nav-link">{t('Home')}</Link>
+							<Link to="/login" className="legal-page-nav-link">{t('Login')}</Link>
+							<Link to="/register" className="legal-page-nav-cta">{t('Register')}</Link>
+						</>
+					)}
 				</div>
 			</nav>
 

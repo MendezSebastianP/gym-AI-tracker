@@ -261,8 +261,8 @@ function App() {
 							path="/"
 							element={isAuthenticated ? (isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/home" replace />) : <PublicRouteFrame><Landing /></PublicRouteFrame>}
 						/>
-						<Route path="/login" element={<PublicRouteFrame><Login /></PublicRouteFrame>} />
-						<Route path="/register" element={<PublicRouteFrame><Register /></PublicRouteFrame>} />
+						<Route path="/login" element={isAuthenticated ? <Navigate to="/home" replace /> : <PublicRouteFrame><Login /></PublicRouteFrame>} />
+						<Route path="/register" element={isAuthenticated ? <Navigate to="/home" replace /> : <PublicRouteFrame><Register /></PublicRouteFrame>} />
 						<Route path="/privacy" element={<PublicRouteFrame><Privacy /></PublicRouteFrame>} />
 						<Route path="/terms" element={<PublicRouteFrame><Terms /></PublicRouteFrame>} />
 						<Route element={<AdminRoute />}>

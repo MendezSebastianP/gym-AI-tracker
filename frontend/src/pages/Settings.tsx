@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/schema';
 import { api } from '../api/client';
@@ -108,9 +109,11 @@ export default function Settings() {
 		}
 	};
 
+	const navigate = useNavigate();
+
 	const handleLogout = async () => {
 		await logout();
-		window.location.href = '/login';
+		navigate('/login', { replace: true });
 	};
 
 	const genderLabel = (g: string) => {
