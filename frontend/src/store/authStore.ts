@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from '../api/client';
 import { db } from '../db/schema';
 import type { User } from '../db/schema';
-import { syncAllDataBeforeLogout } from '../db/sync';
+import { syncAllDataBeforeLogout, stopSyncService } from '../db/sync';
 
 /**
  * Bypass Dexie's closed-state entirely by deleting the DB with the native IndexedDB API.
@@ -75,12 +75,24 @@ export const useAuthStore = create<AuthState>((set) => ({
 		// The server call required a valid access token which is often expired by
 		// logout time, causing a visible 401 in the browser console.
 
+		// Stop background sync before touching the DB
+		stopSyncService();
+
 		// Immediate local cleanup
 		localStorage.removeItem('token');
 		localStorage.removeItem('refresh_token');
+		// Clear all tables instead of delete+reopen — keeps Dexie's observation
+		// system intact so useLiveQuery hooks work after the next login
 		try {
 			await Promise.race([
-				db.delete(),
+				Promise.all([
+					db.users.clear(),
+					db.exercises.clear(),
+					db.routines.clear(),
+					db.sessions.clear(),
+					db.sets.clear(),
+					db.syncQueue.clear(),
+				]),
 				new Promise<void>(resolve => setTimeout(resolve, 1000)),
 			]);
 		} catch (_) { /* ignore */ }
