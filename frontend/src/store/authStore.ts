@@ -10,11 +10,13 @@ import { syncAllDataBeforeLogout } from '../db/sync';
  */
 export const hardReset = async () => {
 	localStorage.clear();
+	// Close Dexie first so the deleteDatabase request isn't blocked by an open connection
+	try { db.close(); } catch (_) { /* ignore */ }
 	await new Promise<void>((resolve) => {
 		const req = indexedDB.deleteDatabase('GymTrackerDB');
 		req.onsuccess = () => resolve();
 		req.onerror = () => resolve();
-		req.onblocked = () => resolve();
+		req.onblocked = () => resolve(); // resolve anyway — navigate will close remaining connections
 	});
 	window.location.replace('/login');
 };
