@@ -143,21 +143,9 @@ export default function ProgressionReport() {
 			.finally(() => setGenerating(false));
 	};
 
-	// ── Apply suggestion ────────────────────────────────────────────────────
-	const applySuggestion = async (
-		dayName: string, exIdStr: string,
-		suggestion: ReportSuggestion,
-		reportData: ReportData,
-		appliedSet: Set<string>,
-		setApplied: (fn: (prev: Set<string>) => Set<string>) => void,
-	) => {
-		const key = `${dayName}-${exIdStr}`;
-		if (appliedSet.has(key) || !routine) return;
-
-		const updatedDays = JSON.parse(JSON.stringify(routine.days));
-		const exId = Number(exIdStr);
-
-		for (const day of updatedDays) {
+	// ── Apply a single change to a days array (mutates in place) ────────────
+	const applyOneSuggestion = (days: any[], dayName: string, exId: number, suggestion: ReportSuggestion) => {
+		for (const day of days) {
 			if (day.day_name === dayName) {
 				const routineEx = day.exercises.find((e: any) => e.exercise_id === exId);
 				if (routineEx) {
@@ -168,10 +156,36 @@ export default function ProgressionReport() {
 				}
 			}
 		}
+	};
+
+	// ── Persist updated days + optional session sync ────────────────────────
+	const persistRoutineDays = async (routineId: number, updatedDays: any[]) => {
+		await api.put(`/routines/${routineId}`, { days: updatedDays });
+		await db.routines.update(routineId, { days: updatedDays, syncStatus: 'updated' as any });
+	};
+
+	// ── Apply single suggestion ────────────────────────────────────────────
+	const applySuggestion = async (
+		dayName: string, exIdStr: string,
+		suggestion: ReportSuggestion,
+		reportData: ReportData,
+		appliedSet: Set<string>,
+		setApplied: (fn: (prev: Set<string>) => Set<string>) => void,
+	) => {
+		const key = `${dayName}-${exIdStr}`;
+		if (appliedSet.has(key) || !routine) return;
+
+		// Read fresh from Dexie to avoid stale-closure races
+		const freshRoutine = await db.routines.get(routine.id!);
+		if (!freshRoutine) return;
+
+		const updatedDays = JSON.parse(JSON.stringify(freshRoutine.days));
+		const exId = Number(exIdStr);
+
+		applyOneSuggestion(updatedDays, dayName, exId, suggestion);
 
 		try {
-			await api.put(`/routines/${routine.id}`, { days: updatedDays });
-			await db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
+			await persistRoutineDays(routine.id!, updatedDays);
 
 			// Sync suggestion to active draft session if it exists
 			try {
@@ -209,6 +223,60 @@ export default function ProgressionReport() {
 		}).catch(() => { });
 
 		setApplied(prev => new Set([...prev, key]));
+	};
+
+	// ── Apply ALL suggestions in one batch PUT ─────────────────────────────
+	const applyAllSuggestions = async (
+		report: ReportData,
+		appliedSet: Set<string>,
+		setApplied: (fn: (prev: Set<string>) => Set<string>) => void,
+	) => {
+		if (!routine) return;
+
+		// Read fresh from Dexie
+		const freshRoutine = await db.routines.get(routine.id!);
+		if (!freshRoutine) return;
+
+		const updatedDays = JSON.parse(JSON.stringify(freshRoutine.days));
+		const newKeys: string[] = [];
+
+		for (const [dayName, exs] of Object.entries(report.days)) {
+			for (const [exIdStr, sug] of Object.entries(exs)) {
+				const key = `${dayName}-${exIdStr}`;
+				if (appliedSet.has(key)) continue;
+				applyOneSuggestion(updatedDays, dayName, Number(exIdStr), sug);
+				newKeys.push(key);
+			}
+		}
+
+		if (newKeys.length === 0) return;
+
+		// Single PUT with all changes
+		try {
+			await persistRoutineDays(routine.id!, updatedDays);
+		} catch { /* offline */ }
+
+		// Record feedback for each suggestion (fire-and-forget)
+		for (const [dayName, exs] of Object.entries(report.days)) {
+			for (const [exIdStr, sug] of Object.entries(exs)) {
+				const key = `${dayName}-${exIdStr}`;
+				if (!newKeys.includes(key)) continue;
+				api.post('/progression/feedback', {
+					report_id: report.report_id,
+					exercise_id: Number(exIdStr),
+					suggestion_type: sug.type,
+					suggested_value: sug.suggested,
+					action: 'accepted',
+					applied_value: sug.suggested,
+				}).catch(() => { });
+			}
+		}
+
+		setApplied(prev => {
+			const next = new Set(prev);
+			newKeys.forEach(k => next.add(k));
+			return next;
+		});
 	};
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
@@ -493,15 +561,7 @@ export default function ProgressionReport() {
 						</div>
 						{total > 0 && (
 							<button
-								onClick={() => {
-									for (const [dayName, exs] of Object.entries(report.days)) {
-										for (const [exId, sug] of Object.entries(exs)) {
-											if (!appliedSet.has(`${dayName}-${exId}`)) {
-												applySuggestion(dayName, exId, sug, report, appliedSet, setApplied);
-											}
-										}
-									}
-								}}
+								onClick={() => applyAllSuggestions(report, appliedSet, setApplied)}
 								className="motion-btn motion-btn--session"
 								style={{ marginLeft: 'auto', fontSize: '11px', padding: '6px 14px', borderRadius: '8px', background: 'var(--primary)', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
 							>
