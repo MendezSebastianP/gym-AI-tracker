@@ -115,7 +115,7 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 		const exSets = (sets || []).filter((s: any) => s.exercise_id === exerciseId);
 		for (const s of exSets) {
 			if (s.server_id) {
-				try { await api.delete(`/sets/${s.server_id}`); } catch {}
+				try { await api.delete(`/sets/${s.server_id}`); } catch { /* best-effort */ }
 			}
 		}
 		// Delete from IndexedDB using index query (more reliable than bulkDelete)

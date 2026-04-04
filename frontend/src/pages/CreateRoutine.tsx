@@ -25,7 +25,7 @@ export default function CreateRoutine() {
 				const savedDays = localStorage.getItem('draftRoutineDays');
 				const hasDraft = savedDays && JSON.parse(savedDays).some((d: any) => d.exercises?.length > 0);
 				if (hasDraft) return 'manual';
-			} catch { }
+			} catch { /* ignore invalid draft */ }
 		}
 		return 'select';
 	});

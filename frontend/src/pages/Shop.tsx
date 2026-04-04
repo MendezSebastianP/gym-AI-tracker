@@ -96,9 +96,10 @@ function ThemePreview({ item }: { item: ThemeItem }) {
 				? `linear-gradient(110deg, #1A1510 0%, #2A2318 25%, #FFD700 50%, #2A2318 75%, #1A1510 100%)`
 				: `linear-gradient(135deg, ${item.preview.bg_primary}, ${item.preview.bg_secondary})`,
 			backgroundSize: isGold ? '300% 100%' : undefined,
-			animation: isGold  ? 'goldThemeGlow 1.6s ease-in-out infinite, goldThemeSweep 2s linear infinite'
-				     : isLight ? 'lightThemeShimmer 2.2s ease-in-out infinite'
-				     : undefined,
+			animation: isGold
+				? 'goldThemeGlow 1.6s ease-in-out infinite, goldThemeSweep 2s linear infinite'
+				: isLight ? 'lightThemeShimmer 2.2s ease-in-out infinite'
+				: undefined,
 			border: isDark ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${item.preview.primary}33`,
 			position: 'relative', overflow: 'hidden',
 			display: 'flex', alignItems: 'center', justifyContent: 'center',
