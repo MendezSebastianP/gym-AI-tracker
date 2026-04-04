@@ -7,7 +7,7 @@ from tests.conftest import register_and_login
 from tests.test_ai_routine import _seed_exercises, _mock_openai_response, MOCK_AI_RESPONSE
 
 def test_ai_usage_tracking_flow(client, db_engine):
-    headers = register_and_login(client)
+    headers = register_and_login(client, initial_coins=1000)
     _seed_exercises(client, headers)
 
     Session = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)

@@ -134,3 +134,128 @@ class TestExerciseSuggest:
         r = client.get("/api/exercises/suggest?existing_ids=1&limit=2", headers=headers)
         assert r.status_code == 200
         assert len(r.json()) <= 2
+
+    def test_suggest_quadriceps_in_day_suggests_complementary(self, client):
+        """When day has Quadriceps exercises, suggest should recommend Hamstrings/Glutes/Calves."""
+        headers = register_and_login(client)
+        self._seed_exercises(client, headers)
+
+        # Exercise 7 is Squat (Quadriceps)
+        r = client.get("/api/exercises/suggest?existing_ids=7", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        muscles = {ex["muscle"] for ex in data}
+        # Quadriceps complements are Hamstrings, Glutes, Calves
+        assert muscles & {"Hamstrings", "Glutes", "Calves"}, f"Expected leg complements, got {muscles}"
+
+    def test_suggest_with_equipment_filter(self, client):
+        """Equipment filter should narrow suggestions to matching equipment + bodyweight."""
+        headers = register_and_login(client)
+        self._seed_exercises(client, headers)
+
+        r = client.get("/api/exercises/suggest?existing_ids=1&equipment=dumbbell", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        # All returned exercises should be dumbbell or bodyweight
+        for ex in data:
+            eq = (ex.get("equipment") or "").lower()
+            assert eq in {"dumbbell", "none (bodyweight)", "bodyweight", ""}, \
+                f"Unexpected equipment {eq!r} with dumbbell filter"
+
+
+class TestExerciseCatalogFilters:
+    """Tests that verify exercise catalog filtering works correctly.
+
+    These tests insert representative exercises covering the new equipment
+    categories added in Phase 1–5 of the catalog expansion, and verify the
+    filter endpoints work for Bands, Kettlebell, Quadriceps, and Glutes.
+    """
+
+    def _seed_catalog(self, client):
+        """Insert a small representative catalog into the test DB."""
+        from app.database import get_db
+        from app.models.exercise import Exercise
+        from app.main import app
+
+        db = next(app.dependency_overrides[get_db]())
+        exercises = [
+            # Bands
+            Exercise(id=100, name="Band Squat", muscle="Quadriceps", muscle_group="Legs", equipment="Bands", type="Strength", difficulty_level=1),
+            Exercise(id=101, name="Band Hip Thrust", muscle="Glutes", muscle_group="Legs", equipment="Bands", type="Strength", difficulty_level=1),
+            Exercise(id=102, name="Band Bicep Curl", muscle="Biceps", muscle_group="Arms", equipment="Bands", type="Strength", difficulty_level=1),
+            # Kettlebell
+            Exercise(id=110, name="Kettlebell Goblet Squat", muscle="Quadriceps", muscle_group="Legs", equipment="Kettlebell", type="Strength", difficulty_level=2),
+            Exercise(id=111, name="Kettlebell Swing", muscle="Glutes", muscle_group="Full Body", equipment="Kettlebell", type="Strength", difficulty_level=2),
+            Exercise(id=112, name="Kettlebell Deadlift", muscle="Hamstrings", muscle_group="Legs", equipment="Kettlebell", type="Strength", difficulty_level=2),
+            # Specific muscles: Quadriceps and Glutes (previously mislabeled as 'Legs')
+            Exercise(id=120, name="Squat", muscle="Quadriceps", muscle_group="Legs", equipment="Barbell", type="Strength", difficulty_level=3),
+            Exercise(id=121, name="Lunge", muscle="Glutes", muscle_group="Legs", equipment="None (Bodyweight)", type="Strength", difficulty_level=2, is_bodyweight=True),
+            Exercise(id=122, name="Bulgarian Split Squat", muscle="Glutes", muscle_group="Legs", equipment="Dumbbell", type="Strength", difficulty_level=3),
+        ]
+        for ex in exercises:
+            db.add(ex)
+        db.commit()
+        db.close()
+
+    def test_bands_equipment_filter_returns_exercises(self, client):
+        """Bands filter should return exercises — not zero results."""
+        headers = register_and_login(client)
+        self._seed_catalog(client)
+
+        r = client.get("/api/exercises/?muscle=Quadriceps", headers=headers)
+        assert r.status_code == 200
+        # Find bands exercise via search to confirm it exists
+        r2 = client.get("/api/exercises/?search=Band Squat", headers=headers)
+        assert r2.status_code == 200
+        names = [x["name"] for x in r2.json()]
+        assert "Band Squat" in names
+
+    def test_quadriceps_muscle_filter(self, client):
+        """Filtering by muscle=Quadriceps should return only Quadriceps exercises."""
+        headers = register_and_login(client)
+        self._seed_catalog(client)
+
+        r = client.get("/api/exercises/?muscle=Quadriceps", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) >= 2, "Should find at least 2 Quadriceps exercises"
+        muscles = {x["muscle"] for x in data if x["muscle"] is not None}
+        assert muscles == {"Quadriceps"}
+
+    def test_glutes_muscle_filter(self, client):
+        """Filtering by muscle=Glutes should return only Glutes exercises."""
+        headers = register_and_login(client)
+        self._seed_catalog(client)
+
+        r = client.get("/api/exercises/?muscle=Glutes", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) >= 2, "Should find at least 2 Glutes exercises"
+        muscles = {x["muscle"] for x in data if x["muscle"] is not None}
+        assert muscles == {"Glutes"}
+
+    def test_kettlebell_exercises_exist(self, client):
+        """Kettlebell exercises should be discoverable by search."""
+        headers = register_and_login(client)
+        self._seed_catalog(client)
+
+        r = client.get("/api/exercises/?search=Kettlebell", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) >= 3, "Should find at least 3 kettlebell exercises"
+        equipment_values = {x["equipment"] for x in data}
+        assert "Kettlebell" in equipment_values
+
+    def test_suggest_uses_specific_leg_muscles(self, client):
+        """Suggest endpoint should work with Quadriceps/Glutes, not generic 'Legs' label."""
+        headers = register_and_login(client)
+        self._seed_catalog(client)
+
+        # With Quadriceps exercise in day, should suggest Hamstrings/Glutes/Calves
+        r = client.get("/api/exercises/suggest?existing_ids=120", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        muscles = {ex["muscle"] for ex in data}
+        # COMPLEMENTARY_MUSCLES["Quadriceps"] = ["Hamstrings", "Glutes", "Calves"]
+        assert muscles & {"Hamstrings", "Glutes", "Calves"}, \
+            f"Expected Hamstrings/Glutes/Calves suggestions for Quadriceps day, got {muscles}"

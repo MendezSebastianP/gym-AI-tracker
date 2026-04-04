@@ -140,6 +140,97 @@ DIFFICULTY_FACTORS = {
     # CARDIO — weighted (where applicable)
     'Cycling':                  2.00,
     'Rowing Machine':           2.00,
+
+    # PHASE 1A — NEW DUMBBELL EXERCISES
+    'Dumbbell Lunge':           3.30,  # ~30 kg total
+    'Dumbbell Walking Lunge':   3.30,
+    'Dumbbell Step Up':         3.30,
+    'Dumbbell Romanian Deadlift': 2.50,  # ~40 kg total
+    'Dumbbell Sumo Squat':      3.30,
+    'Dumbbell Calf Raise':      3.30,
+    'Dumbbell Lateral Lunge':   3.30,
+    'Dumbbell Shrug':           1.60,  # ~60 kg per hand possible
+    'Incline Dumbbell Row':     2.80,  # ~35 kg per hand
+    'Renegade Row':             4.00,  # ~25 kg per hand
+    'Decline Dumbbell Press':   1.80,  # ~55 kg total
+    'Dumbbell Floor Press':     1.80,
+    'Dumbbell Upright Row':     3.30,  # ~30 kg total
+    'Incline Dumbbell Curl':    5.00,  # ~20 kg total
+    'Spider Curl':              5.00,
+    'Zottman Curl':             5.00,
+    'Dumbbell Skullcrusher':    5.00,
+    'Dumbbell Clean and Press': 2.50,
+    'Dumbbell Thruster':        2.50,
+    'Dumbbell Snatch':          3.30,
+    'Dumbbell Swing':           3.30,
+
+    # PHASE 1B — NEW KETTLEBELL EXERCISES
+    'Kettlebell Goblet Squat':  4.00,  # ~24 kg typical
+    'Kettlebell Clean':         4.00,
+    'Kettlebell Snatch':        5.00,  # ~20 kg
+    'Kettlebell Clean and Press': 5.00,
+    'Kettlebell Overhead Press': 5.00,
+    'Kettlebell Row':           5.00,
+    'Kettlebell Deadlift':      3.00,  # ~32 kg
+    'Kettlebell Windmill':      8.00,  # ~12 kg but complex
+    'Kettlebell Halo':          8.00,
+    'Kettlebell Front Squat':   5.00,
+    'Kettlebell Lunge':         5.00,
+    'Kettlebell Thruster':      5.00,
+
+    # PHASE 2 — RESISTANCE BANDS (treated as light variable resistance)
+    'Band Pull Apart':          6.00,
+    'Band Lateral Walk':        5.00,
+    'Band Chest Press':         5.00,
+    'Band Row':                 5.00,
+    'Band Bicep Curl':          6.00,
+    'Band Tricep Extension':    6.00,
+    'Band Shoulder Press':      5.00,
+    'Band Deadlift':            4.00,
+    'Band Face Pull':           6.00,
+    'Band Good Morning':        5.00,
+
+    # PHASE 3 — BARBELL ACCESSORIES
+    'Barbell Hip Thrust':       0.67,  # ~150 kg max
+    'Barbell Lunge':            1.25,  # ~80 kg max
+    'Barbell Reverse Lunge':    1.25,
+    'Barbell Calf Raise':       1.00,  # ~100 kg
+    'Barbell Overhead Squat':   1.25,  # ~80 kg (technique-limited)
+    'Barbell Floor Press':      1.10,  # ~90 kg
+    'Barbell Wrist Curl':       6.50,  # ~15 kg
+    'Pause Bench Press':        1.10,  # slightly harder than normal bench
+    'Pause Squat':              0.77,  # ~130 kg
+    'Pin Squat':                0.77,
+    'Block Pull Deadlift':      0.60,  # ~170 kg
+    'Larsen Press':             1.25,  # ~80 kg
+    'Clean':                    1.25,  # ~80 kg
+    'Snatch':                   1.65,  # ~60 kg
+    'Clean and Jerk':           1.25,  # ~80 kg
+    'Power Clean':              1.25,
+    'Hang Clean':               1.25,
+    'Push Press':               1.10,  # ~90 kg
+
+    # PHASE 4 — MACHINE & CABLE
+    'Machine Hip Thrust':       1.25,  # ~80 kg
+    'Pendulum Squat':           1.43,  # ~70 kg
+    'Cable Pull Through':       3.30,  # ~30 kg
+    'Cable Chest Fly':          4.00,  # ~25 kg
+    'Cable Reverse Fly':        6.50,  # ~15 kg
+    'Cable Hammer Curl':        6.50,
+    'Single Arm Cable Row':     4.00,  # ~25 kg per arm
+    'Cable Glute Kickback':     5.00,  # ~20 kg
+    'Machine Lateral Raise':    5.00,  # ~20 kg
+    'Smith Machine Bench Press': 1.05,  # ~95 kg
+    'Smith Machine Hip Thrust': 1.00,  # ~100 kg
+    'Sissy Squat Machine':      3.30,  # ~30 kg
+
+    # PHASE 5 — CARDIO & FUNCTIONAL
+    'Assault Bike':             2.00,
+    'Ski Erg':                  2.00,
+    'Battle Ropes':             2.00,
+    'Sled Pull':                2.00,
+    'Prowler Push':             2.00,
+    'Incline Walking (Treadmill)': 2.00,
 }
 
 # ── Bodyweight exercise ratios ───────────────────────────────────────────────
@@ -253,6 +344,15 @@ BW_RATIOS = {
     'Running':                  0.30,
     'Running (Treadmill)':      0.30,
     'Jump Rope':                0.30,
+
+    # PHASE 2 — BAND BODYWEIGHT
+    'Band Squat':               0.70,
+    'Band Hip Thrust':          0.40,
+    'Band Glute Kickback':      0.30,
+
+    # PHASE 5 — FUNCTIONAL BODYWEIGHT
+    'Box Jump':                 0.75,
+    'Bear Crawl':               0.45,
 }
 
 
@@ -542,6 +642,102 @@ DIFFICULTY_LEVELS = {
     'Yates Row': 4,
     'Z Press': 4,
     'Zercher Squat': 2,
+
+    # PHASE 1A — NEW DUMBBELL EXERCISES
+    'Dumbbell Lunge': 3,
+    'Dumbbell Walking Lunge': 3,
+    'Dumbbell Step Up': 3,
+    'Dumbbell Romanian Deadlift': 3,
+    'Dumbbell Sumo Squat': 3,
+    'Dumbbell Calf Raise': 2,
+    'Dumbbell Lateral Lunge': 3,
+    'Dumbbell Shrug': 3,
+    'Incline Dumbbell Row': 3,
+    'Renegade Row': 4,
+    'Decline Dumbbell Press': 3,
+    'Dumbbell Floor Press': 3,
+    'Dumbbell Upright Row': 3,
+    'Incline Dumbbell Curl': 3,
+    'Spider Curl': 3,
+    'Zottman Curl': 3,
+    'Dumbbell Skullcrusher': 3,
+    'Dumbbell Clean and Press': 4,
+    'Dumbbell Thruster': 4,
+    'Dumbbell Snatch': 5,
+    'Dumbbell Swing': 3,
+
+    # PHASE 1B — NEW KETTLEBELL EXERCISES
+    'Kettlebell Goblet Squat': 2,
+    'Kettlebell Clean': 5,
+    'Kettlebell Snatch': 6,
+    'Kettlebell Clean and Press': 5,
+    'Kettlebell Overhead Press': 3,
+    'Kettlebell Row': 3,
+    'Kettlebell Deadlift': 3,
+    'Kettlebell Windmill': 4,
+    'Kettlebell Halo': 2,
+    'Kettlebell Front Squat': 3,
+    'Kettlebell Lunge': 3,
+    'Kettlebell Thruster': 4,
+
+    # PHASE 2 — RESISTANCE BANDS (all beginner-accessible)
+    'Band Pull Apart': 1,
+    'Band Lateral Walk': 1,
+    'Band Squat': 1,
+    'Band Chest Press': 1,
+    'Band Row': 1,
+    'Band Bicep Curl': 1,
+    'Band Tricep Extension': 1,
+    'Band Shoulder Press': 1,
+    'Band Deadlift': 1,
+    'Band Face Pull': 1,
+    'Band Good Morning': 1,
+    'Band Hip Thrust': 1,
+    'Band Glute Kickback': 1,
+
+    # PHASE 3 — BARBELL ACCESSORIES
+    'Barbell Hip Thrust': 4,
+    'Barbell Lunge': 4,
+    'Barbell Reverse Lunge': 4,
+    'Barbell Calf Raise': 3,
+    'Barbell Overhead Squat': 7,
+    'Barbell Floor Press': 4,
+    'Barbell Wrist Curl': 2,
+    'Pause Bench Press': 5,
+    'Pause Squat': 5,
+    'Pin Squat': 5,
+    'Block Pull Deadlift': 5,
+    'Larsen Press': 5,
+    'Clean': 7,
+    'Snatch': 8,
+    'Clean and Jerk': 8,
+    'Power Clean': 7,
+    'Hang Clean': 6,
+    'Push Press': 5,
+
+    # PHASE 4 — MACHINE & CABLE
+    'Machine Hip Thrust': 1,
+    'Pendulum Squat': 2,
+    'Cable Pull Through': 2,
+    'Cable Chest Fly': 1,
+    'Cable Reverse Fly': 1,
+    'Cable Hammer Curl': 1,
+    'Single Arm Cable Row': 1,
+    'Cable Glute Kickback': 1,
+    'Machine Lateral Raise': 1,
+    'Smith Machine Bench Press': 2,
+    'Smith Machine Hip Thrust': 2,
+    'Sissy Squat Machine': 2,
+
+    # PHASE 5 — CARDIO & FUNCTIONAL
+    'Assault Bike': 1,
+    'Ski Erg': 1,
+    'Battle Ropes': 2,
+    'Box Jump': 4,
+    'Bear Crawl': 3,
+    'Sled Pull': 3,
+    'Prowler Push': 3,
+    'Incline Walking (Treadmill)': 1,
 }
 
 def apply_scoring(exercise_dict: dict) -> dict:

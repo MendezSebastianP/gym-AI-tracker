@@ -85,7 +85,7 @@ class TestAIRoutineGeneration:
 
     def test_missing_api_key_returns_503(self, client):
         """When OPENAI_API_KEY is not set, should return 503."""
-        headers = register_and_login(client)
+        headers = register_and_login(client, initial_coins=1000)
         _seed_exercises(client, headers)
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
@@ -95,7 +95,7 @@ class TestAIRoutineGeneration:
 
     def test_generate_routine_success(self, client):
         """With a mocked OpenAI response, endpoint should return a valid routine."""
-        headers = register_and_login(client)
+        headers = register_and_login(client, initial_coins=1000)
         _seed_exercises(client, headers)
 
         mock_response = _mock_openai_response(MOCK_AI_RESPONSE)
@@ -122,7 +122,7 @@ class TestAIRoutineGeneration:
 
     def test_generate_routine_filters_invalid_exercise_ids(self, client):
         """Exercise IDs not in our DB should be silently removed."""
-        headers = register_and_login(client)
+        headers = register_and_login(client, initial_coins=1000)
         _seed_exercises(client, headers)
 
         bad_response = {
@@ -157,7 +157,7 @@ class TestAIRoutineGeneration:
 
     def test_generate_routine_with_extra_prompt(self, client):
         """Extra prompt should be passed through to the API call."""
-        headers = register_and_login(client)
+        headers = register_and_login(client, initial_coins=1000)
         _seed_exercises(client, headers)
 
         mock_response = _mock_openai_response(MOCK_AI_RESPONSE)
@@ -183,7 +183,7 @@ class TestAIRoutineGeneration:
 
     def test_generate_routine_no_body(self, client):
         """Endpoint should work with no request body (extra_prompt is optional)."""
-        headers = register_and_login(client)
+        headers = register_and_login(client, initial_coins=1000)
         _seed_exercises(client, headers)
 
         mock_response = _mock_openai_response(MOCK_AI_RESPONSE)
@@ -215,7 +215,7 @@ class TestAIFillDay:
         assert r.status_code == 401
 
     def test_missing_api_key_returns_503(self, client):
-        headers = register_and_login(client)
+        headers = register_and_login(client, initial_coins=1000)
         _seed_exercises(client, headers)
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
@@ -227,7 +227,7 @@ class TestAIFillDay:
             assert r.status_code == 503
 
     def test_fill_day_success(self, client):
-        headers = register_and_login(client)
+        headers = register_and_login(client, initial_coins=1000)
         _seed_exercises(client, headers)
 
         mock_response = _mock_openai_response(MOCK_FILL_DAY_RESPONSE)
@@ -254,7 +254,7 @@ class TestAIFillDay:
         assert data["exercises"][0]["exercise_id"] == 1
 
     def test_fill_day_filters_invalid_ids(self, client):
-        headers = register_and_login(client)
+        headers = register_and_login(client, initial_coins=1000)
         _seed_exercises(client, headers)
 
         bad_response = {
@@ -284,7 +284,7 @@ class TestAIFillDay:
         assert data["exercises"][0]["exercise_id"] == 1
 
     def test_fill_day_excludes_existing(self, client):
-        headers = register_and_login(client)
+        headers = register_and_login(client, initial_coins=1000)
         _seed_exercises(client, headers)
 
         response_with_existing = {

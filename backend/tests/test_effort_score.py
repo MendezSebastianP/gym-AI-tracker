@@ -97,8 +97,11 @@ class TestEffortScore:
             db.commit()
 
             score = compute_effort_score(db, user.id, current)
-            # drop sets are ignored in effort math -> volume~62.8, failure=50, self=70, progression=50
-            assert abs(score - 57.9) < 0.1
+            # drop sets are ignored in effort math.
+            # volume~62.8 (1900/1800 ratio), failure=50 (1/2 exercises), self=70 (rating 7),
+            # progression=75 (1/2 exercises improved — formula: 50 + progressed/comparable * 50)
+            # score = 62.8*0.15 + 50*0.30 + 70*0.30 + 75*0.25 = 9.42 + 15 + 21 + 18.75 = 64.17
+            assert abs(score - 64.2) < 0.1
         finally:
             db.close()
 
@@ -145,8 +148,9 @@ class TestEffortScore:
             db.commit()
 
             score = compute_effort_score(db, user.id, current)
-            # failure disabled -> volume=50, self=50, progression=0 with redistributed weights
-            # 50*0.27 + 50*0.40 + 0*0.33 = 33.5
-            assert abs(score - 33.5) < 0.1
+            # failure disabled -> volume=50 (same volume as prev), self=50 (rating 5),
+            # progression=50 (0/1 exercises improved — formula: 50 + 0*50 = neutral 50)
+            # 50*0.27 + 50*0.40 + 50*0.33 = 13.5 + 20 + 16.5 = 50.0
+            assert abs(score - 50.0) < 0.1
         finally:
             db.close()

@@ -67,9 +67,19 @@ def client(db_engine):
 
 
 # ── Helper: register + login a user and return auth headers ─────────────────
-def register_and_login(client: TestClient, email: str = "test@example.com", password: str = "password123"):
+def register_and_login(client: TestClient, email: str = "test@example.com", password: str = "password123", initial_coins: int = 0):
     """Register a user and return {'Authorization': 'Bearer <token>'} headers."""
     r = client.post("/api/auth/register", json={"email": email, "password": password})
     assert r.status_code == 200, f"Register failed: {r.text}"
     token = r.json()["access_token"]
+    if initial_coins > 0:
+        from app.database import get_db
+        from app.models.user import User
+        from app.main import app
+        db = next(app.dependency_overrides[get_db]())
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.currency = initial_coins
+            db.commit()
+        db.close()
     return {"Authorization": f"Bearer {token}"}
