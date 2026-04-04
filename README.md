@@ -71,6 +71,18 @@ Self-hosted on a mini PC running 24/7 on my network — no cloud providers, no m
 
 ---
 
+## Tooling
+
+| Layer | Tools |
+|---|---|
+| Frontend | React 18, TypeScript, Vite, Dexie.js (IndexedDB) |
+| Backend | FastAPI, SQLAlchemy, PostgreSQL, Alembic |
+| AI | GPT-4o (routine generation, coach chat, progression reports) |
+| Infra | Docker Compose, Caddy, GitHub Webhooks |
+| AI Orchestration | Claude Code — config in [`CLAUDE.md`](CLAUDE.md) |
+
+---
+
 <p align="center">
   <sub>Built with FastAPI, React, TypeScript, and too much caffeine.</sub>
 </p>
