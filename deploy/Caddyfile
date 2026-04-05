@@ -1,7 +1,7 @@
 # Caddyfile — Reverse proxy for production
 # Caddy automatically obtains and renews HTTPS certificates via Let's Encrypt.
 
-gym-ai-tracker.duckdns.org {
+http://kairos.sebmendez.dev {
 
     # ── Security headers on every response ───────────────────────────────
     header {

@@ -72,6 +72,7 @@ export default defineConfig({
 		allowedHosts: [
 			'gym-ai-tracker.duckdns.org',
 			'.duckdns.org', // allow all duckdns subdomains
+			'kairos.sebmendez.dev',
 			'localhost',
 			'192.168.1.45',
 		],

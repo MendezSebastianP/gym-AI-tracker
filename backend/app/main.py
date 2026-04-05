@@ -27,6 +27,7 @@ origins = [
     "http://192.168.1.45:5173",    # Local network access via mini PC
     "http://192.168.1.45:8080",    # Local network access via nginx
     "https://gym-ai-tracker.duckdns.org",  # Production domain
+    "https://kairos.sebmendez.dev",
 ]
 
 app.add_middleware(
