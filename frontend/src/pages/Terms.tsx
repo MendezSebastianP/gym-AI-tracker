@@ -16,7 +16,7 @@ export default function Terms() {
 		<PublicPageShell
 			eyebrow="Terms"
 			title="Terms of Use"
-			description="Basic rules for using the public Gym AI Tracker deployment hosted at gym-ai-tracker.duckdns.org."
+			description="Basic rules for using the public Kairos lift deployment hosted at gym-ai-tracker.duckdns.org."
 		>
 			<div className="legal-summary-grid">
 				<div>
@@ -39,7 +39,7 @@ export default function Terms() {
 
 			<Section title="Use of the service">
 				<p>
-					Gym AI Tracker is a workout logging and routine-planning service. You may use it to create an account, log training, review progress, and use optional AI-powered features.
+					Kairos lift is a workout logging and routine-planning service. You may use it to create an account, log training, review progress, and use optional AI-powered features.
 				</p>
 			</Section>
 

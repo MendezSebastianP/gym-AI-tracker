@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, ShieldCheck, Sparkles, LineChart } from 'lucide-
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './LanguageSwitcher';
 import PublicLegalLinks from './PublicLegalLinks';
+import KairosLogo from './KairosLogo';
 import './PublicAuthShell.css';
 
 interface PublicAuthShellProps {
@@ -34,9 +35,8 @@ export default function PublicAuthShell({
 			</div>
 
 			<nav className="public-auth-nav">
-				<Link to="/" className="public-auth-logo" aria-label="Gym AI Tracker home">
-					<span>Gym</span>
-					<strong>AI</strong>
+				<Link to="/" className="public-auth-logo" aria-label="Kairos lift home">
+					<KairosLogo size="sm" />
 				</Link>
 				<div className="public-auth-nav-actions">
 					<LanguageSwitcher compact />

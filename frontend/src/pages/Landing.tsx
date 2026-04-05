@@ -695,8 +695,8 @@ export default function Landing() {
 	return (
 		<div className="landing">
 			<nav className={`landing-nav ${scrolled ? 'scrolled' : ''}`}>
-				<Link to="/" className="landing-nav-logo" aria-label="Gym AI Tracker home">
-					Gym <span>AI</span>
+				<Link to="/" className="landing-nav-logo" aria-label="Kairos lift home">
+					KAIROS <span>lift</span>
 				</Link>
 				<div className="landing-nav-actions">
 					<LanguageSwitcher compact />
@@ -896,7 +896,7 @@ export default function Landing() {
 			</section>
 
 			<footer className="landing-footer">
-				<div>Gym AI Tracker · {t('Offline-first training journal')}</div>
+				<div>Kairos lift · {t('Offline-first training journal')}</div>
 				<PublicLegalLinks centered compact />
 			</footer>
 		</div>

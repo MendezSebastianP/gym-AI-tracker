@@ -4,10 +4,10 @@ const clean = (value?: string) => {
 };
 
 export const publicSite = {
-	siteName: 'Gym AI Tracker',
+	siteName: 'Kairos lift',
 	publicUrl: 'https://gym-ai-tracker.duckdns.org',
 	publicDomain: 'gym-ai-tracker.duckdns.org',
-	operatorName: clean(import.meta.env.VITE_PUBLIC_OPERATOR_NAME) ?? 'Gym AI Tracker operator',
+	operatorName: clean(import.meta.env.VITE_PUBLIC_OPERATOR_NAME) ?? 'Kairos lift operator',
 	supportEmail: clean(import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL),
 	legalEffectiveDate: clean(import.meta.env.VITE_PUBLIC_LEGAL_EFFECTIVE_DATE) ?? '2026-03-29',
 };

@@ -25,9 +25,9 @@ export default defineConfig({
 			registerType: 'prompt',
 			includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
 			manifest: {
-				name: 'Gym AI Tracker',
-				short_name: 'GymTracker',
-				description: 'Offline-first Gym Tracking PWA',
+				name: 'Kairos lift',
+				short_name: 'Kairos',
+				description: 'Offline-first training journal. Seize the moment.',
 				theme_color: '#ffffff',
 				background_color: '#ffffff',
 				display: 'standalone',

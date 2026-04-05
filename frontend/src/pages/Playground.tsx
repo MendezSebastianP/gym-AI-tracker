@@ -46,7 +46,7 @@ const BASE_WEEKS: WeekSlot[] = [
 export type { WeekSlot, FlameState, OrbCfg };
 export { SLOT_SCALES, CRYSTAL_CLIP, PX_COLORS };
 
-type PlaygroundTab = 'cta' | 'claim' | 'ai' | 'session' | 'nav' | 'pages' | 'streak';
+type PlaygroundTab = 'cta' | 'claim' | 'ai' | 'session' | 'nav' | 'pages' | 'streak' | 'logos';
 type PageFlowKind = 'public' | 'peer' | 'stack';
 
 const tabs: Array<{ id: PlaygroundTab; label: string }> = [
@@ -57,6 +57,7 @@ const tabs: Array<{ id: PlaygroundTab; label: string }> = [
 	{ id: 'nav', label: 'Navigation' },
 	{ id: 'pages', label: 'Page Transitions' },
 	{ id: 'streak', label: 'Streak Skins' },
+	{ id: 'logos', label: 'Logo Lab' },
 ];
 
 const sectionCard: React.CSSProperties = {
@@ -550,6 +551,289 @@ function PageTransitionPreview() {
 	);
 }
 
+// ── Logo Lab ─────────────────────────────────────────────────────────────────
+
+const LIME = '#CCFF00';
+const CYAN = '#00FFFF';
+const GOLD = '#FFD700';
+const APP_DARK = '#121212';
+const APP_BORDER = '#333333';
+
+// ── 6 K styles on 80×80 viewBox ──────────────────────────────────────────────
+
+// 1 · Greek — slab serifs on bar ends, classical proportions
+function K1({ c }: { c: string }) {
+	return (
+		<>
+			<rect x="16" y="18" width="7" height="44" fill={c} />
+			<rect x="11" y="14" width="17" height="5" fill={c} />
+			<rect x="11" y="61" width="17" height="5" fill={c} />
+			<polygon points="23,39 27,33 61,15 57,21" fill={c} />
+			<polygon points="23,41 27,47 57,59 61,65" fill={c} />
+		</>
+	);
+}
+// 2 · Blade — super sharp arms extending to box corners, aggressive
+function K2({ c }: { c: string }) {
+	return <path d="M13,66 L22,66 L22,46 L67,74 L68,65 L30,40 L68,15 L67,6 L22,34 L22,14 L13,14 Z" fill={c} />;
+}
+// 3 · Sport — bold K sheared right, athletic italic
+function K3({ c }: { c: string }) {
+	return <path d="M11,66 L23,66 L26,47 L64,68 L63,60 L34,40 L69,20 L72,12 L28,33 L31,14 L19,14 Z" fill={c} />;
+}
+// 4 · Arcade — 8-bit pixel art, 9px pixels on 11px pitch
+function K4({ c }: { c: string }) {
+	const ps = 9, pit = 11, ox = 9, oy = 4;
+	const pixels: [number, number][] = [
+		[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],
+		[1,0],[1,1],[1,2],[1,3],[1,4],[1,5],[1,6],
+		[4,0],[3,1],[2,2],
+		[2,4],[3,5],[4,6],
+	];
+	return (
+		<>
+			{pixels.map(([col, row]) => (
+				<rect key={`${col}-${row}`} x={ox + col * pit} y={oy + row * pit} width={ps} height={ps} fill={c} />
+			))}
+		</>
+	);
+}
+// 5 · Cyber — bar split by a diagonal lightning-bolt gap, futuristic
+function K5({ c }: { c: string }) {
+	return (
+		<>
+			<polygon points="15,14 23,14 23,35 19,41 15,37" fill={c} />
+			<polygon points="15,43 19,39 23,45 23,66 15,66" fill={c} />
+			<polygon points="23,33 27,27 64,11 66,17 32,39" fill={c} />
+			<polygon points="23,47 32,41 66,63 64,69 27,53" fill={c} />
+		</>
+	);
+}
+// 6 · Bubble — extremely thick round strokes, bubbly/tag feel
+function K6({ c }: { c: string }) {
+	return (
+		<>
+			<line x1="19" y1="13" x2="19" y2="67" stroke={c} strokeWidth="15" strokeLinecap="round" />
+			<line x1="22" y1="40" x2="64" y2="13" stroke={c} strokeWidth="13" strokeLinecap="round" />
+			<line x1="22" y1="40" x2="64" y2="67" stroke={c} strokeWidth="13" strokeLinecap="round" />
+		</>
+	);
+}
+
+// Active K used in logos — K3 Sport/Italic (selected)
+function KFill({ c }: { c: string }) { return <K3 c={c} />; }
+function KGrad({ id }: { id: string }) {
+	return (
+		<>
+			<rect x="16" y="18" width="7" height="44" fill={`url(#${id})`} />
+			<rect x="11" y="14" width="17" height="5" fill={`url(#${id})`} />
+			<rect x="11" y="61" width="17" height="5" fill={`url(#${id})`} />
+			<polygon points="23,39 27,33 61,15 57,21" fill={`url(#${id})`} />
+			<polygon points="23,41 27,47 57,59 61,65" fill={`url(#${id})`} />
+		</>
+	);
+}
+
+function KShowcase() {
+	const styles = [
+		{ label: '1 · Greek', el: <K1 c={LIME} /> },
+		{ label: '2 · Blade', el: <K2 c={LIME} /> },
+		{ label: '3 · Sport', el: <K3 c={LIME} /> },
+		{ label: '4 · Arcade', el: <K4 c={LIME} /> },
+		{ label: '5 · Cyber', el: <K5 c={LIME} /> },
+		{ label: '6 · Bubble', el: <K6 c={LIME} /> },
+	];
+	return (
+		<div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+			{styles.map(({ label, el }) => (
+				<div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+					<svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+						<rect width="80" height="80" rx="16" fill={APP_DARK} />
+						{el}
+					</svg>
+					<div style={{ fontSize: 10, color: '#666', letterSpacing: '0.08em' }}>{label}</div>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function LogoA() {
+	return (
+		<div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+			<svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+				<rect width="80" height="80" rx="18" fill={APP_DARK} />
+				<KFill c={LIME} />
+			</svg>
+			<div style={{ background: APP_DARK, padding: '18px 24px', borderRadius: 14, border: `1px solid ${APP_BORDER}`, display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+				<svg width="40" height="40" viewBox="0 0 80 80" fill="none">
+					<rect width="80" height="80" rx="12" fill={APP_DARK} />
+					<KFill c={LIME} />
+				</svg>
+				<div>
+					<div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.02em', color: '#fff' }}>
+						KAIROS<span style={{ color: LIME }}> lift</span>
+					</div>
+					<div style={{ fontSize: 10, color: '#555', letterSpacing: '0.18em', textTransform: 'uppercase' as const, marginTop: 2 }}>Seize the moment</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function LogoB() {
+	return (
+		<div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+			<svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+				<defs>
+					<filter id="lb-glow" x="-40%" y="-40%" width="180%" height="180%">
+						<feGaussianBlur stdDeviation="4" result="blur" />
+						<feMerge><feMergeNode in="blur" /><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+					</filter>
+				</defs>
+				<rect width="80" height="80" rx="18" fill="#050505" />
+				<g filter="url(#lb-glow)"><KFill c={LIME} /></g>
+			</svg>
+			<div style={{ background: '#050505', padding: '18px 24px', borderRadius: 14, border: '1px solid #1c1c1c', display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+				<svg width="40" height="40" viewBox="0 0 80 80" fill="none">
+					<defs>
+						<filter id="lb-glow2" x="-40%" y="-40%" width="180%" height="180%">
+							<feGaussianBlur stdDeviation="4" result="blur" />
+							<feMerge><feMergeNode in="blur" /><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+						</filter>
+					</defs>
+					<rect width="80" height="80" rx="12" fill="#050505" />
+					<g filter="url(#lb-glow2)"><KFill c={LIME} /></g>
+				</svg>
+				<div>
+					<div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.02em', color: '#fff', textShadow: `0 0 18px ${LIME}55` }}>
+						KAIROS<span style={{ color: LIME, textShadow: `0 0 10px ${LIME}` }}> lift</span>
+					</div>
+					<div style={{ fontSize: 10, color: '#444', letterSpacing: '0.18em', textTransform: 'uppercase' as const, marginTop: 2 }}>Seize the moment</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function LogoC() {
+	// Stacked typographic — no icon, pure wordmark
+	return (
+		<div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+			<div style={{ background: APP_DARK, padding: '28px 36px', borderRadius: 14, border: `1px solid ${APP_BORDER}` }}>
+				<div style={{ fontSize: 38, fontWeight: 900, letterSpacing: '0.06em', color: '#fff', lineHeight: 1 }}>KAIROS</div>
+				<div style={{ fontSize: 38, fontWeight: 900, letterSpacing: '0.06em', color: LIME, lineHeight: 1, marginTop: 4 }}>lift</div>
+				<div style={{ fontSize: 10, color: '#444', letterSpacing: '0.22em', textTransform: 'uppercase' as const, marginTop: 14 }}>Seize the moment</div>
+			</div>
+			<div style={{ background: APP_DARK, padding: '20px 28px', borderRadius: 14, border: `1px solid ${APP_BORDER}`, display: 'inline-flex', alignItems: 'center', gap: 18 }}>
+				<svg width="52" height="52" viewBox="0 0 80 80" fill="none">
+					<KFill c={LIME} />
+				</svg>
+				<div>
+					<div style={{ fontSize: 26, fontWeight: 900, letterSpacing: '0.04em', color: '#fff', lineHeight: 1 }}>KAIROS</div>
+					<div style={{ fontSize: 26, fontWeight: 900, letterSpacing: '0.04em', color: LIME, lineHeight: 1.1 }}>lift</div>
+					<div style={{ fontSize: 10, color: '#444', letterSpacing: '0.18em', textTransform: 'uppercase' as const, marginTop: 8 }}>Seize the moment</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function LogoD() {
+	// Inverted — lime background, black K (high contrast, distinctive)
+	return (
+		<div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+			<svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+				<rect width="80" height="80" rx="18" fill={LIME} />
+				<K1 c="#000" />
+			</svg>
+			<div style={{ background: APP_DARK, padding: '18px 24px', borderRadius: 14, border: `1px solid ${APP_BORDER}`, display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+				<svg width="44" height="44" viewBox="0 0 80 80" fill="none">
+					<rect width="80" height="80" rx="12" fill={LIME} />
+					<K1 c="#000" />
+				</svg>
+				<div>
+					<div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.02em', color: '#fff' }}>
+						KAIROS<span style={{ color: LIME }}> lift</span>
+					</div>
+					<div style={{ fontSize: 10, color: '#555', letterSpacing: '0.18em', textTransform: 'uppercase' as const, marginTop: 2 }}>Seize the moment</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function LogoE() {
+	// Circle ring badge — K inside a thin lime ring
+	return (
+		<div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+			<svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+				<circle cx="40" cy="40" r="37" stroke={LIME} strokeWidth="1.5" fill="none" />
+				<KFill c={LIME} />
+			</svg>
+			<div style={{ background: APP_DARK, padding: '18px 24px', borderRadius: 14, border: `1px solid ${APP_BORDER}`, display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+				<svg width="44" height="44" viewBox="0 0 80 80" fill="none">
+					<circle cx="40" cy="40" r="37" stroke={LIME} strokeWidth="2" fill="none" />
+					<KFill c={LIME} />
+				</svg>
+				<div>
+					<div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.02em', color: '#fff' }}>
+						KAIROS<span style={{ color: LIME }}> lift</span>
+					</div>
+					<div style={{ fontSize: 10, color: '#555', letterSpacing: '0.18em', textTransform: 'uppercase' as const, marginTop: 2 }}>Seize the moment</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function LogosTab() {
+	return (
+		<div>
+			<div style={{ marginBottom: 26 }}>
+				<div style={{ fontSize: 21, fontWeight: 800, color: '#fff', marginBottom: 4 }}>Logo Lab — Kairos lift</div>
+				<div style={{ fontSize: 12, color: '#888', lineHeight: 1.5 }}>Pick a K style below, then choose a logo direction</div>
+			</div>
+			<div style={sectionCard}>
+				<div style={variantLabel}>K Styles</div>
+				<div style={variantTitle}>6 lettermark variants</div>
+				<div style={variantDesc}>All on app dark background with #CCFF00. Tell me which number you prefer.</div>
+				<KShowcase />
+			</div>
+			<div style={sectionCard}>
+				<div style={variantLabel}>Logo A</div>
+				<div style={variantTitle}>Primary — flat lime on dark</div>
+				<div style={variantDesc}>K icon + KAIROS lift wordmark. Clean, no effects. Works at any size.</div>
+				<LogoA />
+			</div>
+			<div style={sectionCard}>
+				<div style={variantLabel}>Logo B</div>
+				<div style={variantTitle}>Glow — neon bloom</div>
+				<div style={variantDesc}>Same K with SVG blur glow. Matches the XP / gamification energy of the app.</div>
+				<LogoB />
+			</div>
+			<div style={sectionCard}>
+				<div style={variantLabel}>Logo C</div>
+				<div style={variantTitle}>Stack — pure wordmark</div>
+				<div style={variantDesc}>KAIROS + lift stacked, no icon. Typographic direction — clean and editorial.</div>
+				<LogoC />
+			</div>
+			<div style={sectionCard}>
+				<div style={variantLabel}>Logo D</div>
+				<div style={variantTitle}>Inverted — lime background</div>
+				<div style={variantDesc}>Black K cut out on #CCFF00 square. High contrast, distinctive as an app icon.</div>
+				<LogoD />
+			</div>
+			<div style={sectionCard}>
+				<div style={variantLabel}>Logo E</div>
+				<div style={variantTitle}>Ring — K in circle badge</div>
+				<div style={variantDesc}>Thin lime circle ring around the K. Badge / seal aesthetic.</div>
+				<LogoE />
+			</div>
+		</div>
+	);
+}
+
 export default function Playground() {
 	const [tab, setTab] = useState<PlaygroundTab>('cta');
 
@@ -584,6 +868,7 @@ export default function Playground() {
 				{tab === 'session' && <SessionControlsTab />}
 				{tab === 'nav' && <NavigationTab />}
 				{tab === 'pages' && <PageTransitionPreview />}
+				{tab === 'logos' && <LogosTab />}
 				{tab === 'streak' && (
 					<>
 						<div style={{ marginBottom: 26 }}>

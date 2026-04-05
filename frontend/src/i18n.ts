@@ -4,7 +4,7 @@ import { initReactI18next } from 'react-i18next';
 const resources = {
 	en: {
 		translation: {
-			"Welcome": "Welcome to Gym AI Tracker",
+			"Welcome": "Welcome to Kairos lift",
 			"Login": "Login",
 			"Register": "Register",
 			"Email": "Email",
@@ -243,7 +243,7 @@ const resources = {
 	},
 	es: {
 		translation: {
-			"Welcome": "Bienvenido a Gym AI Tracker",
+			"Welcome": "Bienvenido a Kairos lift",
 			"Login": "Iniciar Sesión",
 			"Register": "Registrarse",
 			"Email": "Correo",
@@ -520,7 +520,7 @@ const resources = {
 	},
 	fr: {
 		translation: {
-			"Welcome": "Bienvenue à Gym AI Tracker",
+			"Welcome": "Bienvenue à Kairos lift",
 			"Login": "Connexion",
 			"Register": "S'inscrire",
 			"Email": "Email",

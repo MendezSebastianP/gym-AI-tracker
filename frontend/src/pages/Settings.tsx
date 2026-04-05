@@ -595,7 +595,7 @@ export default function Settings() {
 			</button>
 
 			<div className="text-center mt-8 text-xs text-tertiary opacity-50">
-				Gym AI Tracker v1.0.0
+				Kairos lift v1.0.0
 			</div>
 		</div>
 	);

@@ -16,7 +16,7 @@ export default function Privacy() {
 		<PublicPageShell
 			eyebrow="Privacy"
 			title="Privacy Policy"
-			description="How Gym AI Tracker stores account data, workout history, browser data, and AI requests on the live DuckDNS deployment."
+			description="How Kairos lift stores account data, workout history, browser data, and AI requests on the live DuckDNS deployment."
 		>
 			<div className="legal-summary-grid">
 				<div>
@@ -45,7 +45,7 @@ export default function Privacy() {
 
 			<Section title="Who operates this service">
 				<p>
-					Gym AI Tracker is operated directly by {publicSite.operatorName} and served from a self-hosted setup at {publicSite.publicDomain}.
+					Kairos lift is operated directly by {publicSite.operatorName} and served from a self-hosted setup at {publicSite.publicDomain}.
 					The app is not currently run through a third-party SaaS hosting platform.
 				</p>
 			</Section>
