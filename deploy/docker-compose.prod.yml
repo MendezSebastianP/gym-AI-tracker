@@ -13,6 +13,9 @@ services:
   # Override API to not expose port directly
   api:
     ports: []
+    networks:
+      - default
+      - observability
 
   # Caddy — reverse proxy with automatic HTTPS
   caddy:
@@ -86,3 +89,6 @@ networks:
   agent_net:
     driver: bridge
     internal: true  # Isolated — not reachable from internet
+  observability:
+    external: true
+    name: observability
