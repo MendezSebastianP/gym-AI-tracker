@@ -177,15 +177,16 @@ function App() {
 								const localSetId = serverIdToLocalSet.get(setServerId)!;
 								const existing = existingSets.find(x => x.id === localSetId);
 								if (existing?.syncStatus === 'updated') {
-									// Local has unsent edits — preserve local values, just ensure IDs are linked
-									await db.sets.update(localSetId, { server_id: setServerId, session_id: localSessionId });
+									// Local has unsent edits — preserve local values, just link server_id
+									// Do NOT change session_id: the local assignment is authoritative
+									await db.sets.update(localSetId, { server_id: setServerId });
 								} else {
 									await db.sets.update(localSetId, {
 										...setData,
 										set_type: (setData as any).set_type || 'normal',
 										to_failure: !!(setData as any).to_failure,
 										server_id: setServerId,
-										session_id: localSessionId,
+										// Do NOT change session_id: local assignment is authoritative
 										syncStatus: 'synced'
 									});
 								}

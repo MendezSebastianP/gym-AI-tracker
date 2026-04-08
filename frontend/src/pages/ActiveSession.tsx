@@ -229,15 +229,17 @@ export default function ActiveSession() {
 			const day = routine.days[session.day_index];
 			if (!day || !day.exercises || day.exercises.length === 0) return;
 
-			// Check which exercises we actually need to generate sets for
-			const missingExercises = day.exercises.filter((ex: any) => !sets.some((s: any) => s.exercise_id === ex.exercise_id));
-			if (missingExercises.length === 0) {
-				prefillDone.current = true;
-				return;
-			}
-
 			// Lock out concurrent calls before any async work
 			prefillDone.current = true;
+
+			// Query Dexie directly for a fresh snapshot — the reactive `sets` state can be
+			// transiently empty if syncUserData is mid-flight, which would incorrectly
+			// trigger a double-prefill and add sets from the previous session.
+			const freshSets = await db.sets.where('session_id').equals(sessionId).toArray();
+			const missingExercises = day.exercises.filter((ex: any) => !freshSets.some((s: any) => s.exercise_id === ex.exercise_id));
+			if (missingExercises.length === 0) {
+				return;
+			}
 
 			const exerciseIds = day.exercises.map((e: any) => e.exercise_id);
 			const exerciseDetails = await db.exercises.bulkGet(exerciseIds);
