@@ -23,6 +23,7 @@ export default function SuggestionBadge({ suggestion, exerciseName, onApply, onD
 		exercise_swap: '#8b8cf8',
 		bw_progression: 'var(--primary)',
 		cardio_increase: 'var(--primary)',
+		plateau_warning: '#f59e0b',
 	};
 
 	const typeLabels: Record<string, string> = {
@@ -32,6 +33,7 @@ export default function SuggestionBadge({ suggestion, exerciseName, onApply, onD
 		exercise_swap: 'Swap',
 		bw_progression: suggestion.new_exercise_name ? 'Next Progression' : 'Progress',
 		cardio_increase: 'Cardio ↑',
+		plateau_warning: 'Plateau Risk',
 	};
 
 	const color = typeColors[suggestion.type] || 'var(--primary)';

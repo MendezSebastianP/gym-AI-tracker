@@ -132,7 +132,7 @@ def export_data(filepath: str, session_factory: SessionFactory = SessionLocal) -
                 "weight_kg": item.weight_kg,
                 "reps": item.reps,
                 "duration_sec": item.duration_sec,
-                "rpe": item.rpe,
+
                 "distance_km": item.distance_km,
                 "avg_pace": item.avg_pace,
                 "incline": item.incline,
@@ -254,7 +254,7 @@ def import_data(filepath: str, session_factory: SessionFactory = SessionLocal) -
                 weight_kg=item_data.get("weight_kg"),
                 reps=item_data.get("reps"),
                 duration_sec=item_data.get("duration_sec"),
-                rpe=item_data.get("rpe"),
+
                 distance_km=item_data.get("distance_km"),
                 avg_pace=item_data.get("avg_pace"),
                 incline=item_data.get("incline"),

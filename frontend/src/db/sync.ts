@@ -70,7 +70,7 @@ export const processSyncQueue = async () => {
 						weight_kg: set.weight_kg,
 						reps: set.reps,
 						duration_sec: set.duration_sec,
-						rpe: set.rpe,
+
 						distance_km: set.distance_km,
 						avg_pace: set.avg_pace,
 						incline: set.incline,
@@ -161,7 +161,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 					weight_kg: s.weight_kg,
 					reps: s.reps,
 					duration_sec: s.duration_sec,
-					rpe: s.rpe,
+
 					distance_km: s.distance_km,
 					avg_pace: s.avg_pace,
 					incline: s.incline,
@@ -238,7 +238,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 								weight_kg: set.weight_kg,
 								reps: set.reps,
 								duration_sec: set.duration_sec,
-								rpe: set.rpe,
+		
 								distance_km: set.distance_km,
 								avg_pace: set.avg_pace,
 								incline: set.incline,
@@ -322,7 +322,7 @@ export const syncAllDataBeforeLogout = async () => {
 						weight_kg: set.weight_kg,
 						reps: set.reps,
 						duration_sec: set.duration_sec,
-						rpe: set.rpe,
+
 						distance_km: set.distance_km,
 						avg_pace: set.avg_pace,
 						incline: set.incline,

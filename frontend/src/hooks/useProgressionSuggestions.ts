@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { api } from '../api/client';
 
 export interface ProgressionSuggestion {
-	type: string; // weight_increase, rep_increase, deload, exercise_swap, bw_progression, cardio_increase
+	type: string; // weight_increase, rep_increase, deload, exercise_swap, bw_progression, cardio_increase, plateau_warning
 	current: Record<string, any>;
 	suggested: Record<string, any>;
 	reason: string;

@@ -94,7 +94,6 @@ class SetBase(BaseModel):
     weight_kg: Optional[float] = None
     reps: Optional[int] = None
     duration_sec: Optional[int] = None
-    rpe: Optional[float] = None
     distance_km: Optional[float] = None
     avg_pace: Optional[float] = None
     incline: Optional[float] = None
@@ -112,7 +111,6 @@ class SetUpdate(BaseModel):
     weight_kg: Optional[float] = None
     reps: Optional[int] = None
     duration_sec: Optional[int] = None
-    rpe: Optional[float] = None
     distance_km: Optional[float] = None
     avg_pace: Optional[float] = None
     incline: Optional[float] = None
@@ -146,7 +144,6 @@ class CompleteSetItem(BaseModel):
     weight_kg: Optional[float] = None
     reps: Optional[int] = None
     duration_sec: Optional[int] = None
-    rpe: Optional[float] = None
     distance_km: Optional[float] = None
     avg_pace: Optional[float] = None
     incline: Optional[float] = None

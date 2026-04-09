@@ -272,7 +272,7 @@ class TestDbExportImport:
                     weight_kg=0,
                     reps=8,
                     duration_sec=45,
-                    rpe=9.5,
+
                     distance_km=0.2,
                     avg_pace=330.0,
                     incline=4.0,

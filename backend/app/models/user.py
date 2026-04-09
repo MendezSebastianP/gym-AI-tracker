@@ -10,7 +10,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False, server_default="false")
     is_demo = Column(Boolean, default=False, server_default="false")  # blocks login
-    settings = Column(JSON, default={})  # rpe_enabled, language, theme, etc.
+    settings = Column(JSON, default={})  # language, theme, etc.
     
     # Profile details
     weight = Column(Integer, nullable=True) # kg

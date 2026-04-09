@@ -153,7 +153,7 @@ class TestNSSAlgorithms:
                 "weight_kg": weight,
                 "reps": reps,
                 "duration_sec": 30,
-                "rpe": 8,
+
                 "completed_at": _iso(_now())
             }]
         }, headers=headers)

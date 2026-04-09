@@ -281,20 +281,21 @@ export default function ProgressionReport() {
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 	const typeColor = (type: string) =>
-		type === 'deload' ? '#f59e0b' : type === 'exercise_swap' ? '#8b8cf8' : 'var(--primary)';
+		type === 'deload' || type === 'plateau_warning' ? '#f59e0b' : type === 'exercise_swap' ? '#8b8cf8' : 'var(--primary)';
 
 	const typeLabel = (s: ReportSuggestion) => {
 		if (s.type === 'bw_progression' && s.new_exercise_name) return 'Next Progression';
 		return ({
 			weight_increase: '+Weight', rep_increase: '+Reps', deload: 'Deload',
 			exercise_swap: 'Swap', bw_progression: '+Reps', cardio_increase: '+Cardio',
+			plateau_warning: 'Plateau Risk',
 		}[s.type] || s.type);
 	};
 
 	const trendIcon = (type: string) => {
 		if (['weight_increase', 'bw_progression', 'cardio_increase', 'rep_increase'].includes(type))
 			return <TrendingUp size={15} color="var(--success, #22c55e)" />;
-		if (type === 'deload') return <TrendingDown size={15} color="#f59e0b" />;
+		if (type === 'deload' || type === 'plateau_warning') return <TrendingDown size={15} color="#f59e0b" />;
 		if (type === 'exercise_swap') return <AlertTriangle size={15} color="#8b8cf8" />;
 		return <Minus size={15} color="var(--text-tertiary)" />;
 	};

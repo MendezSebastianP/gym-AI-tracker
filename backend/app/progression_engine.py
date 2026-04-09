@@ -59,7 +59,7 @@ SESSIONS_FOR_DOUBLE_PROGRESSION = {
 
 @dataclass
 class ProgressionSuggestion:
-    type: str  # weight_increase, rep_increase, deload, exercise_swap, bw_progression, cardio_increase, none
+    type: str  # weight_increase, rep_increase, deload, exercise_swap, bw_progression, cardio_increase, plateau_warning, none
     current: dict  # {weight, reps, sets} or {distance, duration, pace}
     suggested: dict  # same shape as current
     reason: str
@@ -136,7 +136,7 @@ def _get_session_history(
 ) -> list[dict]:
     """
     Fetch the last N completed sessions containing this exercise, newest first.
-    Returns list of {session_id, completed_at, sets: [{weight_kg, reps, rpe, set_number}]}
+    Returns list of {session_id, completed_at, sets: [{weight_kg, reps, set_number}]}
     """
     sessions = (
         db.query(SessionModel)
@@ -171,7 +171,6 @@ def _get_session_history(
                 {
                     "weight_kg": s.weight_kg or 0,
                     "reps": s.reps or 0,
-                    "rpe": s.rpe,
                     "duration_sec": s.duration_sec or 0,
                     "distance_km": s.distance_km or 0,
                     "avg_pace": s.avg_pace or 0,
@@ -280,40 +279,6 @@ def _analyze_strength(
     current = {"weight": current_weight, "reps": round(avg_reps, 1), "sets": num_sets}
     is_assisted = "assisted" in (exercise.name or "").lower()
 
-    # ── RPE-based check (if RPE data available) ──────────────────────
-    rpe_values = [s["rpe"] for s in latest_sets if s["rpe"] is not None]
-    if rpe_values:
-        avg_rpe = sum(rpe_values) / len(rpe_values)
-        if avg_rpe > 9.0 and len(history) >= 2:
-            # Check if previous session also had high RPE
-            prev_rpe = [s["rpe"] for s in history[1]["sets"] if s["rpe"] is not None]
-            if prev_rpe and sum(prev_rpe) / len(prev_rpe) > 9.0:
-                if is_assisted:
-                    deload_weight = round(current_weight * 1.1 / 2.5) * 2.5
-                    if deload_weight <= current_weight: deload_weight = current_weight + 5.0
-                else:
-                    deload_weight = max(0.0, round(current_weight * 0.9 / 2.5) * 2.5)
-                if deload_weight != current_weight:
-                    return ProgressionSuggestion(
-                        type="deload",
-                        current=current,
-                        suggested={"weight": deload_weight, "reps": rep_high, "sets": target_sets},
-                        reason=f"RPE has been consistently above 9 for 2 sessions. A 10% deload to {deload_weight}kg will help recovery and long-term progress.",
-                        confidence=0.8,
-                    )
-
-        if avg_rpe < 7.0 and current_weight > 0:
-            increment = _get_weight_increment(exercise)
-            suggested_weight = max(0.0, current_weight - increment) if is_assisted else current_weight + increment
-            
-            return ProgressionSuggestion(
-                type="weight_increase",
-                current=current,
-                suggested={"weight": suggested_weight, "reps": round(avg_reps), "sets": target_sets},
-                reason=f"RPE is below 7 — the weight feels easy. Try {suggested_weight}kg next session.",
-                confidence=0.7,
-            )
-
     # ── Double progression: did all sets hit top of range? ───────────
     sessions_needed = SESSIONS_FOR_DOUBLE_PROGRESSION[experience_tier]
 
@@ -343,7 +308,7 @@ def _analyze_strength(
         )
 
     # ── Plateau detection ────────────────────────────────────────────
-    if len(history) >= 4:
+    if len(history) >= 2:
         plateau_count = 0
         ref_weight = current_weight
         ref_reps = round(avg_reps)
@@ -373,6 +338,18 @@ def _analyze_strength(
                 confidence=0.7,
                 new_exercise_id=alt_id,
                 new_exercise_name=alt_name,
+            )
+
+        # ── Pre-plateau warning (2-3 stagnant sessions) ─────────────
+        if 2 <= plateau_count < 4:
+            increment = _get_weight_increment(exercise)
+            suggested_weight = max(0.0, current_weight - increment) if is_assisted else current_weight + increment
+            return ProgressionSuggestion(
+                type="plateau_warning",
+                current=current,
+                suggested={"weight": suggested_weight, "reps": rep_high, "sets": target_sets},
+                reason=f"You've been at {current_weight}kg × ~{ref_reps} reps for {plateau_count} sessions — push for one more rep or try {suggested_weight}kg to avoid a plateau.",
+                confidence=0.6,
             )
 
     return None
@@ -405,7 +382,8 @@ def _analyze_bodyweight(
 
     target_reps = chain_entry.target_reps_to_advance
     target_sets = chain_entry.target_sets_to_advance
-    sessions_needed = chain_entry.sessions_to_advance
+    # Advance after 2 sessions instead of DB value — don't make users wait a month
+    sessions_needed = 2
 
     latest = history[0]
     latest_sets = latest["sets"]
@@ -452,8 +430,21 @@ def _analyze_bodyweight(
                     new_exercise_name=next_exercise.name,
                 )
 
+    # ── Rep increase suggestion (below target, encourage +1 rep) ────
+    if avg_reps < target_reps and len(history) >= 1:
+        suggested_reps = math.ceil(avg_reps) + 1
+        if suggested_reps > target_reps:
+            suggested_reps = target_reps
+        return ProgressionSuggestion(
+            type="rep_increase",
+            current=current,
+            suggested={"weight": 0, "reps": suggested_reps, "sets": target_sets},
+            reason=f"You're averaging {round(avg_reps, 1)} reps — aim for {suggested_reps} reps next session to progress toward {target_reps}.",
+            confidence=0.7,
+        )
+
     # Plateau detection for bodyweight
-    if len(history) >= 4:
+    if len(history) >= 2:
         plateau_count = 0
         ref_reps = round(avg_reps)
         for session_data in history[:6]:
@@ -481,6 +472,16 @@ def _analyze_bodyweight(
                 confidence=0.65,
                 new_exercise_id=alt_id,
                 new_exercise_name=alt_name,
+            )
+
+        # ── Pre-plateau warning (2-3 stagnant sessions) ─────────────
+        if 2 <= plateau_count < 4:
+            return ProgressionSuggestion(
+                type="plateau_warning",
+                current=current,
+                suggested={"weight": 0, "reps": ref_reps + 1, "sets": target_sets},
+                reason=f"You've been at ~{ref_reps} reps for {plateau_count} sessions — push for one more rep to avoid a plateau.",
+                confidence=0.55,
             )
 
     return None

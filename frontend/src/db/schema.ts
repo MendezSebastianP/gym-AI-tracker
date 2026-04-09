@@ -88,7 +88,7 @@ export interface Set {
 	weight_kg?: number;
 	reps?: number;
 	duration_sec?: number;
-	rpe?: number;
+
 	distance_km?: number;
 	avg_pace?: number;
 	incline?: number;

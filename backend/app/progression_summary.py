@@ -212,16 +212,10 @@ def _summarize_strength(exercise: Exercise, ordered_sessions: list) -> dict:
         max_weight = max((s.weight_kg or 0) for s in sets)
         avg_reps = sum((s.reps or 0) for s in sets) / len(sets)
         max_reps = max((s.reps or 0) for s in sets)
-        avg_rpe = None
-        rpe_vals = [s.rpe for s in sets if s.rpe is not None]
-        if rpe_vals:
-            avg_rpe = round(sum(rpe_vals) / len(rpe_vals), 1)
-
         session_stats.append({
             "max_weight": max_weight,
             "avg_reps": round(avg_reps, 1),
             "max_reps": max_reps,
-            "avg_rpe": avg_rpe,
             "num_sets": len(sets),
             "date": sess.completed_at,
         })
