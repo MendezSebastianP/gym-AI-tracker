@@ -1,7 +1,7 @@
 """Effort score computation for completed sessions (informational only)."""
 from __future__ import annotations
 
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Optional
 
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session as DBSession
@@ -76,12 +76,18 @@ def _failure_factor(current_sets: list[SetModel]) -> float:
     if not exercise_ids:
         return 0.0
 
-    failed_exercises = {
+    total = len(exercise_ids)
+    # Realistic ceiling: failing the last set of half your exercises is already
+    # very intense. Cap both the denominator and the numerator at total/2 so
+    # that "last set to failure on half the exercises" scores 100.
+    cap = total / 2.0
+    failed_exercises = len({
         s.exercise_id
         for s in current_sets
         if bool(s.to_failure)
-    }
-    return (len(failed_exercises) / len(exercise_ids)) * 100.0
+    })
+    capped_failed = min(float(failed_exercises), cap)
+    return (capped_failed / cap) * 100.0
 
 
 def _self_rating_factor(session: SessionModel) -> float:
@@ -137,16 +143,27 @@ def _progression_factor(db: DBSession, user_id: int, session: SessionModel, curr
             progressed += 1
 
     if comparable == 0:
-        return 50.0
+        return 50.0  # no prior data to compare — neutral, don't penalise
 
-    # Scale: 0% progressed = 50 (neutral/maintaining), 100% progressed = 100.
-    # Returning 0 for maintaining was misleading — it made identical sessions
-    # score differently depending on whether prior history existed.
-    return 50.0 + (progressed / comparable) * 50.0
+    # Scale: 0% progressed = 10 (not pushing beyond history), 100% progressed = 100.
+    return 10.0 + (progressed / comparable) * 90.0
 
 
-def compute_effort_score(db: DBSession, user_id: int, session: SessionModel) -> float:
-    """Compute a 0-100 effort score for a completed session."""
+def compute_effort_score(db: DBSession, user_id: int, session: SessionModel) -> Optional[float]:
+    """Compute a 0-100 effort score for a completed session.
+    Returns None if no self-rated effort was recorded (user opted out for that session)."""
+    if session.self_rated_effort is None:
+        return None
+
+    # No score for the very first session — nothing to compare against
+    has_prior = db.query(SessionModel.id).filter(
+        SessionModel.user_id == user_id,
+        SessionModel.completed_at.isnot(None),
+        SessionModel.id != session.id,
+    ).limit(1).first()
+    if not has_prior:
+        return None
+
     user = db.query(User).filter(User.id == user_id).first()
     settings = (user.settings or {}) if user else {}
 

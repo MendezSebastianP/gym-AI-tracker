@@ -95,6 +95,13 @@ def update_session(
     db.commit()
     db.refresh(db_session)
 
+    # Recompute effort score when self_rated_effort is updated on an already-completed session
+    if was_completed and 'self_rated_effort' in update_data:
+        from app.effort_score import compute_effort_score
+        db_session.effort_score = compute_effort_score(db, current_user.id, db_session)
+        db.commit()
+        db.refresh(db_session)
+
     response = SessionResponse.model_validate(db_session).model_dump()
 
     # Trigger gamification when session is marked complete for the first time
@@ -164,7 +171,7 @@ def complete_session_bulk(
             weight_kg=s.weight_kg,
             reps=s.reps,
             duration_sec=s.duration_sec,
-            rpe=s.rpe,
+
             distance_km=s.distance_km,
             avg_pace=s.avg_pace,
             incline=s.incline,

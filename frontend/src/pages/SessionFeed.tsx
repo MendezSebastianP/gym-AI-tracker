@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { api } from '../api/client';
-import { ArrowLeft, Calendar, Clock, Edit, CheckCircle, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Edit, CheckCircle, ChevronUp, ChevronDown, Trash2, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useAuthStore } from '../store/authStore';
 
 function formatPace(secondsPerKm: number): string {
 	if (!secondsPerKm || !isFinite(secondsPerKm)) return '--:--';
@@ -37,6 +38,11 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 
 	const [exercises, setExercises] = useState<any[]>([]);
 	const [expandedExtraSets, setExpandedExtraSets] = useState<Record<number, boolean>>({});
+	const [editingEffort, setEditingEffort] = useState(false);
+	const [editEffortValue, setEditEffortValue] = useState<number>(7);
+
+	const { user } = useAuthStore();
+	const effortTrackingEnabled = !!user?.settings?.effort_tracking_enabled;
 
 	const routine = allRoutines.find((r: any) => r.id === session?.routine_id);
 
@@ -82,6 +88,30 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 			setExercises(enriched);
 		});
 	}, [sets, i18n.language, routine, session?.day_index]);
+
+	useEffect(() => {
+		if (session?.self_rated_effort != null) {
+			setEditEffortValue(session.self_rated_effort);
+		}
+	}, [session?.self_rated_effort]);
+
+	const effortTone = (v: number) => v <= 3 ? 'Easy' : v <= 6 ? 'Moderate' : v <= 8 ? 'Hard' : 'All out';
+
+	const saveEffortRating = async () => {
+		if (!session?.server_id) return;
+		try {
+			const res = await api.put(`/sessions/${session.server_id}`, {
+				self_rated_effort: editEffortValue,
+			});
+			await db.sessions.update(sessionId, {
+				self_rated_effort: editEffortValue,
+				effort_score: res.data?.effort_score ?? null,
+			});
+			setEditingEffort(false);
+		} catch (e) {
+			console.error('Failed to save effort rating', e);
+		}
+	};
 
 	if (!session || !sets) {
 		return (
@@ -196,6 +226,65 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 					</div>
 				)}
 			</div>
+
+			{/* Effort Rating */}
+			{effortTrackingEnabled && (
+				<div style={{ marginBottom: '12px' }}>
+					{!editingEffort ? (
+						<button
+							className="btn btn-ghost"
+							onClick={() => {
+								setEditEffortValue(session?.self_rated_effort ?? 7);
+								setEditingEffort(true);
+							}}
+							style={{
+								padding: '4px 10px',
+								fontSize: '12px',
+								color: session?.self_rated_effort != null ? '#86efac' : 'var(--text-tertiary)',
+								border: '1px solid',
+								borderColor: session?.self_rated_effort != null ? 'rgba(134,239,172,0.3)' : 'var(--border)',
+								borderRadius: '6px',
+								display: 'inline-flex',
+								alignItems: 'center',
+								gap: '5px',
+							}}
+						>
+							{session?.self_rated_effort != null ? (
+								<>
+									<span style={{ fontWeight: 700 }}>{session.self_rated_effort}/10</span>
+									<span style={{ color: 'var(--text-tertiary)' }}>·</span>
+									<span>{effortTone(session.self_rated_effort)}</span>
+									<Pencil size={11} style={{ marginLeft: '2px' }} />
+								</>
+							) : (
+								<>Rate effort <Pencil size={11} /></>
+							)}
+						</button>
+					) : (
+						<div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '8px', padding: '10px 12px' }}>
+							<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12px' }}>
+								<span style={{ fontWeight: 700, color: '#86efac' }}>{editEffortValue}/10</span>
+								<span style={{ color: 'var(--text-tertiary)' }}>{effortTone(editEffortValue)}</span>
+							</div>
+							<input
+								type="range"
+								min={1} max={10} step={1}
+								value={editEffortValue}
+								onChange={(e) => setEditEffortValue(parseInt(e.target.value, 10))}
+								style={{ width: '100%', accentColor: '#22c55e', cursor: 'pointer', marginBottom: '8px' }}
+							/>
+							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+								<button className="btn btn-ghost" style={{ fontSize: '12px', padding: '6px' }} onClick={() => setEditingEffort(false)}>
+									Cancel
+								</button>
+								<button className="btn btn-primary" style={{ fontSize: '12px', padding: '6px' }} onClick={saveEffortRating}>
+									Save
+								</button>
+							</div>
+						</div>
+					)}
+				</div>
+			)}
 
 			{/* Exercises & Sets */}
 			<div style={{ display: 'grid', gap: '10px' }}>
