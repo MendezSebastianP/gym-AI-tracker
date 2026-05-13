@@ -1,5 +1,5 @@
 import React from 'react';
-import { reportError } from '../lib/reportError';
+import { reportError } from '../utils/reportError';
 
 interface State {
 	hasError: boolean;
