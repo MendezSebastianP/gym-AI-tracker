@@ -36,6 +36,48 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 		[sessionId]
 	);
 
+	// Fallback: if Dexie has the session but no sets for it (iOS Safari/Edge
+	// can evict IndexedDB silently), fetch them from the server and hydrate.
+	// Otherwise the card renders metadata only and looks "collapsed".
+	const hydratedRef = useRef(false);
+	useEffect(() => {
+		hydratedRef.current = false;
+	}, [sessionId]);
+	useEffect(() => {
+		if (hydratedRef.current) return;
+		if (!session || !sets) return;
+		if (sets.length > 0) return;
+		if (!session.server_id) return;
+		if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+		hydratedRef.current = true;
+		api.get(`/sessions/${session.server_id}`).then(async (res) => {
+			const serverSets: any[] = res.data?.sets || [];
+			if (serverSets.length === 0) return;
+			const existing = await db.sets.where('session_id').equals(sessionId).toArray();
+			const haveServerIds = new Set(existing.map((s: any) => s.server_id).filter(Boolean));
+			const toAdd = serverSets
+				.filter((srv: any) => !haveServerIds.has(srv.id))
+				.map((srv: any) => ({
+					server_id: srv.id,
+					session_id: sessionId,
+					exercise_id: srv.exercise_id,
+					set_number: srv.set_number,
+					weight_kg: srv.weight_kg,
+					reps: srv.reps,
+					duration_sec: srv.duration_sec,
+					distance_km: srv.distance_km,
+					avg_pace: srv.avg_pace,
+					incline: srv.incline,
+					set_type: srv.set_type || 'normal',
+					to_failure: !!srv.to_failure,
+					is_done: !!srv.is_done,
+					completed_at: srv.completed_at,
+					syncStatus: 'synced' as const,
+				}));
+			if (toAdd.length > 0) await db.sets.bulkAdd(toAdd as any);
+		}).catch(() => { hydratedRef.current = false; });
+	}, [session, sets, sessionId]);
+
 	const [exercises, setExercises] = useState<any[]>([]);
 	const [expandedExtraSets, setExpandedExtraSets] = useState<Record<number, boolean>>({});
 	const [editingEffort, setEditingEffort] = useState(false);
