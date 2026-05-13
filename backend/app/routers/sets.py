@@ -49,20 +49,20 @@ def create_set(
     set_dict = set_data.model_dump()
     set_dict.pop("session_id")  # already used above; SetModel gets it explicitly
 
-    # Upsert behaviour for normal sets: if a row with the same
-    # (session_id, exercise_id, set_number) already exists, update it
-    # instead of raising. This prevents the offline-first client from
-    # creating duplicates when a sync retries after a flaky network.
+    # Dedupe for normal sets: if a row with the same
+    # (session_id, exercise_id, set_number) already exists, return it
+    # WITHOUT overwriting. Updates must go through PUT explicitly.
+    #
+    # Why no overwrite: when an offline-first client has an empty local
+    # cache (e.g. iOS Dexie eviction), opening an old completed session
+    # used to trigger a prefill that POSTed sets matching existing slots
+    # but with CURRENT routine values, silently overwriting history.
+    # POST is "create if missing"; PUT is "update". Keep them honest.
     if (set_dict.get("set_type") or "normal") == "normal":
         existing = _find_existing_normal_set(
             db, session_id, set_dict["exercise_id"], set_dict["set_number"]
         )
         if existing:
-            for key, value in set_dict.items():
-                if value is not None:
-                    setattr(existing, key, value)
-            db.commit()
-            db.refresh(existing)
             return existing
 
     db_set = SetModel(**set_dict, session_id=session_id)
@@ -71,7 +71,7 @@ def create_set(
         db.commit()
     except IntegrityError:
         # Unique partial index caught a race we didn't catch above —
-        # roll back and fall through to the existing row.
+        # roll back and return the existing row unchanged.
         db.rollback()
         existing = _find_existing_normal_set(
             db, session_id, set_dict["exercise_id"], set_dict["set_number"]

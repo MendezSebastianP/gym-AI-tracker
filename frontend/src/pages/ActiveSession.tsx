@@ -227,6 +227,11 @@ export default function ActiveSession() {
 			if (prefillDone.current) return;
 			if (!routine || !session || !sets || session.day_index === undefined) return;
 
+			// NEVER prefill into a completed session — that rewrites history.
+			// (See: opening an old session with an empty Dexie cache was treating
+			//  every routine exercise as "missing" and overwriting the past.)
+			if (session.completed_at) return;
+
 			const day = routine.days[session.day_index];
 			if (!day || !day.exercises || day.exercises.length === 0) return;
 

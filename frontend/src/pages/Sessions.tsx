@@ -1,14 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { Link, useNavigate } from 'react-router-dom';
-import { Zap, History, HelpCircle, User, Trash2, X } from 'lucide-react';
+import { Zap, History, HelpCircle, User, Trash2, X, ChevronRight, CheckCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 
 
 export default function Sessions() {
-	const { t } = useTranslation();
+	const { t, i18n } = useTranslation();
 	const navigate = useNavigate();
 	const [showHelp, setShowHelp] = useState(false);
 	const [selectedRoutineFilter, setSelectedRoutineFilter] = useState<number | 'others' | null>(null);
@@ -22,6 +22,22 @@ export default function Sessions() {
 
 	// Load sessions for history and current status
 	const sessions = useLiveQuery(() => db.sessions.orderBy('started_at').reverse().toArray());
+
+	// Exercise catalog for resolving names + translations in the inline panel
+	const exercisesMap = useLiveQuery(async () => {
+		const all = await db.exercises.toArray();
+		const map = new Map<number, { name: string; equipment: string; muscle: string; type: string }>();
+		const currentLang = i18n.language.split('-')[0];
+		all.forEach((ex: any) => {
+			map.set(ex.id, {
+				name: ex.name_translations?.[currentLang] || ex.name,
+				equipment: ex.equipment_translations?.[currentLang] || ex.equipment || '',
+				muscle: ex.muscle_translations?.[currentLang] || ex.muscle || '',
+				type: ex.type || 'Strength',
+			});
+		});
+		return map;
+	}, [i18n.language]);
 
 	// Load sets for expanded session detail
 	const expandedSets = useLiveQuery(
@@ -359,42 +375,136 @@ export default function Sessions() {
 									const dayName = demoMode
 										? (session.day_name || `D${(session.day_index || 0) + 1}`)
 										: (routine?.days[session.day_index || 0]?.day_name || `D${(session.day_index || 0) + 1}`);
+									const sessionN = filteredSessions.length - idx;
+									const routineSlug = encodeURIComponent(routine?.name || 'General');
 
 									return (
-										<button
-											key={session.id}
-											onClick={() => {
-												if (!demoMode) {
-													const n = filteredSessions.length - idx;
-													const routineSlug = encodeURIComponent(routine?.name || 'General');
-													navigate(`/sessions/${routineSlug}/${n}`);
-												}
-											}}
-											style={{
-												padding: '10px 6px',
-												borderRadius: '10px',
-												border: '1px solid var(--overlay-medium)',
-												background: baseBg,
-												cursor: demoMode ? 'default' : 'pointer',
-												textAlign: 'center',
-												transition: 'all 0.15s ease',
-												position: 'relative',
-											}}
-										>
-											{isPendingSync && <span style={{ position: 'absolute', top: '4px', right: '4px', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--warning, #f59e0b)' }} />}
-											<div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-												{dayNum}
-											</div>
-											<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
-												{monthShort}
-											</div>
-											<div style={{
-												fontSize: '10px', color: 'var(--text-secondary)',
-												marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-											}}>
-												{dayName}
-											</div>
-										</button>
+										<React.Fragment key={session.id}>
+											<button
+												onClick={() => {
+													if (demoMode) return;
+													setExpandedSessionId(isExpanded ? null : session.id);
+												}}
+												style={{
+													padding: '10px 6px',
+													borderRadius: '10px',
+													border: isExpanded ? '1px solid var(--primary)' : '1px solid var(--overlay-medium)',
+													background: isExpanded ? 'rgba(204,255,0,0.08)' : baseBg,
+													cursor: demoMode ? 'default' : 'pointer',
+													textAlign: 'center',
+													transition: 'all 0.15s ease',
+													position: 'relative',
+												}}
+											>
+												{isPendingSync && <span style={{ position: 'absolute', top: '4px', right: '4px', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--warning, #f59e0b)' }} />}
+												<div style={{ fontSize: '16px', fontWeight: 700, color: isExpanded ? 'var(--primary)' : 'var(--text-primary)' }}>
+													{dayNum}
+												</div>
+												<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
+													{monthShort}
+												</div>
+												<div style={{
+													fontSize: '10px', color: 'var(--text-secondary)',
+													marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+												}}>
+													{dayName}
+												</div>
+											</button>
+											{isExpanded && (
+												<div
+													ref={expandedRef}
+													style={{
+														gridColumn: '1 / -1',
+														padding: '14px',
+														borderRadius: '10px',
+														background: 'var(--bg-secondary)',
+														border: '1px solid var(--overlay-medium)',
+														marginTop: '2px',
+														marginBottom: '6px',
+													}}
+												>
+													{(() => {
+														const setsByEx = new Map<number, any[]>();
+														(expandedSets || []).forEach((s: any) => {
+															if (!setsByEx.has(s.exercise_id)) setsByEx.set(s.exercise_id, []);
+															setsByEx.get(s.exercise_id)!.push(s);
+														});
+														// Preserve routine day order, then fall back to insertion order
+														const routineOrder: number[] = routine?.days?.[session.day_index ?? 0]?.exercises?.map((e: any) => e.exercise_id) || [];
+														const setOrder = Array.from(setsByEx.keys());
+														const orderedIds = [
+															...routineOrder.filter((id: number) => setsByEx.has(id)),
+															...setOrder.filter((id: number) => !routineOrder.includes(id)),
+														];
+
+														return (
+															<>
+																<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+																	<div>
+																		<div style={{ fontSize: 14, fontWeight: 700 }}>{routine?.name || t('Session')}</div>
+																		<div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+																			{dayName} · {date.toLocaleDateString()}
+																		</div>
+																	</div>
+																	<button
+																		className="btn btn-ghost"
+																		onClick={(e) => {
+																			e.stopPropagation();
+																			navigate(`/sessions/${routineSlug}/${sessionN}`);
+																		}}
+																		style={{ padding: '4px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+																	>
+																		{t('Open')} <ChevronRight size={12} />
+																	</button>
+																</div>
+																{orderedIds.length === 0 && (
+																	<div style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', padding: 12 }}>
+																		{t('No sets recorded.')}
+																	</div>
+																)}
+																<div style={{ display: 'grid', gap: 8 }}>
+																	{orderedIds.map((exId: number) => {
+																		const exMeta = exercisesMap?.get(exId);
+																		const exSets = (setsByEx.get(exId) || []).sort((a: any, b: any) => a.set_number - b.set_number);
+																		const normalSets = exSets.filter((s: any) => (s.set_type || 'normal') === 'normal');
+																		const isCardio = exMeta?.type === 'Cardio';
+																		const isTime = exMeta?.type === 'Time';
+																		return (
+																			<div key={exId} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 8, padding: '8px 10px' }}>
+																				<div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+																					{exMeta?.name || `#${exId}`}
+																				</div>
+																				<div style={{ display: 'grid', gap: 2 }}>
+																					{normalSets.map((s: any, i: number) => (
+																						<div key={s.id} style={{
+																							display: 'flex', alignItems: 'center', gap: 8,
+																							fontSize: 12, color: 'var(--text-secondary)'
+																						}}>
+																							<CheckCircle size={11} color="var(--success)" />
+																							<span style={{ minWidth: 16, fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 700 }}>{i + 1}.</span>
+																							{isCardio && s.distance_km ? (
+																								<span>{s.distance_km} km · {Math.round((s.duration_sec || 0) / 60)} min</span>
+																							) : isTime ? (
+																								<span>{s.duration_sec || 0}s</span>
+																							) : (
+																								<>
+																									<span style={{ minWidth: 50 }}>{s.weight_kg != null ? `${s.weight_kg} kg` : 'NA'}</span>
+																									<span>× {s.reps} reps</span>
+																								</>
+																							)}
+																						</div>
+																					))}
+																				</div>
+																			</div>
+																		);
+																	})}
+																</div>
+															</>
+														);
+													})()}
+												</div>
+											)}
+										</React.Fragment>
 									);
 								})}
 							</div>
