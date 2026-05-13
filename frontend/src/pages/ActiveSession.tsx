@@ -94,7 +94,8 @@ export default function ActiveSession() {
 	const [collapsedExercises, setCollapsedExercises] = useState<number[]>([]);
 	const [showRestTimer, setShowRestTimer] = useState(false);
 	const [showStopwatch, setShowStopwatch] = useState(false);
-	const [completedSets, setCompletedSets] = useState<Set<string>>(new Set());
+	// is_done is persisted on each set row via Dexie + backend.
+	// Computed below from `sets`; no in-memory mirror.
 	const prefillDone = useRef(false);
 	useEffect(() => { prefillDone.current = false; }, [sessionId]);
 
@@ -471,22 +472,23 @@ export default function ActiveSession() {
 	};
 
 	const renumberExerciseSets = async (exerciseId: number) => {
-		const exerciseSets = await db.sets
-			.where('session_id')
-			.equals(sessionId)
-			.and((s: any) => s.exercise_id === exerciseId)
-			.sortBy('set_number');
+		await db.transaction('rw', db.sets, async () => {
+			const exerciseSets = await db.sets
+				.where('[session_id+exercise_id]')
+				.equals([sessionId, exerciseId])
+				.sortBy('set_number');
 
-		for (let i = 0; i < exerciseSets.length; i++) {
-			const setRow = exerciseSets[i];
-			const nextNumber = i + 1;
-			if (setRow.set_number !== nextNumber) {
-				await db.sets.update(setRow.id!, {
-					set_number: nextNumber,
-					syncStatus: setRow.server_id ? 'updated' : (setRow.syncStatus || 'created'),
-				});
+			for (let i = 0; i < exerciseSets.length; i++) {
+				const setRow = exerciseSets[i];
+				const nextNumber = i + 1;
+				if (setRow.set_number !== nextNumber) {
+					await db.sets.update(setRow.id!, {
+						set_number: nextNumber,
+						syncStatus: setRow.server_id ? 'updated' : (setRow.syncStatus || 'created'),
+					});
+				}
 			}
-		}
+		});
 	};
 
 	const deleteSet = async (setId: number) => {
@@ -498,65 +500,77 @@ export default function ActiveSession() {
 	};
 
 	const addSet = async (exerciseId: number, setType: 'normal' | 'drop' = 'normal') => {
-		const existingSets = [...(sets?.filter((s: any) => s.exercise_id === exerciseId) || [])]
-			.sort((a: any, b: any) => a.set_number - b.set_number);
-
-		const dropCount = existingSets.filter((s: any) => (s.set_type || 'normal') === 'drop').length;
-		if (setType === 'drop' && dropCount >= maxDropSets) return;
-
 		const ex = exercises.find((e: any) => e.exercise_id === exerciseId);
 		const isTime = ex?.type === 'Time';
 		const isCardio = ex?.type === 'Cardio';
-		const normalSets = existingSets.filter((s: any) => (s.set_type || 'normal') === 'normal');
-		const firstWorking = normalSets[0];
-		const lastWorking = normalSets[normalSets.length - 1];
 
-		const baseWeight = isTime || isCardio
-			? 0
-			: setType === 'drop'
-				? (lastWorking?.weight_kg || 0) * 0.75
-				: (lastWorking?.weight_kg || firstWorking?.weight_kg || 0);
-		const baseReps = isTime || isCardio
-			? 0
-			: (lastWorking?.reps || firstWorking?.reps || 10);
+		// Run the whole "read existing → compute → insert → renumber" cycle
+		// inside a Dexie transaction. This is the only safe shape — reading
+		// from the reactive `sets` state can race with sync writes and produce
+		// duplicate set_numbers (the regression that came back from prod).
+		await db.transaction('rw', db.sets, async () => {
+			const existingSets = await db.sets
+				.where('[session_id+exercise_id]')
+				.equals([sessionId, exerciseId])
+				.sortBy('set_number');
 
-		const roundedWeight = Math.max(0, Math.round(baseWeight * 2) / 2);
-		const lastNormalIndex = existingSets.reduce(
-			(idx: number, s: any, i: number) => ((s.set_type || 'normal') === 'normal' ? i : idx),
-			-1
-		);
-		const insertIndex = setType === 'normal'
-			? (lastNormalIndex === -1 ? existingSets.length : lastNormalIndex + 1)
-			: existingSets.length;
+			const dropCount = existingSets.filter((s: any) => (s.set_type || 'normal') === 'drop').length;
+			if (setType === 'drop' && dropCount >= maxDropSets) return;
 
-		const setDraft: any = {
-			session_id: sessionId,
-			exercise_id: exerciseId,
-			weight_kg: roundedWeight,
-			reps: baseReps,
-			duration_sec: (isTime || isCardio) ? 0 : undefined,
-			distance_km: isCardio ? 0 : undefined,
-			completed_at: new Date().toISOString(),
-			set_type: setType,
-			to_failure: false,
-			syncStatus: 'created',
-		};
+			const normalSets = existingSets.filter((s: any) => (s.set_type || 'normal') === 'normal');
+			const firstWorking = normalSets[0];
+			const lastWorking = normalSets[normalSets.length - 1];
 
-		const merged = [...existingSets];
-		merged.splice(insertIndex, 0, setDraft);
+			const baseWeight = isTime || isCardio
+				? 0
+				: setType === 'drop'
+					? (lastWorking?.weight_kg || 0) * 0.75
+					: (lastWorking?.weight_kg || firstWorking?.weight_kg || 0);
+			const baseReps = isTime || isCardio
+				? 0
+				: (lastWorking?.reps || firstWorking?.reps || 10);
 
-		for (let i = 0; i < merged.length; i++) {
-			const item = merged[i];
-			const setNumber = i + 1;
-			if (item.id) {
-				await db.sets.update(item.id, {
-					set_number: setNumber,
-					syncStatus: item.server_id ? 'updated' : (item.syncStatus || 'created'),
-				});
-			} else {
-				await db.sets.add({ ...item, set_number: setNumber });
+			const roundedWeight = Math.max(0, Math.round(baseWeight * 2) / 2);
+			const lastNormalIndex = existingSets.reduce(
+				(idx: number, s: any, i: number) => ((s.set_type || 'normal') === 'normal' ? i : idx),
+				-1
+			);
+			const insertIndex = setType === 'normal'
+				? (lastNormalIndex === -1 ? existingSets.length : lastNormalIndex + 1)
+				: existingSets.length;
+
+			const setDraft: any = {
+				session_id: sessionId,
+				exercise_id: exerciseId,
+				weight_kg: roundedWeight,
+				reps: baseReps,
+				duration_sec: (isTime || isCardio) ? 0 : undefined,
+				distance_km: isCardio ? 0 : undefined,
+				completed_at: new Date().toISOString(),
+				set_type: setType,
+				to_failure: false,
+				is_done: false,
+				syncStatus: 'created',
+			};
+
+			const merged = [...existingSets];
+			merged.splice(insertIndex, 0, setDraft);
+
+			for (let i = 0; i < merged.length; i++) {
+				const item = merged[i];
+				const setNumber = i + 1;
+				if (item.id) {
+					if (item.set_number !== setNumber) {
+						await db.sets.update(item.id, {
+							set_number: setNumber,
+							syncStatus: item.server_id ? 'updated' : (item.syncStatus || 'created'),
+						});
+					}
+				} else {
+					await db.sets.add({ ...item, set_number: setNumber });
+				}
 			}
-		}
+		});
 	};
 
 	const toggleCollapse = async (exerciseId: number) => {
@@ -566,6 +580,48 @@ export default function ActiveSession() {
 
 		setCollapsedExercises(newCollapsed);
 		await db.sessions.update(sessionId, { locked_exercises: newCollapsed });
+	};
+
+	// is_done helpers — persist to Dexie (and via sync to backend) so the
+	// state survives leaving the session or an iPhone Dexie eviction.
+	const setSetDone = async (setId: number, value: boolean) => {
+		await db.sets.update(setId, { is_done: value, syncStatus: 'updated' as any });
+	};
+
+	const setExerciseDone = async (exerciseId: number, value: boolean) => {
+		await db.transaction('rw', db.sets, async () => {
+			const exSets = await db.sets
+				.where('[session_id+exercise_id]')
+				.equals([sessionId, exerciseId])
+				.toArray();
+			for (const s of exSets) {
+				if (!!s.is_done !== value) {
+					await db.sets.update(s.id!, { is_done: value, syncStatus: 'updated' as any });
+				}
+			}
+		});
+		// Collapse on done, expand on undo.
+		const currentlyCollapsed = collapsedExercises.includes(exerciseId);
+		if (value && !currentlyCollapsed) {
+			await toggleCollapse(exerciseId);
+		} else if (!value && currentlyCollapsed) {
+			await toggleCollapse(exerciseId);
+		}
+	};
+
+	const setAllDone = async (value: boolean) => {
+		await db.transaction('rw', db.sets, async () => {
+			const allSessionSets = await db.sets.where('session_id').equals(sessionId).toArray();
+			for (const s of allSessionSets) {
+				if (!!s.is_done !== value) {
+					await db.sets.update(s.id!, { is_done: value, syncStatus: 'updated' as any });
+				}
+			}
+		});
+		const allExIds = exercises.map((e: any) => e.exercise_id);
+		const nextCollapsed = value ? allExIds : [];
+		setCollapsedExercises(nextCollapsed);
+		await db.sessions.update(sessionId, { locked_exercises: nextCollapsed });
 	};
 
 	const isCompleted = !!session?.completed_at;
@@ -789,8 +845,8 @@ export default function ActiveSession() {
 			{isEditable && !isCompleted && (() => {
 				const allExIds = exercises.map((e: any) => e.exercise_id);
 				const allCollapsed = allExIds.every((id: number) => collapsedExercises.includes(id));
-				const allSetKeys = sets?.map((s: any) => `${s.id}`) || [];
-				const globalAllDone = allSetKeys.length > 0 && allSetKeys.every((k: string) => completedSets.has(k));
+				const allSessionSets = sets || [];
+				const globalAllDone = allSessionSets.length > 0 && allSessionSets.every((s: any) => !!s.is_done);
 				const compactBtn: React.CSSProperties = {
 					padding: '6px 10px', borderRadius: 'var(--radius-sm)',
 					fontSize: 12, fontWeight: 600,
@@ -831,7 +887,8 @@ export default function ActiveSession() {
 							</button>
 							{routine && (() => {
 								const { loading, fetched, suggestions } = progressionSuggestions;
-								if (fetched && suggestions.size === 0) return null;
+								const visibleCount = [...suggestions.keys()].filter(id => !dismissedSuggestions.has(id)).length;
+								if (fetched && visibleCount === 0) return null;
 								return (
 									<button
 										onClick={async () => {
@@ -849,8 +906,8 @@ export default function ActiveSession() {
 											cursor: loading ? 'wait' : 'pointer',
 										}}
 									>
-										{loading ? '...' : fetched ? `${suggestions.size}` : '💡'}
-										{loading ? t('Checking') : fetched ? (suggestions.size === 1 ? t('suggestion') : t('suggestions')) : t('Suggestions')}
+										{loading ? '...' : fetched ? `${visibleCount}` : '💡'}
+										{loading ? t('Checking') : fetched ? (visibleCount === 1 ? t('suggestion') : t('suggestions')) : t('Suggestions')}
 									</button>
 								);
 							})()}
@@ -868,13 +925,7 @@ export default function ActiveSession() {
 							)}
 							{exercises.length > 1 && (
 								<button
-									onClick={() => {
-										if (globalAllDone) {
-											setCompletedSets(new Set());
-										} else {
-											setCompletedSets(new Set(allSetKeys));
-										}
-									}}
+									onClick={() => { setAllDone(!globalAllDone); }}
 									className="motion-btn motion-btn--session"
 									style={{
 										...compactBtn,
@@ -909,7 +960,7 @@ export default function ActiveSession() {
 					const supportsSetTypes = ex.type !== 'Cardio' && ex.type !== 'Time';
 					const isCollapsed = collapsedExercises.includes(ex.exercise_id);
 					const isExerciseLocked = ex.locked === true;
-					const exDoneCount = exerciseSets.filter((s: any) => completedSets.has(`${s.id}`)).length;
+					const exDoneCount = exerciseSets.filter((s: any) => !!s.is_done).length;
 					const isExAllDone = exerciseSets.length > 0 && exDoneCount === exerciseSets.length;
 
 					return (
@@ -1041,15 +1092,7 @@ export default function ActiveSession() {
 											className={`motion-btn motion-btn--session ${isExAllDone ? '' : 'motion-btn--soft'}`.trim()}
 											onClick={(e: any) => {
 												e.stopPropagation();
-												setCompletedSets(prev => {
-													const next = new Set(prev);
-													if (isExAllDone) {
-														exerciseSets.forEach((s: any) => next.delete(`${s.id}`));
-													} else {
-														exerciseSets.forEach((s: any) => next.add(`${s.id}`));
-													}
-													return next;
-												});
+												setExerciseDone(ex.exercise_id, !isExAllDone);
 											}}
 											style={{
 												padding: '4px 10px',
@@ -1104,7 +1147,7 @@ export default function ActiveSession() {
 									</div>
 
 									{exerciseSets.map((s: any) => {
-										const setDone = completedSets.has(`${s.id}`);
+										const setDone = !!s.is_done;
 										const setType = s.set_type || 'normal';
 										const isWarmup = setType === 'warmup';
 										const isDrop = setType === 'drop';
@@ -1126,12 +1169,7 @@ export default function ActiveSession() {
 														<div style={{ width: '56px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
 															{isEditable ? (
 																<div
-																	onClick={() => setCompletedSets(prev => {
-																		const next = new Set(prev);
-																		const key = `${s.id}`;
-																		if (next.has(key)) next.delete(key); else next.add(key);
-																		return next;
-																	})}
+																	onClick={() => setSetDone(s.id, !setDone)}
 																	style={{
 																		minWidth: isWarmup || isDrop ? 52 : 24,
 																		height: 24,

@@ -38,6 +38,7 @@ const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
 const AdminExercises = lazy(() => import('./pages/admin/AdminExercises'));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
+const AdminErrors = lazy(() => import('./pages/admin/AdminErrors'));
 
 function RouteLoadingFallback() {
 	return (
@@ -185,6 +186,7 @@ function App() {
 										...setData,
 										set_type: (setData as any).set_type || 'normal',
 										to_failure: !!(setData as any).to_failure,
+										is_done: !!(setData as any).is_done,
 										server_id: setServerId,
 										// Do NOT change session_id: local assignment is authoritative
 										syncStatus: 'synced'
@@ -195,6 +197,7 @@ function App() {
 									...setData,
 									set_type: (setData as any).set_type || 'normal',
 									to_failure: !!(setData as any).to_failure,
+									is_done: !!(setData as any).is_done,
 									server_id: setServerId,
 									session_id: localSessionId,
 									syncStatus: 'synced'
@@ -297,6 +300,7 @@ function App() {
 								<Route path="/admin/users" element={<AdminUsers />} />
 								<Route path="/admin/exercises" element={<AdminExercises />} />
 								<Route path="/admin/settings" element={<AdminSettings />} />
+								<Route path="/admin/errors" element={<AdminErrors />} />
 							</Route>
 						</Route>
 

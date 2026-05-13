@@ -94,6 +94,7 @@ export interface Set {
 	incline?: number;
 	set_type?: 'normal' | 'warmup' | 'drop';
 	to_failure?: boolean;
+	is_done?: boolean; // UI-only: user marked this set as done in the active session
 	completed_at: string;
 	syncStatus?: 'synced' | 'created' | 'updated' | 'deleted';
 }
@@ -136,6 +137,11 @@ class GymDatabase extends Dexie {
 		});
 		// v5: set/session metadata additions (no index changes)
 		this.version(5).stores({});
+		// v6: compound [session_id+exercise_id] index for transactional addSet,
+		// avoids Dexie reactive-state races that produced duplicate set_numbers.
+		this.version(6).stores({
+			sets: '++id, server_id, session_id, exercise_id, syncStatus, [session_id+exercise_id]'
+		});
 	}
 }
 

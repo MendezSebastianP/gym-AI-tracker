@@ -76,6 +76,7 @@ export const processSyncQueue = async () => {
 						incline: set.incline,
 						set_type: set.set_type || 'normal',
 						to_failure: !!set.to_failure,
+						is_done: !!set.is_done,
 						completed_at: set.completed_at,
 					});
 					await db.sets.update(set.id!, {
@@ -93,6 +94,7 @@ export const processSyncQueue = async () => {
 						incline: set.incline,
 						set_type: set.set_type || 'normal',
 						to_failure: !!set.to_failure,
+						is_done: !!set.is_done,
 					});
 					await db.sets.update(set.id!, { syncStatus: 'synced' });
 				}
@@ -167,6 +169,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 					incline: s.incline,
 					set_type: s.set_type || 'normal',
 					to_failure: !!s.to_failure,
+					is_done: !!s.is_done,
 					completed_at: s.completed_at || session.completed_at
 				}))
 			};
@@ -244,6 +247,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 								incline: set.incline,
 								set_type: set.set_type || 'normal',
 								to_failure: !!set.to_failure,
+								is_done: !!set.is_done,
 								completed_at: set.completed_at,
 							});
 							await db.sets.update(set.id!, {
@@ -260,6 +264,7 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 								incline: set.incline,
 								set_type: set.set_type || 'normal',
 								to_failure: !!set.to_failure,
+								is_done: !!set.is_done,
 							});
 							await db.sets.update(set.id!, { syncStatus: 'synced' });
 						}
@@ -328,6 +333,7 @@ export const syncAllDataBeforeLogout = async () => {
 						incline: set.incline,
 						set_type: set.set_type || 'normal',
 						to_failure: !!set.to_failure,
+						is_done: !!set.is_done,
 						completed_at: set.completed_at,
 					});
 					await db.sets.update(set.id!, {
@@ -345,6 +351,7 @@ export const syncAllDataBeforeLogout = async () => {
 						incline: set.incline,
 						set_type: set.set_type || 'normal',
 						to_failure: !!set.to_failure,
+						is_done: !!set.is_done,
 					});
 					await db.sets.update(set.id!, { syncStatus: 'synced' });
 				}

@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.session import Session as SessionModel, Set as SetModel
@@ -10,6 +12,22 @@ router = APIRouter(
     prefix="/api/sets",
     tags=["sets"]
 )
+
+
+def _find_existing_normal_set(db: Session, session_id: int, exercise_id: int, set_number: int) -> SetModel | None:
+    """Return the existing normal set with this slot (if any) — used by the
+    create endpoint to upsert instead of duplicating when the client retries."""
+    return (
+        db.query(SetModel)
+        .filter(
+            SetModel.session_id == session_id,
+            SetModel.exercise_id == exercise_id,
+            SetModel.set_number == set_number,
+            func.coalesce(SetModel.set_type, 'normal') == 'normal',
+        )
+        .first()
+    )
+
 
 @router.post("", response_model=SetResponse)
 def create_set(
@@ -30,9 +48,37 @@ def create_set(
 
     set_dict = set_data.model_dump()
     set_dict.pop("session_id")  # already used above; SetModel gets it explicitly
+
+    # Upsert behaviour for normal sets: if a row with the same
+    # (session_id, exercise_id, set_number) already exists, update it
+    # instead of raising. This prevents the offline-first client from
+    # creating duplicates when a sync retries after a flaky network.
+    if (set_dict.get("set_type") or "normal") == "normal":
+        existing = _find_existing_normal_set(
+            db, session_id, set_dict["exercise_id"], set_dict["set_number"]
+        )
+        if existing:
+            for key, value in set_dict.items():
+                if value is not None:
+                    setattr(existing, key, value)
+            db.commit()
+            db.refresh(existing)
+            return existing
+
     db_set = SetModel(**set_dict, session_id=session_id)
     db.add(db_set)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Unique partial index caught a race we didn't catch above —
+        # roll back and fall through to the existing row.
+        db.rollback()
+        existing = _find_existing_normal_set(
+            db, session_id, set_dict["exercise_id"], set_dict["set_number"]
+        )
+        if existing:
+            return existing
+        raise HTTPException(status_code=409, detail="Set conflict")
     db.refresh(db_set)
     return db_set
 
@@ -50,7 +96,7 @@ def update_set(
 
     for key, value in set_update.model_dump(exclude_unset=True).items():
         setattr(db_set, key, value)
-    
+
     db.commit()
     db.refresh(db_set)
     return db_set
@@ -64,7 +110,7 @@ def delete_set(
     db_set = db.query(SetModel).join(SessionModel).filter(SetModel.id == set_id, SessionModel.user_id == current_user.id).first()
     if not db_set:
         raise HTTPException(status_code=404, detail="Set not found")
-    
+
     db.delete(db_set)
     db.commit()
     return {"ok": True}

@@ -99,6 +99,7 @@ class SetBase(BaseModel):
     incline: Optional[float] = None
     set_type: Optional[str] = "normal"
     to_failure: Optional[bool] = False
+    is_done: Optional[bool] = False
     completed_at: Optional[datetime] = None
 
 class SetCreate(SetBase):
@@ -116,6 +117,7 @@ class SetUpdate(BaseModel):
     incline: Optional[float] = None
     set_type: Optional[str] = "normal"
     to_failure: Optional[bool] = False
+    is_done: Optional[bool] = None
     completed_at: Optional[datetime] = None
 
 class SetResponse(SetBase):
@@ -149,6 +151,7 @@ class CompleteSetItem(BaseModel):
     incline: Optional[float] = None
     set_type: Optional[str] = "normal"
     to_failure: Optional[bool] = False
+    is_done: Optional[bool] = False
     completed_at: Optional[datetime] = None
 
 class SessionCompleteBulk(BaseModel):

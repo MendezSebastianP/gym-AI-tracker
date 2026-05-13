@@ -3,6 +3,16 @@
 
 http://kairos.sebmendez.dev {
 
+    # ── Access logs (rotated JSON to /var/log/caddy/access.log) ──────────
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 10mb
+            roll_keep 5
+            roll_keep_for 720h
+        }
+        format json
+    }
+
     # ── Security headers on every response ───────────────────────────────
     header {
         X-Content-Type-Options "nosniff"

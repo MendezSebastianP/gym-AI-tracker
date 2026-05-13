@@ -1,4 +1,12 @@
-"""Effort score computation for completed sessions (informational only)."""
+"""Effort score computation for completed sessions (informational only).
+
+Sessions are scored ONLY against prior completed sessions of the same
+(routine_id, day_index) — that is, against the previous time the user did
+this exact day of this exact routine. The very first cycle of any routine
+day produces no score (used as the reference for future cycles).
+
+A session with no routine_id / day_index cannot be paired and is skipped.
+"""
 from __future__ import annotations
 
 from typing import Dict, Iterable, Optional
@@ -18,6 +26,22 @@ def _is_normal_set_filter():
     return sa_func.coalesce(SetModel.set_type, "normal") == "normal"
 
 
+def _prior_paired_sessions_query(db: DBSession, user_id: int, session: SessionModel):
+    """Sessions of the same (routine, day_index) completed before this one."""
+    return (
+        db.query(SessionModel)
+        .filter(
+            SessionModel.user_id == user_id,
+            SessionModel.completed_at.isnot(None),
+            SessionModel.id != session.id,
+            SessionModel.completed_at < session.completed_at,
+            SessionModel.routine_id == session.routine_id,
+            SessionModel.day_index == session.day_index,
+        )
+        .order_by(SessionModel.completed_at.desc())
+    )
+
+
 def _session_volume(sets: Iterable[SetModel]) -> float:
     total = 0.0
     for s in sets:
@@ -34,14 +58,8 @@ def _volume_factor(db: DBSession, user_id: int, session: SessionModel, current_v
         return 50.0
 
     previous_sessions = (
-        db.query(SessionModel.id)
-        .filter(
-            SessionModel.user_id == user_id,
-            SessionModel.completed_at.isnot(None),
-            SessionModel.id != session.id,
-            SessionModel.completed_at < session.completed_at,
-        )
-        .order_by(SessionModel.completed_at.desc())
+        _prior_paired_sessions_query(db, user_id, session)
+        .with_entities(SessionModel.id)
         .limit(10)
         .all()
     )
@@ -108,6 +126,16 @@ def _progression_factor(db: DBSession, user_id: int, session: SessionModel, curr
     if not sets_by_exercise:
         return 50.0
 
+    # Restrict comparison to prior sessions of THIS routine + day_index only.
+    paired_session_ids = [
+        sid for (sid,) in
+        _prior_paired_sessions_query(db, user_id, session)
+        .with_entities(SessionModel.id)
+        .all()
+    ]
+    if not paired_session_ids:
+        return 50.0
+
     comparable = 0
     progressed = 0
 
@@ -117,12 +145,8 @@ def _progression_factor(db: DBSession, user_id: int, session: SessionModel, curr
                 sa_func.max(SetModel.weight_kg).label("max_weight"),
                 sa_func.max(SetModel.reps).label("max_reps"),
             )
-            .join(SessionModel, SessionModel.id == SetModel.session_id)
             .filter(
-                SessionModel.user_id == user_id,
-                SessionModel.completed_at.isnot(None),
-                SessionModel.id != session.id,
-                SessionModel.completed_at < session.completed_at,
+                SetModel.session_id.in_(paired_session_ids),
                 SetModel.exercise_id == exercise_id,
                 _is_normal_set_filter(),
             )
@@ -151,17 +175,26 @@ def _progression_factor(db: DBSession, user_id: int, session: SessionModel, curr
 
 def compute_effort_score(db: DBSession, user_id: int, session: SessionModel) -> Optional[float]:
     """Compute a 0-100 effort score for a completed session.
-    Returns None if no self-rated effort was recorded (user opted out for that session)."""
+
+    Returns None when:
+      - the user didn't self-rate this session, OR
+      - the session is not tied to a routine + day_index, OR
+      - this is the first cycle of this (routine, day_index) — no reference yet.
+    """
     if session.self_rated_effort is None:
         return None
 
-    # No score for the very first session — nothing to compare against
-    has_prior = db.query(SessionModel.id).filter(
-        SessionModel.user_id == user_id,
-        SessionModel.completed_at.isnot(None),
-        SessionModel.id != session.id,
-    ).limit(1).first()
-    if not has_prior:
+    # Effort is only meaningful when paired against a prior same-day session.
+    if session.routine_id is None or session.day_index is None:
+        return None
+
+    has_prior_paired = (
+        _prior_paired_sessions_query(db, user_id, session)
+        .with_entities(SessionModel.id)
+        .limit(1)
+        .first()
+    )
+    if not has_prior_paired:
         return None
 
     user = db.query(User).filter(User.id == user_id).first()

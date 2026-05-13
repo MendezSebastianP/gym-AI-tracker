@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+import traceback
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -38,7 +41,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-from app.routers import auth, exercises, routines, sessions, sets, stats, sync, gamification, user_preferences, ai, admin, weight, progression
+from app.routers import auth, exercises, routines, sessions, sets, stats, sync, gamification, user_preferences, ai, admin, weight, progression, errors as errors_router
 
 app.include_router(auth.router)
 app.include_router(exercises.router)
@@ -53,6 +56,41 @@ app.include_router(ai.router)
 app.include_router(admin.router)
 app.include_router(weight.router)
 app.include_router(progression.router)
+app.include_router(errors_router.router)
+
+
+@app.middleware("http")
+async def log_unhandled_exceptions(request: Request, call_next):
+    """Catch-all middleware: any unhandled exception lands in error_logs.
+
+    Always returns the standard 500 to the client so existing behaviour
+    is preserved. Logging is best-effort — if the DB write fails (e.g. DB
+    is the thing that's broken), we swallow that secondary error.
+    """
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        try:
+            from app.database import SessionLocal
+            from app.models.error_log import ErrorLog
+            db = SessionLocal()
+            try:
+                row = ErrorLog(
+                    source="backend",
+                    level="error",
+                    message=f"{type(exc).__name__}: {exc}"[:4000],
+                    stack=traceback.format_exc(),
+                    url=str(request.url),
+                    user_agent=request.headers.get("user-agent"),
+                    context={"method": request.method, "path": request.url.path},
+                )
+                db.add(row)
+                db.commit()
+            finally:
+                db.close()
+        except Exception:
+            pass
+        return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 @app.get("/")
 def read_root():

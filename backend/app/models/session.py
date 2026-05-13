@@ -40,6 +40,11 @@ class Set(Base):
     incline = Column(Float, nullable=True)        # incline % or resistance level
     set_type = Column(String, default="normal", server_default="normal")  # normal | warmup | drop
     to_failure = Column(Boolean, default=False, server_default="false")
+    # UI-only signal: user tapped the per-set checkmark / "All done" in the
+    # active session. Persisted server-side so it survives Dexie eviction
+    # (iPhone Safari/Edge can evict IndexedDB silently). Does NOT affect
+    # scoring, effort, or stats — purely visual state.
+    is_done = Column(Boolean, default=False, server_default="false", nullable=False)
     completed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     session = relationship("Session", back_populates="sets")

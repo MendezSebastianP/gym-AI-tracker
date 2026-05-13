@@ -5,7 +5,10 @@ const API_URL = '/api';
 
 export const api = axios.create({
 	baseURL: API_URL,
-	timeout: 12000, // 12s — prevents requests from hanging indefinitely
+	// 25s — mobile networks (esp. iPhone Edge) routinely take 10–20s when
+	// resuming from background. A short timeout that fires here used to
+	// clear the user's tokens and force a re-login mid-session.
+	timeout: 25000,
 	headers: {
 		'Content-Type': 'application/json',
 	},
@@ -40,6 +43,17 @@ function onRefreshFailed(error: unknown) {
 
 function subscribeToRefresh(cb: RefreshCb) {
 	refreshSubscribers.push(cb);
+}
+
+async function doRefresh(refreshToken: string) {
+	// Network errors get one retry after 1s backoff — mobile flakiness only
+	try {
+		return await axios.post(`${API_URL}/auth/refresh`, { refresh_token: refreshToken }, { timeout: 25000 });
+	} catch (err: any) {
+		if (err?.response) throw err; // HTTP error (401, 5xx) — don't retry, surface immediately
+		await new Promise((r) => setTimeout(r, 1000));
+		return await axios.post(`${API_URL}/auth/refresh`, { refresh_token: refreshToken }, { timeout: 25000 });
+	}
 }
 
 // Response interceptor — on 401, try to refresh the access token
@@ -81,9 +95,7 @@ api.interceptors.response.use(
 		originalRequest._retry = true;
 
 		try {
-			const res = await axios.post(`${API_URL}/auth/refresh`, {
-				refresh_token: refreshToken,
-			});
+			const res = await doRefresh(refreshToken);
 			const newAccessToken = res.data.access_token;
 			localStorage.setItem('token', newAccessToken);
 
@@ -97,11 +109,17 @@ api.interceptors.response.use(
 
 			originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
 			return api(originalRequest);
-		} catch (refreshError) {
+		} catch (refreshError: any) {
 			isRefreshing = false;
-			onRefreshFailed(refreshError); // properly reject all queued requests
-			localStorage.removeItem('token');
-			localStorage.removeItem('refresh_token');
+			// Only nuke tokens when the refresh token is actually rejected.
+			// Network/timeout/5xx failures leave the tokens alone so the user
+			// stays logged in across mobile network blips.
+			const isAuthFailure = refreshError?.response?.status === 401;
+			onRefreshFailed(refreshError);
+			if (isAuthFailure) {
+				localStorage.removeItem('token');
+				localStorage.removeItem('refresh_token');
+			}
 			return Promise.reject(refreshError);
 		}
 	}

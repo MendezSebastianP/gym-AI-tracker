@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { LogOut, Users, Activity, Settings, BarChart2, Flame } from 'lucide-react';
+import { LogOut, Users, Activity, Settings, BarChart2, Flame, AlertTriangle } from 'lucide-react';
 import '../AdminLayout.css';
 
 export default function AdminLayout() {
@@ -18,6 +18,7 @@ export default function AdminLayout() {
 		{ path: '/admin/users', label: 'Users', icon: <Users size={20} /> },
 		{ path: '/admin/exercises', label: 'Exercise Catalog', icon: <Activity size={20} /> },
 		{ path: '/admin/settings', label: 'Settings', icon: <Settings size={20} /> },
+		{ path: '/admin/errors', label: 'Error Log', icon: <AlertTriangle size={20} /> },
 		{ path: '/playground', label: 'Streak Playground', icon: <Flame size={20} /> },
 	];
 

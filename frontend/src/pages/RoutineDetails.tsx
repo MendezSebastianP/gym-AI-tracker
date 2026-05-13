@@ -44,6 +44,7 @@ export default function RoutineDetails() {
 	const [showPicker, setShowPicker] = useState<{ dayIndex: number; cardioMode?: boolean } | null>(null);
 	const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
 	const [editedDescription, setEditedDescription] = useState<string>('');
+	const [editedName, setEditedName] = useState<string>('');
 	const [suggestionDayIndex, setSuggestionDayIndex] = useState<number | undefined>(undefined);
 	const [pendingFetchDay, setPendingFetchDay] = useState<number | undefined>(undefined);
 	const progressionSuggestions = useProgressionSuggestions(routine?.id ? Number(routine.id) : undefined, suggestionDayIndex);
@@ -134,6 +135,7 @@ export default function RoutineDetails() {
 		});
 		setEditedDays(newDays);
 		setEditedDescription(routine?.description || '');
+		setEditedName(routine?.name || '');
 		setEditMode(true);
 	};
 
@@ -154,7 +156,12 @@ export default function RoutineDetails() {
 				});
 			});
 
-			const updatePayload: any = { days: cleanDays, description: editedDescription || null };
+			const trimmedName = editedName.trim();
+			const updatePayload: any = {
+				days: cleanDays,
+				description: editedDescription || null,
+				name: trimmedName || routine.name,
+			};
 			if (navigator.onLine) {
 				await api.put(`/routines/${routine.id}`, updatePayload);
 			}
@@ -289,11 +296,29 @@ export default function RoutineDetails() {
 	return (
 		<div className="container fade-in" style={{ paddingBottom: '80px' }}>
 			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-				<div style={{ display: 'flex', alignItems: 'center' }}>
+				<div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
 					<button className="btn btn-ghost" onClick={() => navigate('/routines')} style={{ paddingLeft: 0 }}>
 						<ArrowLeft size={24} />
 					</button>
-					<h1 style={{ marginBottom: 0 }}>{routine.name}</h1>
+					{editMode ? (
+						<input
+							type="text"
+							className="input"
+							value={editedName}
+							onChange={(e) => setEditedName(e.target.value)}
+							placeholder={t('Routine name')}
+							style={{
+								fontSize: '24px',
+								fontWeight: 'bold',
+								padding: '4px 8px',
+								flex: 1,
+								minWidth: 0,
+								background: 'transparent',
+							}}
+						/>
+					) : (
+						<h1 style={{ marginBottom: 0 }}>{routine.name}</h1>
+					)}
 				</div>
 				{!editMode ? (
 					<div style={{ display: 'flex', gap: '8px' }}>

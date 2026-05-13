@@ -27,11 +27,17 @@ class TestWeeklyStats:
         assert r.status_code == 200
         return r.json()
 
-    def _add_set_to_session(self, client, headers, session_id: int, weight: float = 100.0, reps: int = 10):
+    def _add_set_to_session(self, client, headers, session_id: int, weight: float = 100.0, reps: int = 10, set_number: int | None = None):
+        # Auto-pick the next set_number for this (session, exercise) so the
+        # upsert-on-conflict path in /api/sets doesn't merge duplicates.
+        if set_number is None:
+            existing = client.get(f"/api/sessions/{session_id}", headers=headers).json()
+            existing_for_ex = [s for s in existing.get("sets", []) if s.get("exercise_id") == 1]
+            set_number = (max((s.get("set_number", 0) for s in existing_for_ex), default=0)) + 1
         r = client.post("/api/sets/", json={
             "session_id": session_id,
             "exercise_id": 1,
-            "set_number": 1,
+            "set_number": set_number,
             "weight_kg": weight,
             "reps": reps,
             "completed_at": _iso(_now()),

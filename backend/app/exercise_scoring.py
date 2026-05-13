@@ -353,6 +353,60 @@ BW_RATIOS = {
     # PHASE 5 — FUNCTIONAL BODYWEIGHT
     'Box Jump':                 0.75,
     'Bear Crawl':               0.45,
+
+    # ── PROGRESSION CHAIN AUDIT (issue 7) ───────────────────────────────
+    # Every exercise in CHAINS gets an explicit ratio so harder variants
+    # don't fall back to the 0.65 default and silently rank below their
+    # easier counterparts. Values are calibrated to keep ratios monotonic
+    # (non-decreasing) along each chain.
+
+    # horizontal_push_standard
+    'Wall Push Up':             0.25,
+    'Incline Push Up':          0.40,
+    'Knee Push Up':             0.50,
+    # Push Up (0.65) — existing
+    'Wide Push Up':             0.70,
+    # Push Up Diamond (0.75) — existing
+    # Pseudo Planche Push Up (1.00) — existing
+    # Archer Push Up (1.10) — existing
+    'One Arm Push Up':          1.60,
+
+    # horizontal_push_decline
+    'Decline Push Up':          0.70,
+    'Decline Pike Push Up':     0.72,
+    # Pike Push Up (0.75) — existing
+    # HSPU Wall (1.10), HSPU Free (1.40) — existing
+
+    # vertical_push_dip
+    'Bench Dips':               0.50,
+    'Negative Dip':             0.75,
+    # Dips (0.85), Ring Dips (1.00) — existing
+
+    # pull_vertical
+    'Scapular Pull Up':         0.30,
+    'Negative Pull Up':         0.50,
+    'Band Assisted Pull Up':    0.70,
+    # Pull Up (1.00), L-Sit Pull Up (1.20), Muscle Up Bar (2.00) — existing
+
+    # pull_horizontal
+    'Ring Row':                 0.40,
+    # Inverted Row (0.55), Archer Pull Up (1.40) — existing
+
+    # squat
+    'Jumping Squat':            0.50,
+    # Cossack (0.65), Lunge (0.55), Shrimp (1.00), Pistol (1.20) — existing
+    'Assisted Pistol Squat':    1.10,
+
+    # core_rotational
+    'Bicycle Crunches':         0.35,
+    'Windshield Wipers':        0.85,
+
+    # core_hanging
+    'Tuck L-Sit':               0.58,
+    'V-Ups':                    0.65,
+
+    # core_lower_back
+    'Hollow Body Rocks':        0.45,
 }
 
 

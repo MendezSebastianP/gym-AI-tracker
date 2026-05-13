@@ -9,3 +9,4 @@ from .ai_usage_log import AIUsageLog
 from .weight_log import WeightLog
 from .progression import ProgressionReport, ProgressionFeedback, ExerciseProgression
 from .routine_completion import RoutineCompletion
+from .error_log import ErrorLog
