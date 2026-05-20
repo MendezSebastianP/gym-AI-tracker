@@ -96,6 +96,33 @@ class TestSessions:
         assert me_after["experience"] == me_before["experience"]
         assert me_after["level"] == me_before["level"]
 
+    def test_put_completed_session_accepts_unchanged_completed_at(self, client):
+        """A PUT that echoes the existing completed_at (because the client is also
+        editing another field like bodyweight) must succeed as a no-op on that field.
+
+        Previously this 409'd, which silently left the local syncStatus stuck at
+        'updated' and produced a permanent "pending sync" indicator in the UI.
+        """
+        headers = register_and_login(client, "noop-complete@example.com")
+        session = self._create_session(client, headers)
+
+        complete_at = _now_iso()
+        r1 = client.put(f"/api/sessions/{session['id']}", json={"completed_at": complete_at}, headers=headers)
+        assert r1.status_code == 200
+        server_completed_at = r1.json()["completed_at"]
+
+        # Edit another field while echoing the same completed_at — must succeed.
+        r2 = client.put(
+            f"/api/sessions/{session['id']}",
+            json={"completed_at": server_completed_at, "bodyweight_kg": 78.0, "notes": "felt good"},
+            headers=headers,
+        )
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["bodyweight_kg"] == 78.0
+        assert r2.json()["notes"] == "felt good"
+        # And completed_at is unchanged
+        assert r2.json()["completed_at"] == server_completed_at
+
     def test_session_bodyweight_kg_persists(self, client):
         headers = register_and_login(client)
         session = self._create_session(client, headers)

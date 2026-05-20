@@ -77,8 +77,12 @@ def update_session(
     update_data = session_update.model_dump(exclude_unset=True)
 
     # Completion is immutable once set, to prevent XP replay by reopen/re-complete cycles.
+    # Accept a no-op (same value) so a client PUTting the full record for an unrelated
+    # field edit (bodyweight, notes, …) isn't rejected and left stuck at syncStatus='updated'.
     if was_completed and "completed_at" in update_data:
-        raise HTTPException(status_code=409, detail="Completed sessions cannot be reopened or re-completed")
+        if update_data["completed_at"] != db_session.completed_at:
+            raise HTTPException(status_code=409, detail="Completed sessions cannot be reopened or re-completed")
+        update_data.pop("completed_at")
     
     for key, value in update_data.items():
         setattr(db_session, key, value)

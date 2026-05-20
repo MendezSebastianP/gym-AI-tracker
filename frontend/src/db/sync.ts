@@ -137,10 +137,12 @@ const syncSessionToServer = async (session: any): Promise<number | null> => {
 		const serverId = session.server_id;
 
 		if (session.completed_at && session.syncStatus === 'updated') {
-			// Already-completed session was edited (e.g. date change) — just PUT the metadata
+			// Already-completed session was edited (bodyweight, duration, etc.) — PUT the
+			// editable metadata only. completed_at is server-side immutable: including it
+			// here triggers a 409 even when the value is unchanged, which silently kept
+			// edited sessions stuck at syncStatus='updated' forever (orange-dot bug).
 			await api.put(`/sessions/${serverId}`, {
 				started_at: session.started_at,
-				completed_at: session.completed_at,
 				notes: session.notes,
 				duration_seconds: session.duration_seconds || null,
 				locked_exercises: session.locked_exercises || [],
