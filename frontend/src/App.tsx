@@ -174,9 +174,22 @@ function App() {
 							const { id: setServerId, ...setData } = serverSet;
 							activeServerSetIds.add(setServerId);
 
-							if (serverIdToLocalSet.has(setServerId)) {
-								const localSetId = serverIdToLocalSet.get(setServerId)!;
-								const existing = existingSets.find(x => x.id === localSetId);
+							// Re-check Dexie at insertion time: another writer (e.g. ActiveSession's
+							// prefillSets hydrating from server after Safari evicted IndexedDB) may
+							// have added the same server_id while syncUserData was running. The cached
+							// `serverIdToLocalSet` map can't see those, so without this we'd duplicate.
+							let localSetId: number | undefined = serverIdToLocalSet.get(setServerId);
+							if (localSetId === undefined) {
+								const liveExisting = await db.sets.where('server_id').equals(setServerId).first();
+								if (liveExisting?.id) {
+									localSetId = liveExisting.id;
+									serverIdToLocalSet.set(setServerId, localSetId);
+								}
+							}
+
+							if (localSetId !== undefined) {
+								const existing = existingSets.find(x => x.id === localSetId)
+									|| await db.sets.get(localSetId);
 								if (existing?.syncStatus === 'updated') {
 									// Local has unsent edits — preserve local values, just link server_id
 									// Do NOT change session_id: the local assignment is authoritative

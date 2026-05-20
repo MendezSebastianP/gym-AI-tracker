@@ -241,7 +241,50 @@ export default function ActiveSession() {
 			// Query Dexie directly for a fresh snapshot — the reactive `sets` state can be
 			// transiently empty if syncUserData is mid-flight, which would incorrectly
 			// trigger a double-prefill and add sets from the previous session.
-			const freshSets = await db.sets.where('session_id').equals(sessionId).toArray();
+			let freshSets = await db.sets.where('session_id').equals(sessionId).toArray();
+
+			// iOS Safari evicts IndexedDB when memory-pressured. If the session was
+			// already synced (has server_id) but Dexie has zero local sets, the
+			// authoritative state lives on the server — re-hydrate before deciding
+			// what's "missing", otherwise we'd overwrite the user's real progress
+			// with values from the previous session.
+			if (session.server_id && freshSets.length === 0 && navigator.onLine) {
+				try {
+					const res = await api.get(`/sessions/${session.server_id}`);
+					const serverSets: any[] = res.data?.sets || [];
+					if (serverSets.length > 0) {
+						// Re-check Dexie immediately before insert: syncUserData may have raced
+						// us and already added some of these sets. Filter to only the ones we
+						// don't have yet (matched by server_id) to avoid duplicates.
+						const alreadyLocal = await db.sets.where('session_id').equals(sessionId).toArray();
+						const existingServerIds = new Set(alreadyLocal.map((s: any) => s.server_id).filter(Boolean));
+						const hydrated = serverSets
+							.filter((s: any) => !existingServerIds.has(s.id))
+							.map((s: any) => ({
+								session_id: sessionId,
+								server_id: s.id,
+								exercise_id: s.exercise_id,
+								set_number: s.set_number,
+								weight_kg: s.weight_kg ?? 0,
+								reps: s.reps ?? 0,
+								duration_sec: s.duration_sec,
+								distance_km: s.distance_km,
+								avg_pace: s.avg_pace,
+								incline: s.incline,
+								set_type: s.set_type || 'normal',
+								to_failure: !!s.to_failure,
+								is_done: !!s.is_done,
+								completed_at: s.completed_at || session.started_at,
+								syncStatus: 'synced' as any,
+							}));
+						if (hydrated.length > 0) {
+							await db.sets.bulkAdd(hydrated);
+						}
+						freshSets = await db.sets.where('session_id').equals(sessionId).toArray();
+					}
+				} catch { /* offline / 404 — fall through to defaults */ }
+			}
+
 			const missingExercises = day.exercises.filter((ex: any) => !freshSets.some((s: any) => s.exercise_id === ex.exercise_id));
 			if (missingExercises.length === 0) {
 				return;
@@ -584,7 +627,13 @@ export default function ActiveSession() {
 			: [...collapsedExercises, exerciseId];
 
 		setCollapsedExercises(newCollapsed);
-		await db.sessions.update(sessionId, { locked_exercises: newCollapsed });
+		// Mark session as updated so the change syncs AND syncUserData preserves
+		// it on the next pull (otherwise server's stale value overwrites locally
+		// when the page reloads after iOS Safari backgrounds the tab).
+		await db.sessions.update(sessionId, {
+			locked_exercises: newCollapsed,
+			syncStatus: 'updated' as any,
+		});
 	};
 
 	// is_done helpers — persist to Dexie (and via sync to backend) so the
@@ -626,7 +675,10 @@ export default function ActiveSession() {
 		const allExIds = exercises.map((e: any) => e.exercise_id);
 		const nextCollapsed = value ? allExIds : [];
 		setCollapsedExercises(nextCollapsed);
-		await db.sessions.update(sessionId, { locked_exercises: nextCollapsed });
+		await db.sessions.update(sessionId, {
+			locked_exercises: nextCollapsed,
+			syncStatus: 'updated' as any,
+		});
 	};
 
 	const isCompleted = !!session?.completed_at;

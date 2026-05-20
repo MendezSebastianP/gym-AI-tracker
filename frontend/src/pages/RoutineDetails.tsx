@@ -49,6 +49,14 @@ export default function RoutineDetails() {
 	const [pendingFetchDay, setPendingFetchDay] = useState<number | undefined>(undefined);
 	const progressionSuggestions = useProgressionSuggestions(routine?.id ? Number(routine.id) : undefined, suggestionDayIndex);
 	const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
+	const [expandedNames, setExpandedNames] = useState<Set<string>>(new Set());
+	const toggleNameExpanded = (key: string) => {
+		setExpandedNames(prev => {
+			const next = new Set(prev);
+			if (next.has(key)) next.delete(key); else next.add(key);
+			return next;
+		});
+	};
 
 	// Trigger fetch when day index changes
 	React.useEffect(() => {
@@ -473,12 +481,28 @@ export default function RoutineDetails() {
 								</>
 							) : (
 								// Read-only view
-								day.exercises.map((ex: any, i: number) => (
+								day.exercises.map((ex: any, i: number) => {
+									const nameKey = `${dIndex}-${i}`;
+									const nameExpanded = expandedNames.has(nameKey);
+									return (
 									<div key={i} style={{ marginBottom: '8px' }}>
-										<div style={{ display: 'flex', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-											<span style={{ width: '24px', color: 'var(--text-tertiary)' }}>{i + 1}</span>
-											<div style={{ flex: 1, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-												{getExerciseName(ex)}
+										<div style={{ display: 'flex', alignItems: 'flex-start', color: 'var(--text-secondary)', fontSize: '14px', gap: '6px' }}>
+											<span style={{ width: '24px', color: 'var(--text-tertiary)', flexShrink: 0, paddingTop: '1px' }}>{i + 1}</span>
+											<div
+												onClick={(e) => { e.stopPropagation(); toggleNameExpanded(nameKey); }}
+												style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: nameExpanded ? 'wrap' : 'nowrap', cursor: 'pointer' }}
+											>
+												<span
+													style={{
+														overflow: nameExpanded ? 'visible' : 'hidden',
+														textOverflow: nameExpanded ? 'clip' : 'ellipsis',
+														whiteSpace: nameExpanded ? 'normal' : 'nowrap',
+														minWidth: 0,
+														wordBreak: 'break-word',
+													}}
+												>
+													{getExerciseName(ex)}
+												</span>
 												{getExerciseContext(ex)}
 											</div>
 											<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -578,7 +602,8 @@ export default function RoutineDetails() {
 											);
 										})()}
 									</div>
-								))
+								);
+								})
 							)}
 						</div>
 					</div>
@@ -618,6 +643,7 @@ function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, getExerciseC
 		transition,
 	} = useSortable({ id: ex._id });
 
+	const [nameExpanded, setNameExpanded] = useState(false);
 	const isCardio = typeof ex.reps === 'string' && isNaN(Number(ex.reps)) && ex.reps !== '';
 
 	const pillLabel = ex.weight_kg > 0
@@ -647,8 +673,21 @@ function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, getExerciseC
 				>
 					<GripVertical size={14} color="var(--text-tertiary)" />
 				</div>
-				<div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-					<span style={{ fontSize: '14px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+				<div
+					onClick={(e) => { e.stopPropagation(); setNameExpanded(v => !v); }}
+					style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: nameExpanded ? 'wrap' : 'nowrap', cursor: 'pointer' }}
+				>
+					<span
+						style={{
+							fontSize: '14px',
+							fontWeight: 700,
+							overflow: nameExpanded ? 'visible' : 'hidden',
+							textOverflow: nameExpanded ? 'clip' : 'ellipsis',
+							whiteSpace: nameExpanded ? 'normal' : 'nowrap',
+							wordBreak: 'break-word',
+							minWidth: 0,
+						}}
+					>
 						{getExerciseName(ex)}
 					</span>
 					{getExerciseContext && getExerciseContext(ex)}

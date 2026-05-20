@@ -231,3 +231,57 @@ class TestSets:
         r = client.get(f"/api/sessions/{session['id']}", headers=headers)
         assert r.status_code == 200
         assert len(r.json()["sets"]) == 2
+
+    def test_is_done_round_trips_on_set(self, client):
+        """is_done must persist on the set and come back via GET /sessions/{id}.
+
+        The mobile client's hydration path (ActiveSession's prefillSets server
+        fallback) relies on this — if is_done isn't preserved end-to-end, the
+        user's "done" marks vanish after iOS Safari evicts IndexedDB and reloads.
+        """
+        headers = register_and_login(client)
+        session = self._create_session(client, headers)
+        s = self._create_set(client, headers, session["id"], set_number=1, is_done=True)
+        assert s["is_done"] is True
+
+        # Round-trip via PUT
+        r = client.put(f"/api/sets/{s['id']}", json={"is_done": False}, headers=headers)
+        assert r.status_code == 200
+
+        # GET on the parent session should include the set with is_done=False
+        r2 = client.get(f"/api/sessions/{session['id']}", headers=headers)
+        assert r2.status_code == 200
+        sets = r2.json()["sets"]
+        assert len(sets) == 1
+        assert sets[0]["is_done"] is False
+
+    def test_locked_exercises_round_trips_on_session(self, client):
+        """locked_exercises (collapse state) must persist via PUT and come back via GET.
+
+        Frontend toggleCollapse marks the session syncStatus='updated' so the
+        change syncs and survives the next syncUserData pull. This test guards
+        the API contract that backs that behavior.
+        """
+        headers = register_and_login(client)
+        session = self._create_session(client, headers)
+
+        r = client.put(
+            f"/api/sessions/{session['id']}",
+            json={"locked_exercises": [10, 22, 33]},
+            headers=headers,
+        )
+        assert r.status_code == 200
+
+        r2 = client.get(f"/api/sessions/{session['id']}", headers=headers)
+        assert r2.status_code == 200
+        assert r2.json()["locked_exercises"] == [10, 22, 33]
+
+        # Clearing the list should also round-trip
+        r3 = client.put(
+            f"/api/sessions/{session['id']}",
+            json={"locked_exercises": []},
+            headers=headers,
+        )
+        assert r3.status_code == 200
+        r4 = client.get(f"/api/sessions/{session['id']}", headers=headers)
+        assert r4.json()["locked_exercises"] == []
