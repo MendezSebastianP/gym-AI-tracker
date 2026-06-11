@@ -13,8 +13,19 @@ http://kairos.sebmendez.dev {
         format json
     }
 
+    # ── Redirect plain-HTTP visitors to HTTPS ─────────────────────────────
+    # TLS terminates at Cloudflare; the visitor's original scheme arrives in
+    # X-Forwarded-Proto. /hooks/* is excluded so GitHub webhook deliveries
+    # (which do not follow redirects) keep working regardless of their URL.
+    @insecure {
+        header X-Forwarded-Proto http
+        not path /hooks/*
+    }
+    redir @insecure https://kairos.sebmendez.dev{uri} 301
+
     # ── Security headers on every response ───────────────────────────────
     header {
+        Strict-Transport-Security "max-age=15552000"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "strict-origin-when-cross-origin"
