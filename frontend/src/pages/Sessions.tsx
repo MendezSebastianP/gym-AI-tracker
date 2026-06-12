@@ -1,27 +1,39 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { Link, useNavigate } from 'react-router-dom';
-import { Zap, History, HelpCircle, User, Trash2, X } from 'lucide-react';
+import { HelpCircle, User, Trash2, X, Clock, ChevronRight, LayoutGrid, Rows3 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { K, Pencil, SecLabel } from '../components/kit';
 
+function sessionDurationMin(s: any): number {
+	if (s.duration_seconds != null && s.duration_seconds > 0) return Math.round(s.duration_seconds / 60);
+	if (s.started_at && s.completed_at) {
+		return Math.round((new Date(s.completed_at).getTime() - new Date(s.started_at).getTime()) / 60000);
+	}
+	return 0;
+}
+
+function daysAgo(dateStr: string): number {
+	return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000));
+}
 
 export default function Sessions() {
-	const { t } = useTranslation();
+	const { t, i18n } = useTranslation();
 	const navigate = useNavigate();
 	const [showHelp, setShowHelp] = useState(false);
 	const [selectedRoutineFilter, setSelectedRoutineFilter] = useState<number | 'others' | null>(null);
 	const [demoMode, setDemoMode] = useState(false);
 	const [demoSessions, setDemoSessions] = useState<any[]>([]);
+	const [overrideDayIndex, setOverrideDayIndex] = useState<number | null>(null);
+	const [historyView, setHistoryView] = useState<'grid' | 'list'>(
+		() => (localStorage.getItem('sessionsHistoryView') === 'list' ? 'list' : 'grid')
+	);
 
-	// Load routines to find favorite
 	const routines = useLiveQuery(() => db.routines.toArray());
-
-	// Load sessions for history and current status
 	const sessions = useLiveQuery(() => db.sessions.orderBy('started_at').reverse().toArray());
 
-	// Fetch demo sessions when demo mode is toggled on
 	useEffect(() => {
 		if (demoMode) {
 			api.get('/sessions/demo/history')
@@ -30,7 +42,7 @@ export default function Sessions() {
 		}
 	}, [demoMode]);
 
-	// Set default filter to favorite routine once routines load
+	// Default history filter = favorite routine
 	useEffect(() => {
 		if (!demoMode && routines && routines.length > 0 && selectedRoutineFilter === null) {
 			const nonArchived = routines.filter((r: any) => !r.archived_at);
@@ -39,44 +51,39 @@ export default function Sessions() {
 		}
 	}, [routines, selectedRoutineFilter, demoMode]);
 
-	const deleteSession = useCallback(async (sessionId: number) => {
-		if (demoMode) return;
-		if (!confirm(t('Are you sure you want to delete this session? This cannot be undone.'))) return;
+	const setView = (v: 'grid' | 'list') => {
+		setHistoryView(v);
+		localStorage.setItem('sessionsHistoryView', v);
+	};
 
-		try {
-			const session = await db.sessions.get(sessionId);
-			if (session && session.server_id) {
-				await api.delete(`/sessions/${session.server_id}`);
-			}
-		} catch (e) {
-			console.error("Failed to delete from server", e);
-		}
+	if (!routines || !sessions) {
+		return (
+			<div className="container">
+				<div className="mono" style={{ padding: '80px 0', textAlign: 'center', fontSize: 10.5, color: 'var(--text-4)' }}>
+					{t('Loading...')}
+				</div>
+			</div>
+		);
+	}
 
-		await db.sets.where('session_id').equals(sessionId).delete();
-		await db.sessions.delete(sessionId);
-	}, [t, demoMode]);
-
-	if (!routines || !sessions) return <div className="container">{t('Loading...')}</div>;
-
-	// Determine Active Routine (Favorite or First — skip archived)
+	// Active routine = favorite or first non-archived
 	const nonArchivedRoutines = routines.filter((r: any) => !r.archived_at);
 	const activeRoutine = nonArchivedRoutines.find((r: any) => r.is_favorite) || nonArchivedRoutines[0];
 
-	// Determine "Up Next"
-	let nextSessionCard = null;
+	// ── Up Next / Resume hero ──────────────────────────────────────────
+	let heroCard = null;
 	if (activeRoutine) {
 		const activeSession = sessions.find((s: any) => !s.completed_at && s.routine_id === activeRoutine.id);
 
 		if (activeSession) {
-			const dayName = activeRoutine.days[activeSession.day_index || 0]?.day_name || `Day ${(activeSession.day_index || 0) + 1}`;
+			const dayName = activeRoutine.days[activeSession.day_index || 0]?.day_name || `${t('Day')} ${(activeSession.day_index || 0) + 1}`;
 
 			const discardSession = async () => {
-				if (!confirm(t("Are you sure you want to discard your in-progress session?"))) return;
+				if (!confirm(t('Are you sure you want to discard your in-progress session?'))) return;
 				if (activeSession.server_id) {
 					try {
 						await api.delete(`/sessions/${activeSession.server_id}`);
 					} catch (e) {
-						// Queue delete for retry when back online
 						await db.syncQueue.add({
 							event_type: 'delete_session',
 							payload: { server_id: activeSession.server_id },
@@ -89,44 +96,56 @@ export default function Sessions() {
 				await db.sessions.delete(activeSession.id!);
 			};
 
-			nextSessionCard = (
-				<div className="card" style={{ borderLeft: '4px solid var(--accent)', background: 'linear-gradient(to right, rgba(0,255,255,0.05), transparent)' }}>
-					<h2 className="text-lg font-bold mb-2 flex items-center gap-2">
-						<Zap size={16} className="text-accent" />
-						{t('Resume Workout')}
-					</h2>
-					<div className="mb-4">
-						<div className="text-xl font-semibold">{activeRoutine.name}</div>
-						<div className="text-secondary">{dayName}</div>
-						<div className="text-xs text-tertiary mt-2">
-							Started {new Date(activeSession.started_at).toLocaleString()}
+			heroCard = (
+				<div className="hero-card">
+					<div className="grain" />
+					<div className="hero-body">
+						<div className="hero-eyebrow">
+							<span className="hero-bolt"><span className="elapsed"><span className="dot" /></span></span>
+							<span className="mono">{t('In progress')}</span>
 						</div>
-					</div>
-					<div className="flex gap-2">
-						<button onClick={() => navigate(`/sessions/${activeSession.id}`)} className="btn btn-primary flex-1 motion-btn motion-btn--cta">
-							{t('Resume Session')}
+						<h2 className="hero-title">{activeRoutine.name}</h2>
+						<div className="hero-row">
+							<span className="hero-meta">{dayName}</span>
+							<span className="hero-dot" />
+							<span className="hero-meta">
+								{t('Started')} {new Date(activeSession.started_at).toLocaleString(i18n.language, { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+							</span>
+						</div>
+						<button className="btn-primary hero-cta" onClick={() => navigate(`/sessions/${activeSession.id}`)}>
+							<K.bolt />{t('Resume Session')}
 						</button>
-						<button onClick={discardSession} className="btn btn-secondary flex-1 flex items-center justify-center gap-2 text-error" style={{ color: 'var(--error)', borderColor: 'var(--error)' }}>
-							<Trash2 size={16} />
-							{t('Discard')}
-
-						</button>
+						<div className="hero-foot">
+							<span className="last" />
+							<button className="hero-empty" onClick={discardSession} style={{ color: 'var(--danger)' }}>
+								<Trash2 size={14} />{t('Discard')}
+							</button>
+						</div>
 					</div>
 				</div>
 			);
-		} else {
+		} else if (activeRoutine.days && activeRoutine.days.length > 0) {
 			const completedSessions = sessions.filter((s: any) => s.completed_at && s.routine_id === activeRoutine.id);
 			const lastSession = completedSessions[0];
-			let nextDayIndex = 0;
-			if (activeRoutine.days && activeRoutine.days.length > 0) {
-				if (lastSession && typeof lastSession.day_index === 'number') {
-					nextDayIndex = (lastSession.day_index + 1) % activeRoutine.days.length;
-				}
+			let computedNext = 0;
+			if (lastSession && typeof lastSession.day_index === 'number') {
+				computedNext = (lastSession.day_index + 1) % activeRoutine.days.length;
 			}
-			const nextDay = activeRoutine.days?.[nextDayIndex];
+			const nextDayIndex = overrideDayIndex !== null && overrideDayIndex < activeRoutine.days.length
+				? overrideDayIndex
+				: computedNext;
+			const nextDay = activeRoutine.days[nextDayIndex];
+			const exCount = nextDay?.exercises?.length || 0;
+
+			// Estimated duration from this day's history
+			const dayHistory = completedSessions.filter((s: any) => (s.day_index || 0) === nextDayIndex).slice(0, 5);
+			const avgMin = dayHistory.length > 0
+				? Math.round(dayHistory.reduce((a: number, s: any) => a + sessionDurationMin(s), 0) / dayHistory.length)
+				: 0;
+
+			const previewNames: string[] = (nextDay?.exercises || []).slice(0, 3).map((e: any) => e.name || '').filter(Boolean);
 
 			const startSession = async () => {
-				if (!activeRoutine.days || activeRoutine.days.length === 0) return;
 				const id = await db.sessions.add({
 					user_id: activeRoutine.user_id,
 					routine_id: activeRoutine.id,
@@ -138,46 +157,90 @@ export default function Sessions() {
 				navigate(`/sessions/${id}`);
 			};
 
-			if (activeRoutine.days && activeRoutine.days.length > 0) {
-				nextSessionCard = (
-					<div className="card" style={{ borderLeft: '4px solid var(--primary)', background: 'linear-gradient(to right, rgba(204, 255, 0, 0.05), transparent)' }}>
-						<h2 className="text-lg font-bold mb-2 flex items-center gap-2">
-							<Zap size={16} className="text-primary" />
-							{t("Up Next")}
-						</h2>
-						<div className="mb-4">
-							<div className="text-sm text-primary uppercase tracking-wider mb-1">{activeRoutine.name}</div>
-							<div className="text-xl font-semibold mb-1">{nextDay?.day_name || `Day ${nextDayIndex + 1}`}</div>
-							<div className="text-sm text-secondary">{nextDay?.exercises.length || 0} {t('exercises')}</div>
+			const cycleDay = () => {
+				setOverrideDayIndex(((nextDayIndex + 1) % activeRoutine.days.length));
+			};
+
+			heroCard = (
+				<div className="hero-card">
+					<div className="grain" />
+					<div className="hero-body">
+						<div className="hero-eyebrow">
+							<span className="hero-bolt"><K.bolt /></span>
+							<span className="mono">{t('Up Next')}</span>
 						</div>
-						<button onClick={startSession} className="btn btn-primary w-full motion-btn">{t('Start Workout')}</button>
+						<h2 className="hero-title">{activeRoutine.name}</h2>
+						<div className="hero-row">
+							<button className="day-switch" onClick={cycleDay}>
+								{nextDay?.day_name || `${t('Day')} ${nextDayIndex + 1}`}
+								<K.updown />
+							</button>
+							<span className="hero-dot" />
+							<span className="hero-meta num">{exCount} {t('exercises')}</span>
+							{avgMin > 0 && (
+								<>
+									<span className="hero-dot" />
+									<span className="hero-meta num">~{avgMin} min</span>
+								</>
+							)}
+						</div>
+
+						{previewNames.length > 0 && (
+							<div className="hero-preview">
+								{previewNames.map((n, i) => (
+									<span key={i} className="ex-chip"><K.dumbbell />{n.split(' ').slice(0, 2).join(' ')}</span>
+								))}
+								{exCount > previewNames.length && (
+									<span className="ex-chip more">+{exCount - previewNames.length}</span>
+								)}
+							</div>
+						)}
+
+						<button className="btn-primary hero-cta" onClick={startSession}>
+							<K.bolt />{t('Start Workout')}
+						</button>
+
+						<div className="hero-foot">
+							<span className="last">
+								{lastSession
+									? `${t('Last')} · ${daysAgo(lastSession.completed_at!)}${t('d')} ${t('ago')}`
+									: t('First session of this routine')}
+							</span>
+						</div>
 					</div>
-				);
-			} else {
-				nextSessionCard = (
-					<div className="card text-center p-8 text-tertiary">{t('Routine has no days configured.')}</div>
-				);
-			}
+				</div>
+			);
+		} else {
+			heroCard = (
+				<div className="card" style={{ textAlign: 'center', padding: '28px 16px', color: 'var(--text-3)' }}>
+					{t('Routine has no days configured.')}
+				</div>
+			);
 		}
 	} else {
-		nextSessionCard = (
-			<div className="card" style={{ textAlign: 'center', padding: '32px 16px' }}>
-				<h3 className="text-lg font-semibold mb-2">{t('No active routine')}</h3>
-				<p className="text-secondary mb-4">{t('Create a routine to start tracking your workouts.')}</p>
-				<Link to="/routines/new" className="btn btn-primary motion-btn motion-btn--cta">{t('Create Routine')}</Link>
+		heroCard = (
+			<div className="hero-card">
+				<div className="grain" />
+				<div className="hero-body" style={{ textAlign: 'center', padding: '26px 18px 22px' }}>
+					<h3 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{t('No active routine')}</h3>
+					<p style={{ margin: '8px 0 0', fontSize: 13.5, color: 'var(--text-2)' }}>
+						{t('Create a routine to start tracking your workouts.')}
+					</p>
+					<Link to="/routines/new" className="btn-primary" style={{ marginTop: 16 }}>
+						{t('Create Routine')}
+					</Link>
+				</div>
 			</div>
 		);
 	}
 
-	// History
+	// ── History ────────────────────────────────────────────────────────
 	const historySessions = demoMode ? demoSessions : sessions.filter((s: any) => !!s.completed_at);
 
-	// Build routine filter options (only for normal mode)
 	const routineIds = new Set(historySessions.map((s: any) => s.routine_id));
 	const knownRoutineIds = new Set(routines.map((r: any) => r.id));
 	const hasOrphans = [...routineIds].some(id => !knownRoutineIds.has(id));
 
-	// Filter sessions by selected routine (skip in demo mode — show all)
 	let filteredSessions = historySessions;
 	if (!demoMode) {
 		if (selectedRoutineFilter === 'others') {
@@ -187,196 +250,227 @@ export default function Sessions() {
 		}
 	}
 
-	// Calculate routine cycles to alternate colors per cycle
-	const sessionCycleMap = new Map<number, number>();
-	if (filteredSessions.length > 0) {
-		const chronologicalSessions = [...filteredSessions].reverse();
-		let currentCycle = 0;
-		let lastDayIndex = -1;
-		for (const session of chronologicalSessions) {
-			const currentDayIndex = session.day_index || 0;
-			if (currentDayIndex <= lastDayIndex) {
-				currentCycle++;
-			}
-			sessionCycleMap.set(session.id!, currentCycle);
-			lastDayIndex = currentDayIndex;
+	// Group by month (newest first, input already sorted desc)
+	const monthGroups: { key: string; label: string; items: any[] }[] = [];
+	for (const s of filteredSessions) {
+		const d = new Date(s.completed_at!);
+		const key = `${d.getFullYear()}-${d.getMonth()}`;
+		let g = monthGroups[monthGroups.length - 1];
+		if (!g || g.key !== key) {
+			g = {
+				key,
+				label: d.toLocaleString(i18n.language, { month: 'short', year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined }),
+				items: [],
+			};
+			monthGroups.push(g);
 		}
+		g.items.push(s);
 	}
 
-	// Navigation for Sessions has been moved to routing.
+	const selectedRoutineName = selectedRoutineFilter === 'others'
+		? t('Others')
+		: nonArchivedRoutines.find((r: any) => r.id === selectedRoutineFilter)?.name
+			|| routines.find((r: any) => r.id === selectedRoutineFilter)?.name
+			|| t('All');
+
+	const openSession = (session: any, idx: number) => {
+		if (demoMode) return;
+		const routine = routines.find((r: any) => r.id === session.routine_id);
+		const n = filteredSessions.length - idx;
+		const routineSlug = encodeURIComponent(routine?.name || 'General');
+		navigate(`/sessions/${routineSlug}/${n}`);
+	};
+
+	const sessionMeta = (session: any) => {
+		const routine = demoMode ? null : routines.find((r: any) => r.id === session.routine_id);
+		const dayName = demoMode
+			? (session.day_name || `${t('Day')} ${(session.day_index || 0) + 1}`)
+			: (routine?.days[session.day_index || 0]?.day_name || `${t('Day')} ${(session.day_index || 0) + 1}`);
+		const date = new Date(session.completed_at!);
+		return {
+			dayName,
+			dayNum: date.getDate(),
+			monthShort: date.toLocaleString(i18n.language, { month: 'short' }),
+			dur: sessionDurationMin(session),
+			pendingSync: !demoMode && session.syncStatus !== 'synced',
+			dayParity: ((session.day_index || 0) % 2) + 1,
+		};
+	};
 
 	return (
-		<div className="container" style={{ paddingBottom: '80px' }}>
-			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
-				<h1 className="text-2xl font-bold">{t('Sessions')}</h1>
-				<button className="btn btn-ghost" onClick={() => setShowHelp(!showHelp)} style={{ padding: '4px' }}>
-					<HelpCircle size={18} color="var(--text-tertiary)" />
+		<div className="container">
+			<header className="page-hdr" style={{ alignItems: 'center' }}>
+				<div className="page-title">{t('Sessions')}</div>
+				<button className="icon-btn sm" onClick={() => setShowHelp(!showHelp)} aria-label={t('Help')}>
+					<HelpCircle size={18} />
 				</button>
-				<div style={{ marginLeft: 'auto' }}>
-					<button
-						onClick={() => { setDemoMode(!demoMode); }}
-						style={{
-							background: demoMode ? 'rgba(255, 215, 0, 0.15)' : 'transparent',
-							border: demoMode ? '1px solid rgba(255, 215, 0, 0.4)' : '1px solid rgba(255,255,255,0.1)',
-							borderRadius: '8px', padding: '6px', cursor: 'pointer',
-							display: 'flex', alignItems: 'center', justifyContent: 'center',
-							transition: 'all 0.2s'
-						}}
-						title={t('Toggle Demo Mode')}
-					>
-						<User size={18} color={demoMode ? '#FFD700' : 'var(--text-tertiary)'} />
-					</button>
-				</div>
-			</div>
+				<button
+					className={`icon-btn sm ${demoMode ? '' : ''}`}
+					onClick={() => setDemoMode(!demoMode)}
+					aria-label={t('Toggle Demo Mode')}
+					style={demoMode ? {
+						color: 'var(--reward)',
+						borderColor: 'color-mix(in oklab, var(--reward) 40%, transparent)',
+						background: 'color-mix(in oklab, var(--reward) 12%, transparent)',
+					} : undefined}
+				>
+					<User size={18} />
+				</button>
+			</header>
 
-			{demoMode && (
-				<div style={{
-					background: 'rgba(255, 215, 0, 0.08)',
-					border: '1px solid rgba(255, 215, 0, 0.25)',
-					borderRadius: '10px',
-					padding: '10px 14px',
-					marginBottom: '16px',
-					fontSize: '12px',
-					color: '#FFD700',
-					display: 'flex',
-					alignItems: 'center',
-					gap: '8px',
-					lineHeight: 1.4
-				}}>
-					<User size={14} />
-					{t('Demo mode — showing 16 months of PPL training history')}
+			{showHelp && (
+				<div className="coach" style={{ marginTop: 10, position: 'relative' }}>
+					<span className="badge"><HelpCircle size={15} /></span>
+					<div style={{ paddingRight: 18 }}>
+						<b>{t('How sessions work')}</b>
+						<p>
+							{t('A session is one workout. Your active routine determines what\'s "Up Next".')}{' '}
+							{t('Sessions cycle through each day of your routine automatically.')}{' '}
+							{t('If you have an unfinished session, you can resume or discard it.')}{' '}
+							{t('Completed sessions appear in the History below.')}
+						</p>
+					</div>
+					<button
+						onClick={() => setShowHelp(false)}
+						style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}
+						aria-label={t('Close')}
+					>
+						<X size={14} />
+					</button>
 				</div>
 			)}
 
-			{showHelp && (
-				<div style={{
-					background: 'var(--bg-tertiary)',
-					padding: '12px 16px',
-					borderRadius: '8px',
-					fontSize: '13px',
-					color: 'var(--text-secondary)',
-					border: '1px solid rgba(99, 102, 241, 0.3)',
-					marginBottom: '16px',
-					lineHeight: '1.6',
-					position: 'relative'
-				}}>
-					<button onClick={() => setShowHelp(false)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
-						<X size={14} />
-					</button>
-					<strong style={{ color: 'var(--text-primary)' }}>{t('How sessions work')}</strong><br />
-					{t('A session is one workout. Your active routine determines what\'s "Up Next".')}<br />
-					{t('Sessions cycle through each day of your routine automatically.')}<br />
-					{t('If you have an unfinished session, you can resume or discard it.')}<br />
-					{t('Completed sessions appear in the History below.')}
+			{demoMode && (
+				<div
+					className="coach"
+					style={{
+						marginTop: 10,
+						borderColor: 'color-mix(in oklab, var(--reward) 30%, transparent)',
+						background: 'color-mix(in oklab, var(--reward) 7%, var(--card-solid))',
+					}}
+				>
+					<span className="badge" style={{ background: 'color-mix(in oklab, var(--reward) 16%, transparent)', color: 'var(--reward)' }}>
+						<User size={14} />
+					</span>
+					<div>
+						<b style={{ color: 'var(--reward)' }}>{t('Demo mode')}</b>
+						<p>{t('Demo mode — showing 16 months of PPL training history')}</p>
+					</div>
 				</div>
 			)}
 
 			{!demoMode && (
 				<>
-					<h3 className="section-title text-sm font-semibold text-secondary uppercase tracking-wider mb-3 px-1">{t('Current')}</h3>
-					{nextSessionCard}
+					<SecLabel>{t('Current')}</SecLabel>
+					{heroCard}
 				</>
 			)}
 
-			{/* History Section */}
-			<h3 className="section-title text-sm font-semibold text-secondary uppercase tracking-wider mb-3 mt-8 px-1 flex items-center gap-2">
-				<History size={16} />
-				{t('History')}
-			</h3>
+			<SecLabel>{t('History')} · {filteredSessions.length}</SecLabel>
 
 			{historySessions.length === 0 ? (
-				<div className="text-center text-tertiary py-8 text-sm">
-					{t('No completed sessions yet.')}
-				</div>
+				<div className="topmark" style={{ padding: '24px 0' }}>{t('No completed sessions yet.')}</div>
 			) : (
 				<>
-					{/* Routine filter dropdown */}
-					{!demoMode && <select
-						value={selectedRoutineFilter === 'others' ? 'others' : (selectedRoutineFilter ?? '')}
-						onChange={e => {
-							const val = e.target.value;
-							if (val === 'others') setSelectedRoutineFilter('others');
-							else setSelectedRoutineFilter(Number(val));
-						}}
-						style={{
-							width: '100%', padding: '10px 12px', borderRadius: '8px',
-							background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-							border: '1px solid #444', fontSize: '14px', marginBottom: '16px', outline: 'none'
-						}}
-					>
-						{nonArchivedRoutines
-							.filter((r: any) => routineIds.has(r.id))
-							.map((r: any) => (
-								<option key={r.id} value={r.id}>{r.name}</option>
-							))
-						}
-						{hasOrphans && <option value="others">{t('Others')}</option>}
-					</select>}
-
-					{/* Compact 3-per-row session tabs */}
-					{filteredSessions.length === 0 ? (
-						<div className="text-center text-tertiary py-6 text-sm">
-							{t('No sessions for this routine.')}
+					<div className="filter-row">
+						{!demoMode && (
+							<div className="routine-select">
+								<span className="rs-ic"><K.dumbbell width={16} height={16} /></span>
+								<span className="rs-name">{selectedRoutineName}</span>
+								<span className="rs-chev"><K.updown /></span>
+								<select
+									value={selectedRoutineFilter === 'others' ? 'others' : (selectedRoutineFilter ?? '')}
+									onChange={e => {
+										const val = e.target.value;
+										if (val === 'others') setSelectedRoutineFilter('others');
+										else setSelectedRoutineFilter(Number(val));
+									}}
+									aria-label={t('Filter by routine')}
+								>
+									{nonArchivedRoutines
+										.filter((r: any) => routineIds.has(r.id))
+										.map((r: any) => (
+											<option key={r.id} value={r.id}>{r.name}</option>
+										))}
+									{hasOrphans && <option value="others">{t('Others')}</option>}
+								</select>
+							</div>
+						)}
+						<div className="view-toggle" style={demoMode ? { marginLeft: 'auto' } : undefined}>
+							<button className={historyView === 'grid' ? 'on' : ''} onClick={() => setView('grid')} aria-label={t('Grid view')}>
+								<LayoutGrid size={17} />
+							</button>
+							<button className={historyView === 'list' ? 'on' : ''} onClick={() => setView('list')} aria-label={t('List view')}>
+								<Rows3 size={17} />
+							</button>
 						</div>
+					</div>
+
+					{filteredSessions.length === 0 ? (
+						<div className="topmark" style={{ padding: '18px 0' }}>{t('No sessions for this routine.')}</div>
 					) : (
 						<>
-							<div style={{
-								display: 'grid',
-								gridTemplateColumns: 'repeat(3, 1fr)',
-								gap: '8px',
-								marginBottom: '16px'
-							}}>
-								{filteredSessions.map((session: any, idx: number) => {
-									const cycleIndex = sessionCycleMap.get(session.id!) || 0;
-									const isDarkCycle = cycleIndex % 2 === 1;
-									const baseBg = isDarkCycle ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.02)';
-									const isPendingSync = !demoMode && session.syncStatus !== 'synced';
+							{monthGroups.map(group => (
+								<div key={group.key}>
+									<div className="mini-divider">
+										<span className="m-month">{group.label}</span>
+										<span className="m-count num">{group.items.length}</span>
+										<span className="m-line" />
+									</div>
 
-									const date = new Date(session.completed_at!);
-									const dayNum = date.getDate();
-									const monthShort = date.toLocaleString(undefined, { month: 'short' });
-									const routine = routines.find((r: any) => r.id === session.routine_id);
-									const dayName = demoMode
-										? (session.day_name || `D${(session.day_index || 0) + 1}`)
-										: (routine?.days[session.day_index || 0]?.day_name || `D${(session.day_index || 0) + 1}`);
-
-									return (
-										<button
-											key={session.id}
-											onClick={() => {
-												if (!demoMode) {
-													const n = filteredSessions.length - idx;
-													const routineSlug = encodeURIComponent(routine?.name || 'General');
-													navigate(`/sessions/${routineSlug}/${n}`);
-												}
-											}}
-											style={{
-												padding: '10px 6px',
-												borderRadius: '10px',
-												border: '1px solid var(--overlay-medium)',
-												background: baseBg,
-												cursor: demoMode ? 'default' : 'pointer',
-												textAlign: 'center',
-												transition: 'all 0.15s ease',
-												position: 'relative',
-											}}
-										>
-											{isPendingSync && <span style={{ position: 'absolute', top: '4px', right: '4px', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--warning, #f59e0b)' }} />}
-											<div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-												{dayNum}
-											</div>
-											<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>
-												{monthShort}
-											</div>
-											<div style={{
-												fontSize: '10px', color: 'var(--text-secondary)',
-												marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-											}}>
-												{dayName}
-											</div>
-										</button>
-									);
-								})}
+									{historyView === 'grid' ? (
+										<div className="month-grid">
+											{group.items.map((session: any) => {
+												const idx = filteredSessions.indexOf(session);
+												const m = sessionMeta(session);
+												return (
+													<button key={session.id} className="sess-card" onClick={() => openSession(session, idx)}>
+														<span className={`daybar d${m.dayParity}`} />
+														{m.pendingSync && <span className="sess-sync" title={t('Pending sync')} />}
+														<div className="sess-date num">{m.dayNum}</div>
+														<div className="sess-month">{m.monthShort}</div>
+														<div className="sess-day">{m.dayName}</div>
+														{m.dur > 0 && (
+															<div className="sess-foot">
+																<Clock size={11} style={{ color: 'var(--text-4)' }} />
+																<span className="dur num">{m.dur}m</span>
+															</div>
+														)}
+													</button>
+												);
+											})}
+										</div>
+									) : (
+										<div className="month-list">
+											{group.items.map((session: any) => {
+												const idx = filteredSessions.indexOf(session);
+												const m = sessionMeta(session);
+												return (
+													<button key={session.id} className="sess-li" onClick={() => openSession(session, idx)}>
+														<div className="li-date">
+															<b className="num">{m.dayNum}</b>
+															<span>{m.monthShort}</span>
+														</div>
+														<div className="li-main">
+															<div className="li-day">{m.dayName}</div>
+															<div className="li-meta num">
+																{m.dur > 0 ? `${m.dur} min` : '—'}
+																{m.pendingSync ? ` · ${t('Pending sync')}` : ''}
+															</div>
+														</div>
+														<div className="li-tail"><ChevronRight size={16} /></div>
+													</button>
+												);
+											})}
+										</div>
+									)}
+								</div>
+							))}
+							<div style={{ height: 4 }} />
+							<div className="sec-label" style={{ margin: '14px 2px 4px' }}>
+								<Pencil />
+								<span className="mono">{t("That's everything")} · {filteredSessions.length}</span>
+								<Pencil />
 							</div>
 						</>
 					)}

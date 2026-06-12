@@ -5,16 +5,17 @@ import { api } from '../api/client';
 import { db } from '../db/schema';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ExercisePicker from '../components/ExercisePicker';
-import { Plus, Trash, Trash2, Wand2, GripVertical, Pencil, Bot, RefreshCw, ArrowRight } from 'lucide-react';
+import GenLoader from '../components/GenLoader';
+import { Plus, Trash2, GripVertical, Pencil as PencilIcon, RefreshCw, ArrowRight, Check } from 'lucide-react';
 import ExerciseSuggestions from '../components/ExerciseSuggestions';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
 import HybridNumber from '../components/HybridNumber';
-import CoinIcon from '../components/icons/CoinIcon';
 import { useAuthStore } from '../store/authStore';
 import { getCoinRecoveryTarget } from '../utils/coinRecovery';
+import { K, Coin } from '../components/kit';
 
 export default function CreateRoutine() {
 	const { user, updateUser } = useAuthStore();
@@ -45,8 +46,9 @@ export default function CreateRoutine() {
 
 	// AI State
 	const [aiExtraPrompt, setAiExtraPrompt] = useState('');
-	const [loading, setLoading] = useState(false);
-	const [finishingLoading, setFinishingLoading] = useState(false);
+	const [genPhase, setGenPhase] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+	const genRun = useRef(0);
+	const pendingRoutine = useRef<{ routine: any; enrichedDays: any[] } | null>(null);
 	const [aiError, setAiError] = useState<string | null>(null);
 	const [isAiGenerated, setIsAiGenerated] = useState(() => {
 		return localStorage.getItem('draftRoutineIsAi') === 'true';
@@ -141,8 +143,6 @@ export default function CreateRoutine() {
 		}, 5000);
 	};
 
-
-
 	const navigate = useNavigate();
 	const { t } = useTranslation();
 
@@ -174,19 +174,19 @@ export default function CreateRoutine() {
 	};
 
 	const handleSave = async () => {
-		if (!name) return alert('Name is required');
+		if (!name) return alert(t('Name is required'));
 
 		const routineData = { name, days, ai_usage_id: aiUsageId };
 
-			try {
-				if (navigator.onLine) {
-					const res = await api.post('/routines', routineData);
-					// Sync back to local DB? usually happen via sync logic, but we can optimistically add
-					await db.routines.put({ ...res.data, syncStatus: 'synced' });
-					const me = await api.get('/auth/me');
-					updateUser(me.data);
-					await db.users.put(me.data).catch(() => {});
-				} else {
+		try {
+			if (navigator.onLine) {
+				const res = await api.post('/routines', routineData);
+				// Sync back to local DB? usually happen via sync logic, but we can optimistically add
+				await db.routines.put({ ...res.data, syncStatus: 'synced' });
+				const me = await api.get('/auth/me');
+				updateUser(me.data);
+				await db.users.put(me.data).catch(() => {});
+			} else {
 				// Offline save
 				await db.routines.add({ ...routineData, user_id: 0, syncStatus: 'created' } as any);
 				// Add to sync queue
@@ -206,22 +206,19 @@ export default function CreateRoutine() {
 
 			navigate('/routines');
 		} catch (e) {
-			alert('Error creating routine');
+			alert(t('Error creating routine'));
 		}
 	};
 
 	const generateAI = async () => {
-		setLoading(true);
+		const run = ++genRun.current;
+		setGenPhase('loading');
 		setAiError(null);
 		try {
 			const res = await api.post('/ai/generate-routine', {
 				extra_prompt: aiExtraPrompt || undefined,
 			});
 			const routine = res.data;
-			setName(routine.name || 'AI Routine');
-			if (routine.coach_message) {
-				setAiCoachMessage(routine.coach_message);
-			}
 			// Add _id and resolve exercise names from local DB
 			const enrichedDays = await Promise.all(
 				(routine.days || []).map(async (day: any) => ({
@@ -252,15 +249,11 @@ export default function CreateRoutine() {
 					),
 				}))
 			);
-			setDays(enrichedDays);
-			setIsAiGenerated(true);
-			setAiUsageId(routine.ai_usage_id);
-			setMode('manual');
-
-			setFinishingLoading(true);
-			await new Promise(r => setTimeout(r, 400));
-			if (routine.currency !== undefined) setCoinBalance(routine.currency);
+			if (genRun.current !== run) return; // cancelled meanwhile
+			pendingRoutine.current = { routine, enrichedDays };
+			setGenPhase('done');
 		} catch (e: any) {
+			if (genRun.current !== run) return;
 			const detail = e?.response?.data?.detail || e?.message || 'Unknown error';
 			if (e?.response?.status === 402) {
 				setAiError(t('Not enough coins.'));
@@ -271,10 +264,25 @@ export default function CreateRoutine() {
 			} else {
 				setAiError(detail);
 			}
-		} finally {
-			setLoading(false);
-			setFinishingLoading(false);
+			setGenPhase('error');
 		}
+	};
+
+	const applyGenerated = () => {
+		const p = pendingRoutine.current;
+		setGenPhase('idle');
+		if (!p) return;
+		pendingRoutine.current = null;
+		const routine = p.routine;
+		setName(routine.name || 'AI Routine');
+		if (routine.coach_message) {
+			setAiCoachMessage(routine.coach_message);
+		}
+		setDays(p.enrichedDays);
+		setIsAiGenerated(true);
+		setAiUsageId(routine.ai_usage_id);
+		if (routine.currency !== undefined) setCoinBalance(routine.currency);
+		setMode('manual');
 	};
 
 	const toggleSelectExercise = (exerciseUid: string) => {
@@ -413,310 +421,247 @@ export default function CreateRoutine() {
 		navigate('/');
 	};
 
+	// ── AI generation overlay ──
+	if (genPhase !== 'idle') {
+		const p = pendingRoutine.current;
+		const doneSub = p
+			? `${p.enrichedDays.length} ${t('days')} · ${p.enrichedDays.reduce((a: number, d: any) => a + d.exercises.length, 0)} ${t('exercises')}`
+			: '';
+		return (
+			<GenLoader
+				variant="routine"
+				status={genPhase === 'loading' ? 'loading' : genPhase === 'done' ? 'done' : 'error'}
+				doneTitle={t('Routine ready')}
+				doneSub={doneSub}
+				errorText={aiError}
+				onDone={applyGenerated}
+				onRetry={generateAI}
+				onCancel={() => { genRun.current++; setGenPhase('idle'); }}
+			/>
+		);
+	}
+
+	// ── Mode: pick AI vs manual ──
 	if (mode === 'select') {
 		return (
-			<div className="container fade-in" style={{ paddingBottom: '80px' }}>
-				<style>{`
-					@keyframes wizardGlow {
-						0%, 100% { box-shadow: 0 0 20px rgba(204,255,0,0.15), 0 0 40px rgba(204,255,0,0.07); }
-						50% { box-shadow: 0 0 32px rgba(204,255,0,0.30), 0 0 64px rgba(204,255,0,0.13); }
-					}
-					@keyframes wandSpin {
-						0% { transform: rotate(-10deg) scale(1); }
-						50% { transform: rotate(10deg) scale(1.15); }
-						100% { transform: rotate(-10deg) scale(1); }
-					}
-					@keyframes sparkFloat {
-						0% { transform: translateY(0) rotate(0deg); opacity: 0.5; }
-						50% { transform: translateY(-7px) rotate(20deg); opacity: 1; }
-						100% { transform: translateY(0) rotate(0deg); opacity: 0.5; }
-					}
-					@keyframes shimmerWizard {
-						0% { background-position: -200% 0; }
-						100% { background-position: 200% 0; }
-					}
-					@keyframes wizardBtnPulse {
-						0%, 100% { box-shadow: 0 0 0 0 rgba(204,255,0,0.5); }
-						50% { box-shadow: 0 0 0 8px rgba(204,255,0,0); }
-					}
-				`}</style>
-				<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-					<h1>{t('Create Routine')}</h1>
+			<div className="container">
+				<header className="page-hdr" style={{ alignItems: 'center' }}>
+					<span className="page-title" style={{ fontSize: 30 }}>{t('Create Routine')}</span>
 					{isOnboarding && (
-						<button className="btn btn-ghost" onClick={handleSkip}>
-							{t('Skip')}
-						</button>
+						<button className="flow-cancel" onClick={handleSkip}>{t('Skip')}</button>
 					)}
-				</div>
-				<div style={{ display: 'grid', gap: '16px' }}>
-					{/* AI Wizard — hero card */}
-					<button
-						onClick={() => setMode('ai')}
-						className="motion-btn motion-btn--ai"
-						style={{
-							textAlign: 'left', cursor: 'pointer', border: 'none', padding: 0, background: 'none', width: '100%',
-						}}
-					>
-						<div style={{
-							background: 'linear-gradient(135deg, rgba(204,255,0,0.1) 0%, rgba(0,230,120,0.06) 100%)',
-							border: '1px solid rgba(204,255,0,0.35)',
-							borderRadius: '18px',
-							padding: '28px 24px',
-							position: 'relative',
-							overflow: 'hidden',
-							animation: 'wizardGlow 4s ease-in-out infinite',
-						}}>
-							{/* Shimmer overlay */}
-							<div style={{
-								position: 'absolute', inset: 0, pointerEvents: 'none',
-								background: 'linear-gradient(105deg, transparent 40%, rgba(204,255,0,0.05) 50%, transparent 60%)',
-								backgroundSize: '200% 100%', animation: 'shimmerWizard 5s linear infinite',
-							}} />
-							{/* Sparkles */}
-							<div style={{ position: 'absolute', top: '16px', right: '20px', animation: 'sparkFloat 2.8s ease-in-out infinite' }}>
-								<Wand2 size={20} color="rgba(204,255,0,0.4)" style={{ animation: 'wandSpin 3s ease-in-out infinite' }} />
-							</div>
-							<div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-								<div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(204,255,0,0.12)', display: 'flex' }}>
-									<Wand2 size={24} color="var(--primary)" />
-								</div>
-								<h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--primary)' }}>
-									{t('AI Wizard')}
-								</h3>
-							</div>
-							<p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5, margin: '0 0 20px' }}>
-								{t('Generate a personalized routine based on your profile and goals.')}
-							</p>
-							<div style={{
-								padding: '12px 20px', borderRadius: '10px', background: 'var(--primary)',
-								color: '#000', fontWeight: 800, fontSize: '14px', textAlign: 'center',
-								animation: 'wizardBtnPulse 2.5s ease-in-out infinite',
-								display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-							}}>
-								<Wand2 size={16} /> {t('Generate with AI')}
-								<span style={{ marginLeft: '4px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,0,0,0.15)', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-									<CoinIcon size={12} style={{ color: 'var(--gold)' }} /> 50
-								</span>
-							</div>
-						</div>
-					</button>
+				</header>
 
-					<button className="card motion-btn motion-btn--cta motion-btn--soft" onClick={() => setMode('manual')} style={{ textAlign: 'left', cursor: 'pointer' }}>
-						<h3 style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-							<Plus size={20} /> {t('Manual Builder')}
-						</h3>
-						<p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '14px' }}>
-							{t('Build your routine from scratch, exercise by exercise.')}
-						</p>
-					</button>
+				<div className="wiz">
+					<span className="wiz-spark"><K.sparkBig /></span>
+					<div className="wiz-body">
+						<div className="wiz-head">
+							<span className="wiz-badge"><K.spark width={18} height={18} /></span>
+							<span className="wiz-title">{t('AI Wizard')}</span>
+						</div>
+						<p className="wiz-desc">{t('Generate a personalized routine based on your profile and goals.')}</p>
+						<button className="btn-primary wiz-cta" onClick={() => setMode('ai')}>
+							<K.spark />{t('Generate with AI')}
+							<span className="credit"><Coin size={13} />50</span>
+						</button>
+					</div>
 				</div>
+
+				<button className="opt-card" onClick={() => setMode('manual')}>
+					<div className="opt-head">
+						<span className="opt-ic"><Plus size={17} /></span>
+						<span className="opt-title">{t('Manual Builder')}</span>
+					</div>
+					<p className="opt-desc">{t('Build your routine from scratch, exercise by exercise.')}</p>
+				</button>
 			</div>
 		);
 	}
 
-	if (loading) return (
-		<div className="container fade-in" style={{ justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: '16px' }}>
-			<Wand2 size={48} style={{ color: 'var(--primary)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-
-			<h2 style={{ fontSize: '18px', fontWeight: 'bold', marginTop: '16px' }}>{t('Generating your personalized routine...')}</h2>
-			<p style={{ color: 'var(--text-tertiary)', fontSize: '14px' }}>{t('This may take a few seconds')}</p>
-
-			<style>
-				{`
-				@keyframes fakeProgress {
-					0% { width: 0%; }
-					10% { width: 30%; }
-					40% { width: 70%; }
-					100% { width: 95%; }
-				}
-			`}
-			</style>
-			<div style={{ width: '80%', height: '6px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden', marginTop: '16px', marginInline: 'auto' }}>
-				<div style={{
-					height: '100%',
-					backgroundColor: 'var(--primary)',
-					animation: finishingLoading ? 'none' : 'fakeProgress 12s cubic-bezier(0.1, 0.8, 0.2, 1) forwards',
-					width: finishingLoading ? '100%' : '0%',
-					transition: finishingLoading ? 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)' : 'none'
-				}} />
-			</div>
-		</div>
-	);
-
 	return (
-		<div className="container fade-in" style={{ paddingBottom: '96px' }}>
-			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-				<h1>{mode === 'ai' ? t('AI Setup') : t('New Routine')}</h1>
-				<button className="btn btn-ghost" onClick={handleCancel}>{t('Cancel')}</button>
-			</div>
+		<div className="container" style={{ paddingBottom: 96 }}>
+			<header className="page-hdr" style={{ alignItems: 'center' }}>
+				<span className="page-title" style={{ fontSize: mode === 'ai' ? 30 : 25 }}>
+					{mode === 'ai' ? t('AI Setup') : t('New Routine')}
+				</span>
+				<button className="flow-cancel" onClick={handleCancel}>{t('Cancel')}</button>
+			</header>
 
 			{mode === 'ai' ? (
-				<div className="card">
-					<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-						<Wand2 size={20} style={{ color: 'var(--primary)' }} />
-						<h3 style={{ fontSize: '16px', fontWeight: 'bold' }}>{t('AI Routine Generator')}</h3>
-					</div>
-					<p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '16px', lineHeight: '1.5' }}>
-						{t('We\'ll use your profile and training context to generate a routine. Optionally add specific instructions below.')}
-					</p>
-					{hasContext === false && (
-						<div style={{ background: 'rgba(204, 255, 0, 0.08)', border: '1px solid rgba(204, 255, 0, 0.2)', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-							{t('Your Training Context isn\'t configured yet. The AI will generate a generic routine.')}{' '}
-							<a href="/settings/questionnaire" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>{t('Configure')}</a>
+				<>
+					<div className="ai-panel">
+						<div className="pn-head">
+							<span className="pn-spark"><K.spark width={17} height={17} /></span>
+							<span className="pn-title">{t('AI Routine Generator')}</span>
 						</div>
-					)}
-					<div className="input-group">
-						<label className="label">{t('Additional instructions (optional)')}</label>
+						<p>{t('We\'ll use your profile and training context to generate a routine. Optionally add specific instructions below.')}</p>
+
+						{hasContext === false && (
+							<p style={{ color: 'var(--text-2)' }}>
+								{t('Your Training Context isn\'t configured yet. The AI will generate a generic routine.')}{' '}
+								<a href="/settings/questionnaire" style={{ color: 'var(--lime)', textDecoration: 'underline', textUnderlineOffset: 2, fontWeight: 600 }}>
+									{t('Configure')}
+								</a>
+							</p>
+						)}
+
+						<div className="ai-ta-label">{t('Additional instructions (optional)')}</div>
 						<textarea
-							className="input"
-							style={{ minHeight: '100px', padding: '12px', resize: 'vertical' }}
-							placeholder={t('e.g., I want supersets to save time, focus on calves, include a deload week...')}
+							className="ai-ta"
+							maxLength={500}
 							value={aiExtraPrompt}
 							onChange={e => setAiExtraPrompt(e.target.value)}
-							maxLength={500}
+							placeholder={t('e.g., I want supersets to save time, focus on calves, include a deload week...')}
 						/>
-						<span style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'right', marginTop: '4px' }}>
-							{aiExtraPrompt.length}/500
-						</span>
+						<div className="ai-count num">{aiExtraPrompt.length}/500</div>
 					</div>
+
 					{aiError && (
-						<div style={{ padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(255,0,0,0.1)', color: 'var(--error)', fontSize: '13px', marginBottom: '12px' }}>
-							{aiError}
+						<div
+							className="coach"
+							style={{
+								marginTop: 12,
+								borderColor: 'color-mix(in oklab, var(--danger) 35%, transparent)',
+								background: 'color-mix(in oklab, var(--danger) 7%, var(--card-solid))',
+							}}
+						>
+							<span className="badge" style={{ background: 'color-mix(in oklab, var(--danger) 16%, transparent)', color: 'var(--danger)' }}>!</span>
+							<div><b style={{ color: 'var(--danger)' }}>{t('Generation failed')}</b><p>{aiError}</p></div>
 						</div>
 					)}
+
 					{coinBalance !== null && coinBalance < 50 && (
-						<div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,0,0,0.08)', color: 'var(--error)', fontSize: '12px', marginBottom: '12px', textAlign: 'center', display: 'grid', gap: '10px' }}>
-							<div>{t('Need 50 coins, you have')} {coinBalance}</div>
-							<div style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-								{coinRecoveryTarget.helper}
+						<div className="card" style={{ marginTop: 12, marginBottom: 0, textAlign: 'center' }}>
+							<div style={{ fontWeight: 700, fontSize: 14.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+								<Coin size={16} />
+								{t('Need 50 coins, you have')} <span className="num" style={{ color: 'var(--reward)' }}>{coinBalance}</span>
 							</div>
+							<p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--text-2)' }}>
+								{coinRecoveryTarget.helper}
+							</p>
 							<button
 								type="button"
-								className="btn btn-ghost motion-btn motion-btn--ai motion-btn--soft is-low-coins"
-								style={{ justifySelf: 'center', display: 'inline-flex', alignItems: 'center', gap: '8px', border: '1px solid rgba(255,255,255,0.08)', padding: '8px 12px' }}
+								className="tool-chip"
+								style={{ margin: '12px auto 0' }}
 								onClick={() => navigate(coinRecoveryTarget.to)}
 							>
-								<span>{coinRecoveryTarget.label}</span>
+								{coinRecoveryTarget.label}
 								<ArrowRight size={14} />
 							</button>
 						</div>
 					)}
+
 					<button
-						className={`btn btn-primary motion-btn motion-btn--ai ${loading ? 'is-loading' : ''}`.trim()}
-						style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (coinBalance !== null && coinBalance < 50) ? 0.5 : 1 }}
+						className="btn-primary"
+						style={{ width: '100%', marginTop: 16, opacity: (coinBalance !== null && coinBalance < 50) ? 0.5 : 1 }}
 						onClick={generateAI}
-						disabled={loading || (coinBalance !== null && coinBalance < 50)}
+						disabled={coinBalance !== null && coinBalance < 50}
 					>
-						<Wand2 size={18} /> {t('Generate Routine')}
-						<span style={{ marginLeft: '4px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,0,0,0.15)', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-							<CoinIcon size={12} /> 50
-						</span>
+						<K.spark />{t('Generate Routine')}
+						<span className="credit"><Coin size={13} />50</span>
 					</button>
-				</div>
+				</>
 			) : (
 				<>
 					{isAiGenerated && (
-						<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', borderRadius: '8px', backgroundColor: 'rgba(204,255,0,0.08)', border: '1px solid rgba(204,255,0,0.2)', marginBottom: '16px', fontSize: '13px', color: 'var(--primary)' }}>
-							<Wand2 size={16} />
-							{t('AI-generated suggestion — tap exercises to swap them')}
-						</div>
-					)}
-
-					{/* AI Coach Feedback Message */}
-					{isAiGenerated && aiCoachMessage && (
-						<div style={{
-							padding: '16px',
-							borderRadius: '8px',
-							backgroundColor: 'var(--bg-card)',
-							border: '1px solid var(--border)',
-							marginBottom: '16px',
-							display: 'flex',
-							flexDirection: 'column',
-							gap: '12px'
-						}}>
-							<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', fontSize: '14px' }}>
-								<span style={{ display: 'inline-flex' }}><Bot size={18} color="var(--primary)" /></span> {t('AI Coach Note')}
+						<div className="coach" style={{ marginBottom: 12 }}>
+							<span className="badge"><K.spark width={15} height={15} /></span>
+							<div>
+								<b>{t('AI-generated suggestion — tap exercises to swap them')}</b>
+								{aiCoachMessage && <p>{aiCoachMessage}</p>}
 							</div>
-							<p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-								{aiCoachMessage}
-							</p>
 						</div>
 					)}
 
 					{/* AI Refinement Bar */}
 					{isAiGenerated && selectedForReplace.size > 0 && (
-						<div style={{
-							padding: '12px 16px',
-							borderRadius: '8px',
-							backgroundColor: 'rgba(255,165,0,0.08)',
-							border: '1px solid rgba(255,165,0,0.3)',
-							marginBottom: '16px',
-							display: 'flex',
-							flexDirection: 'column',
-							gap: '8px'
-						}}>
-							<span style={{ fontSize: '13px', color: 'var(--warning, orange)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-								<RefreshCw size={14} /> {selectedForReplace.size} exercise{selectedForReplace.size > 1 ? 's' : ''} selected for replacement
+						<div
+							className="card"
+							style={{
+								marginBottom: 12,
+								borderColor: 'color-mix(in oklab, var(--reward) 40%, transparent)',
+								background: 'color-mix(in oklab, var(--reward) 6%, var(--card-solid))',
+							}}
+						>
+							<span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--reward)', display: 'flex', alignItems: 'center', gap: 7 }}>
+								<RefreshCw size={14} />
+								{selectedForReplace.size} {t(selectedForReplace.size > 1 ? 'exercises selected for replacement' : 'exercise selected for replacement')}
 							</span>
-							<input
-								className="input"
-								placeholder={t('e.g. "Use machines instead" or "I have a shoulder injury"')}
-								value={replacePrompt}
-								onChange={e => setReplacePrompt(e.target.value)}
-								style={{ fontSize: '13px' }}
-							/>
-							<div style={{ display: 'flex', gap: '8px' }}>
+							<div className="field" style={{ marginTop: 10 }}>
+								<input
+									placeholder={t('e.g. "Use machines instead" or "I have a shoulder injury"')}
+									value={replacePrompt}
+									onChange={e => setReplacePrompt(e.target.value)}
+									style={{ marginTop: 0, fontSize: 14 }}
+								/>
+							</div>
+							<div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
 								<button
-									className="btn btn-ghost"
-									style={{ flex: 1, fontSize: '13px' }}
+									className="tool-chip"
+									style={{ flex: 1, justifyContent: 'center' }}
 									onClick={() => { setSelectedForReplace(new Set()); setReplacePrompt(''); }}
 								>
 									{t('Cancel')}
 								</button>
 								<button
-									className="btn btn-primary"
-									style={{ flex: 1, fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+									className="tool-chip on"
+									style={{ flex: 1, justifyContent: 'center' }}
 									onClick={replaceSelected}
 									disabled={replacing}
 								>
-									<Wand2 size={14} /> {replacing ? t('Replacing...') : t('Replace Selected')}
+									<K.spark width={14} height={14} />
+									{replacing ? t('Replacing...') : t('Replace Selected')}
 								</button>
 							</div>
+							{aiError && (
+								<p style={{ margin: '10px 0 0', fontSize: 12.5, color: 'var(--danger)' }}>{aiError}</p>
+							)}
 						</div>
 					)}
-					<div className="input-group">
-						<label className="label">{t('Routine Name')}</label>
-						<input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. PPL Split" />
+
+					<div className="field" style={{ marginTop: 6 }}>
+						<label>{t('Routine Name')}</label>
+						<input value={name} onChange={e => setName(e.target.value)} placeholder={t('e.g. PPL Split')} />
 					</div>
 
-					<div style={{ flex: 1, overflowY: 'auto' }}>
-						{days.map((day, dIndex) => (
-							<div key={dIndex} className="card">
-								<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-									<input
-										className="input"
-										value={day.day_name}
-										onChange={(e) => {
+					{days.map((day, dIndex) => (
+						<div key={dIndex} className="b-day">
+							<div className="b-day-head">
+								<input
+									value={day.day_name}
+									onChange={(e) => {
+										const newDays = [...days];
+										newDays[dIndex].day_name = e.target.value;
+										setDays(newDays);
+									}}
+									style={{
+										flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none',
+										color: 'var(--text)', fontFamily: 'var(--font-disp)', fontWeight: 800,
+										fontSize: 17, letterSpacing: '-0.01em', padding: '2px 0',
+									}}
+								/>
+								{days.length > 1 && (
+									<button
+										className="b-day-del"
+										onClick={() => {
 											const newDays = [...days];
-											newDays[dIndex].day_name = e.target.value;
+											newDays.splice(dIndex, 1);
 											setDays(newDays);
 										}}
-										style={{ fontWeight: 'bold', background: 'transparent', padding: '4px', border: 'none' }}
-									/>
-									<button className="btn btn-ghost" onClick={() => {
-										const newDays = [...days];
-										newDays.splice(dIndex, 1);
-										setDays(newDays);
-									}}><Trash size={16} /></button>
-								</div>
+										aria-label={t('Delete day')}
+									>
+										<Trash2 size={15} />
+									</button>
+								)}
+							</div>
 
-
-								<DndContext
-									sensors={sensors}
-									collisionDetection={closestCenter}
-									onDragEnd={(e) => handleDragEnd(e, dIndex)}
-								>
-									<SortableContext items={day.exercises.map((e: any) => e._id)} strategy={verticalListSortingStrategy}>
+							<DndContext
+								sensors={sensors}
+								collisionDetection={closestCenter}
+								onDragEnd={(e) => handleDragEnd(e, dIndex)}
+							>
+								<SortableContext items={day.exercises.map((e: any) => e._id)} strategy={verticalListSortingStrategy}>
+									<div className="b-ex-list" style={{ marginTop: day.exercises.length > 0 ? 12 : 0 }}>
 										{day.exercises.map((ex: any, eIndex: number) => (
 											<SortableCreateExerciseRow
 												key={ex._id}
@@ -734,75 +679,51 @@ export default function CreateRoutine() {
 												onStopEdit={() => setEditingExerciseId(null)}
 											/>
 										))}
-									</SortableContext>
-								</DndContext>
-								<div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-									<button
-										className="btn btn-secondary"
-										style={{ flex: 2, fontSize: '14px', padding: '8px' }}
-										onClick={() => setShowPicker({ dayIndex: dIndex })}
-									>
-										<Plus size={16} style={{ marginRight: '4px' }} /> Add Exercise
-									</button>
-									<button
-										className="btn btn-secondary"
-										style={{ flex: 1, fontSize: '14px', padding: '8px' }}
-										onClick={() => setShowPicker({ dayIndex: dIndex, cardioMode: true })}
-									>
-										<Plus size={16} style={{ marginRight: '4px' }} /> Cardio
-									</button>
-								</div>
+									</div>
+								</SortableContext>
+							</DndContext>
 
-								{/* Smart Suggestions */}
-								<ExerciseSuggestions
-									existingExerciseIds={day.exercises.map((e: any) => e.exercise_id)}
-									onAdd={(exercise) => {
-										const newDays = [...days];
-										newDays[dIndex].exercises.push({
-											_id: Math.random().toString(36).substring(7),
-											exercise_id: exercise.id,
-											name: exercise.name,
-											muscle_group: exercise.muscle || exercise.muscle_group || null,
-											equipment: exercise.equipment || null,
-											sets: 3, reps: '10', rest: 60
-										});
-										setDays(newDays);
-									}}
-								/>
+							<div className="b-add-row">
+								<button className="b-add-btn" onClick={() => setShowPicker({ dayIndex: dIndex })}>
+									<Plus size={15} />{t('Add Exercise')}
+								</button>
+								<button className="b-add-btn sec" onClick={() => setShowPicker({ dayIndex: dIndex, cardioMode: true })}>
+									<Plus size={15} />{t('Cardio')}
+								</button>
 							</div>
-						))}
 
-						<button onClick={() => setDays([...days, { day_name: `Day ${days.length + 1}`, exercises: [] }])}
-							style={{ width: '100%', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', fontSize: '13px', fontWeight: 600, border: '2px dashed rgba(204,255,0,0.35)', borderRadius: '10px', background: 'rgba(204,255,0,0.05)', color: 'var(--primary)', cursor: 'pointer' }}
-						>
-							<Plus size={15} /> Add Training Day
-						</button>
-					</div>
-					<button className="btn btn-primary motion-btn motion-btn--cta" style={{ width: '100%', marginTop: '16px' }} onClick={handleSave}>
-						Save Routine
+							{/* Smart Suggestions */}
+							<ExerciseSuggestions
+								existingExerciseIds={day.exercises.map((e: any) => e.exercise_id)}
+								onAdd={(exercise) => {
+									const newDays = [...days];
+									newDays[dIndex].exercises.push({
+										_id: Math.random().toString(36).substring(7),
+										exercise_id: exercise.id,
+										name: exercise.name,
+										muscle_group: exercise.muscle || exercise.muscle_group || null,
+										equipment: exercise.equipment || null,
+										sets: 3, reps: '10', rest: 60
+									});
+									setDays(newDays);
+								}}
+							/>
+						</div>
+					))}
+
+					<button className="b-add-day" onClick={() => setDays([...days, { day_name: `Day ${days.length + 1}`, exercises: [] }])}>
+						<Plus size={17} />{t('Add Training Day')}
+					</button>
+
+					<button className="btn-primary" style={{ width: '100%', marginTop: 16 }} onClick={handleSave}>
+						{t('Save Routine')}
 					</button>
 
 					{/* Undo Toast */}
 					{undoState && createPortal(
-						<div style={{
-							position: 'fixed',
-							bottom: '80px',
-							right: '24px',
-							backgroundColor: 'var(--bg-card)',
-							color: 'var(--text-primary)',
-							padding: '12px 16px',
-							borderRadius: '8px',
-							boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-							display: 'flex',
-							alignItems: 'center',
-							gap: '12px',
-							zIndex: 9999,
-							border: '1px solid var(--border)'
-						}}>
-							<span style={{ fontSize: '14px' }}>Exercise removed</span>
+						<div className="toast" style={{ bottom: 'calc(var(--nav-h) + 24px)' }}>
+							<span>{t('Exercise removed')}</span>
 							<button
-								className="btn btn-primary"
-								style={{ padding: '6px 12px', minHeight: 'auto', height: 'auto', fontSize: '13px' }}
 								onClick={() => {
 									const newDays = [...days];
 									newDays[undoState.dIndex].exercises.splice(undoState.eIndex, 0, undoState.ex);
@@ -810,8 +731,12 @@ export default function CreateRoutine() {
 									setUndoState(null);
 									if (undoTimeoutRef.current) window.clearTimeout(undoTimeoutRef.current);
 								}}
+								style={{
+									background: 'var(--lime)', color: 'var(--on-lime)', border: 'none', cursor: 'pointer',
+									borderRadius: 99, padding: '5px 13px', fontFamily: 'var(--font-disp)', fontWeight: 700, fontSize: 12.5,
+								}}
 							>
-								Undo
+								{t('Undo')}
 							</button>
 						</div>,
 						document.body
@@ -833,6 +758,7 @@ export default function CreateRoutine() {
 }
 
 function SortableCreateExerciseRow({ ex, eIndex, dIndex, days, setDays, isAiGenerated, isSelected, onToggleSelect, onRemove, editing, onStartEdit, onStopEdit }: any) {
+	const { t } = useTranslation();
 	const {
 		attributes,
 		listeners,
@@ -856,13 +782,17 @@ function SortableCreateExerciseRow({ ex, eIndex, dIndex, days, setDays, isAiGene
 	return (
 		<div
 			ref={setNodeRef}
+			className="b-ex-row"
 			style={{
 				transform: CSS.Transform.toString(transform),
 				transition,
-				backgroundColor: isSelected ? 'rgba(255,165,0,0.08)' : 'var(--bg-card)',
-				border: isSelected ? '1px solid orange' : editing ? '1px solid var(--primary)' : '1px solid var(--border)',
-				borderRadius: '8px',
-				marginBottom: '6px',
+				flexWrap: 'wrap',
+				borderColor: isSelected
+					? 'color-mix(in oklab, var(--reward) 50%, transparent)'
+					: editing
+						? 'color-mix(in oklab, var(--lime) 40%, transparent)'
+						: undefined,
+				background: isSelected ? 'color-mix(in oklab, var(--reward) 9%, transparent)' : undefined,
 				overflow: editing ? 'visible' : 'hidden',
 				position: 'relative',
 				zIndex: editing ? 2 : 0,
@@ -870,77 +800,90 @@ function SortableCreateExerciseRow({ ex, eIndex, dIndex, days, setDays, isAiGene
 			onClick={isAiGenerated ? onToggleSelect : undefined}
 		>
 			{/* Single row: grip | name+meta | pill | trash */}
-			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 8px' }}>
-				<div
-					style={{ width: '20px', cursor: 'grab', display: 'flex', justifyContent: 'center', flexShrink: 0 }}
-					{...attributes} {...listeners}
-					onClick={e => e.stopPropagation()}
-				>
-					<GripVertical size={14} color="var(--text-tertiary)" />
-				</div>
-				<div style={{ flex: 1, minWidth: 0 }}>
-					<div style={{ fontSize: '14px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isSelected ? 'orange' : 'var(--text-primary)' }}>
-						{ex.name}
-					</div>
-					<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '1px' }}>
-						{ex.muscle_group || 'Any'} · {ex.equipment || 'Bodyweight'}
-					</div>
-				</div>
-				{/* Pill button */}
-				<button
-					onClick={handlePillClick}
-					style={{
-						display: 'flex', alignItems: 'center', gap: '4px',
-						padding: '4px 8px', borderRadius: '6px', flexShrink: 0,
-						border: '1px solid var(--border)',
-						background: isSelected ? 'rgba(255,165,0,0.15)' : 'var(--bg-secondary)',
-						color: isSelected ? 'orange' : 'var(--text-primary)',
-						cursor: 'pointer', fontSize: '12px', fontWeight: 600,
-					}}
-				>
-					{ex.sets}×{ex.reps}
-					{!isAiGenerated && <Pencil size={9} color="var(--text-tertiary)" />}
-				</button>
-				{/* Trash */}
-				<button
-					onClick={e => { e.stopPropagation(); if (onRemove) onRemove(); }}
-					style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}
-				>
-					<Trash2 size={15} color="var(--error)" />
-				</button>
+			<div
+				style={{ width: 20, cursor: 'grab', display: 'flex', justifyContent: 'center', flexShrink: 0, color: 'var(--text-4)' }}
+				{...attributes} {...listeners}
+				onClick={e => e.stopPropagation()}
+			>
+				<GripVertical size={14} />
 			</div>
+			<div className="be-main">
+				<div className="be-name" style={{ color: isSelected ? 'var(--reward)' : undefined }}>{ex.name}</div>
+				<div className="be-tag">{ex.muscle_group || t('Any')} · {ex.equipment || t('Bodyweight')}</div>
+			</div>
+			{/* sets×reps pill */}
+			<button
+				onClick={handlePillClick}
+				className="num"
+				style={{
+					display: 'flex', alignItems: 'center', gap: 5,
+					padding: '5px 10px', borderRadius: 8, flexShrink: 0,
+					border: '1px solid var(--line-strong)',
+					background: isSelected ? 'color-mix(in oklab, var(--reward) 14%, transparent)' : 'var(--raised)',
+					color: isSelected ? 'var(--reward)' : 'var(--text)',
+					cursor: 'pointer', fontSize: 12.5, fontWeight: 700, fontFamily: 'var(--font-disp)',
+				}}
+			>
+				{ex.sets}×{ex.reps}
+				{!isAiGenerated && <PencilIcon size={9} style={{ color: 'var(--text-4)' }} />}
+			</button>
+			{/* Trash */}
+			<button
+				className="be-del"
+				onClick={e => { e.stopPropagation(); if (onRemove) onRemove(); }}
+				aria-label={t('Delete')}
+			>
+				<Trash2 size={15} />
+			</button>
 
 			{/* Inline edit panel — expands when pill is tapped */}
 			{editing && (
-				<div style={{ padding: '8px 12px 14px 36px', borderTop: '1px solid var(--border)', background: 'rgba(204,255,0,0.03)', display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
-					<HybridNumber
-						value={ex.sets}
-						onChange={v => { const nd = [...days]; nd[dIndex].exercises[eIndex].sets = v; setDays(nd); }}
-						min={1} max={20} step={1} sensitivity={28} label="Sets" showDelta={false}
-					/>
-					<span style={{ fontSize: '13px', color: 'var(--text-tertiary)', fontWeight: 600, paddingBottom: '12px' }}>×</span>
+				<div
+					onClick={e => e.stopPropagation()}
+					style={{
+						flexBasis: '100%', display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap',
+						padding: '10px 2px 4px 26px', borderTop: '1px solid var(--line)', marginTop: 8,
+					}}
+				>
+					<div style={{ width: 86 }}>
+						<HybridNumber
+							value={ex.sets}
+							onChange={v => { const nd = [...days]; nd[dIndex].exercises[eIndex].sets = v; setDays(nd); }}
+							min={1} max={20} step={1} sensitivity={28} label={t('Sets')} showDelta={false}
+						/>
+					</div>
+					<span style={{ fontSize: 13, color: 'var(--text-4)', fontWeight: 600, paddingBottom: 13 }}>×</span>
 					{isCardio ? (
-						<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duration</span>
+						<div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+							<span className="mono" style={{ fontSize: 8.5, color: 'var(--text-4)', textAlign: 'center' }}>{t('Duration')}</span>
 							<input
-								className="input"
-								style={{ width: '80px', height: '40px', fontSize: '13px', padding: '4px 8px' }}
 								value={ex.reps}
 								onChange={e => { const nd = [...days]; nd[dIndex].exercises[eIndex].reps = e.target.value; setDays(nd); }}
+								style={{
+									width: 86, height: 44, borderRadius: 10, textAlign: 'center',
+									background: 'var(--raised)', border: '1px solid var(--line)', color: 'var(--text)',
+									fontFamily: 'var(--font-disp)', fontWeight: 700, fontSize: 14, outline: 'none',
+								}}
 							/>
 						</div>
 					) : (
-						<HybridNumber
-							value={Number(ex.reps) || 10}
-							onChange={v => { const nd = [...days]; nd[dIndex].exercises[eIndex].reps = String(v); setDays(nd); }}
-							min={1} max={100} step={1} sensitivity={28} label="Reps" showDelta={false}
-						/>
+						<div style={{ width: 86 }}>
+							<HybridNumber
+								value={Number(ex.reps) || 10}
+								onChange={v => { const nd = [...days]; nd[dIndex].exercises[eIndex].reps = String(v); setDays(nd); }}
+								min={1} max={100} step={1} sensitivity={28} label={t('Reps')} showDelta={false}
+							/>
+						</div>
 					)}
 					<button
 						onClick={e => { e.stopPropagation(); onStopEdit(); }}
-						style={{ padding: '8px 14px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#000', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '2px' }}
+						style={{
+							marginLeft: 'auto', height: 40, padding: '0 16px', borderRadius: 11, border: 'none',
+							background: 'var(--lime)', color: 'var(--on-lime)', fontFamily: 'var(--font-disp)',
+							fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+						}}
 					>
-						Done
+						<Check size={14} />{t('Done')}
 					</button>
 				</div>
 			)}

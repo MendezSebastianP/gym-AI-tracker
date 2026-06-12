@@ -45,7 +45,7 @@ export function Stopwatch() {
 					<circle
 						cx="65" cy="65" r={RADIUS}
 						fill="none"
-						stroke={running ? 'var(--accent, #6366f1)' : 'var(--text-tertiary)'}
+						stroke={running ? 'var(--green-mid)' : 'var(--text-tertiary)'}
 						strokeWidth="6"
 						strokeLinecap="round"
 						strokeDasharray={CIRCUMFERENCE}
@@ -60,7 +60,7 @@ export function Stopwatch() {
 				}}>
 					<div style={{
 						fontSize: '32px', fontWeight: 800, letterSpacing: '-1px',
-						color: running ? 'var(--accent, #6366f1)' : 'var(--text-primary)',
+						color: running ? 'var(--green-mid)' : 'var(--text-primary)',
 					}}>
 						{hours > 0
 							? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
@@ -81,7 +81,7 @@ export function Stopwatch() {
 						if (running) { stopwatchPause(); setRunning(false); }
 						else { stopwatchStart(); setRunning(true); }
 					}}
-					style={btnStyle(running ? 'var(--bg-tertiary)' : 'var(--accent, #6366f1)')}
+					style={btnStyle(running ? 'var(--bg-tertiary)' : 'var(--green-mid)')}
 				>
 					{running ? <><Pause size={16} /> Pause</> : <><Play size={16} /> {elapsed > 0 ? 'Resume' : 'Start'}</>}
 				</button>

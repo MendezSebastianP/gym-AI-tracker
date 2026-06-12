@@ -94,7 +94,7 @@ export default function WorkoutTimer({ mode, startTime: _startTime }: WorkoutTim
 					fontFamily: 'monospace',
 					fontSize: '18px',
 					fontWeight: 'bold',
-					color: isRunning ? 'var(--accent)' : 'var(--text-secondary)',
+					color: isRunning ? 'var(--green-mid)' : 'var(--text-secondary)',
 					minWidth: '80px'
 				}}>
 					{formatTime(accumulatedTime)}
@@ -145,7 +145,7 @@ export default function WorkoutTimer({ mode, startTime: _startTime }: WorkoutTim
 					fontFamily: 'monospace',
 					fontSize: '18px',
 					fontWeight: 'bold',
-					color: timerRemaining === 0 ? 'var(--success)' : 'var(--accent)',
+					color: timerRemaining === 0 ? 'var(--success)' : 'var(--green-mid)',
 					minWidth: '60px',
 					textAlign: 'center'
 				}}>

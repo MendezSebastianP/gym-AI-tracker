@@ -435,8 +435,10 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 	const isEdit = mode === 'edit';
 
 	return (
-		<div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2, position: 'relative' }}>
-			{label && <span className="exp-set-field-label">{label}</span>}
+		<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2, position: 'relative', width: '100%', minWidth: 0 }}>
+			{label && (
+				<span className="mono" style={{ fontSize: 8.5, color: 'var(--text-4)', textAlign: 'center' }}>{label}</span>
+			)}
 
 			{/* Always-present input — positioned off-screen when not editing so focus() works synchronously on mobile */}
 			<input
@@ -448,13 +450,14 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 				onBlur={commitEdit}
 				onKeyDown={handleKeyDown}
 				style={isEdit ? {
-					width: 80, height: 44, textAlign: 'center',
-					fontSize: '18px', fontWeight: 700,
-					background: 'var(--bg-primary)',
-					border: '2px solid var(--primary)',
-					borderRadius: 'var(--radius-sm)',
-					color: 'var(--text-primary)',
-					outline: 'none', caretColor: 'var(--primary)',
+					width: '100%', height: 44, textAlign: 'center',
+					fontSize: '17px', fontWeight: 700,
+					fontFamily: 'var(--font-disp)',
+					background: 'var(--field-focus)',
+					border: '1.5px solid var(--lime)',
+					borderRadius: 10,
+					color: 'var(--text)',
+					outline: 'none', caretColor: 'var(--lime)',
 				} : {
 					position: 'absolute', left: -9999, top: 0,
 					width: 1, height: 1, opacity: 0,
@@ -467,23 +470,14 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 				onTouchStart={handleTouchStart}
 				onTouchEnd={handleTouchEnd}
 				onMouseDown={handleMouseDown}
+				className={`nf num ${isSwipe || mode === 'drum' ? 'scrubbing' : ''} ${value === 0 ? 'zero' : ''}`}
 				style={{
-					position: 'relative',
-					display: isEdit ? 'none' : 'block',
-					background: isSwipe ? 'var(--primary-glow)' : 'var(--bg-tertiary)',
-					border: isSwipe ? '1px solid var(--primary-border)' : mode === 'drum' ? '1px solid var(--primary-border)' : '1px solid var(--border)',
-					borderRadius: 'var(--radius-sm)',
-					padding: '8px 14px',
-					fontSize: '16px', fontWeight: 700,
-					color: isSwipe ? 'var(--primary)' : 'var(--text-primary)',
-					minWidth: '80px', textAlign: 'center',
-					cursor: 'ns-resize',
-					userSelect: 'none', WebkitUserSelect: 'none',
-					touchAction: 'none',
-					transition: isSwipe ? 'none' : 'all 0.2s',
+					display: isEdit ? 'none' : 'flex',
+					width: '100%',
+					transition: isSwipe ? 'none' : undefined,
 				}}
 			>
-				{step < 1 ? value.toFixed(1) : value}
+				<span className="nf-val">{step < 1 ? value.toFixed(1) : value}</span>
 
 				{/* Swipe delta indicator — right side */}
 				{showDelta && isSwipe && swipeDelta !== 0 && (
@@ -491,8 +485,8 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 						position: 'absolute', right: -38, top: '50%',
 						transform: 'translateY(-50%)',
 						fontSize: '12px', fontWeight: 700,
-						color: swipeDelta > 0 ? 'var(--success)' : 'var(--error)',
-						whiteSpace: 'nowrap', pointerEvents: 'none',
+						color: swipeDelta > 0 ? 'var(--lime)' : 'var(--danger)',
+						whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 3,
 					}}>
 						{swipeDelta > 0 ? '+' : ''}{step < 1 ? swipeDelta.toFixed(1) : swipeDelta}
 					</div>
@@ -500,22 +494,16 @@ export function HybridNumber({ value, onChange, min = 0, max = 9999, step = 0.5,
 
 				{/* Arrows hint */}
 				{mode === 'idle' && (
-					<div style={{
-						position: 'absolute', right: 4, top: '50%',
-						transform: 'translateY(-50%)',
-						display: 'flex', flexDirection: 'column', gap: 1,
-						opacity: 0.3, fontSize: 8, lineHeight: 1,
-						color: 'var(--text-tertiary)',
-					}}>
-						<span>&#9650;</span>
-						<span>&#9660;</span>
-					</div>
+					<span className="nf-aff">
+						<svg width="9" height="6" viewBox="0 0 9 6"><path d="M1 5l3.5-4L8 5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+						<svg width="9" height="6" viewBox="0 0 9 6"><path d="M1 1l3.5 4L8 1" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+					</span>
 				)}
 			</div>
 
 			{!isEdit && showHint && (
-				<span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-					drag &bull; tap=drum &bull; double-tap=type
+				<span className="hint" style={{ margin: '2px 0 0' }}>
+					drag · tap · 2×tap
 				</span>
 			)}
 

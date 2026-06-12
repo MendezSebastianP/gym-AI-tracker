@@ -1,6 +1,10 @@
 /**
  * StreakFlames.tsx — shared streak skin components.
- * Used by: Dashboard (LiveStreakRow), Playground (preview), Shop (single-slot preview).
+ * Used by: Stats home (LiveStreakRow), Playground (preview), Shop (single-slot preview).
+ *
+ * Design rules (kairos): crisp vector shapes, no blur-stacked blobs, one calm
+ * looping animation per element, glow as a single soft shadow. Each paid skin
+ * keeps a distinct identity: A campfire · B arcane crystal · C1/2/3 orbs · D pixel.
  */
 import React from 'react';
 
@@ -71,10 +75,10 @@ export const CFG_C1: OrbCfg = {
 	pendingGradient: 'radial-gradient(circle at 38% 40%, #FFFAD0 0%, #FFA500 22%, #FF4400 52%, #AA0000 76%, #320000 100%)',
 	extGradient:     'radial-gradient(circle at 38% 36%, #3A2020 0%, #1E1010 50%, #0D0808 100%)',
 	glowColor: '255,80,0',
-	swirlGradient: 'conic-gradient(from 0deg, transparent 0%, rgba(255,200,50,0.55) 14%, transparent 28%, rgba(255,80,0,0.45) 44%, transparent 58%, rgba(255,160,20,0.5) 74%, transparent 88%, rgba(255,240,80,0.3) 96%, transparent 100%)',
+	swirlGradient: 'conic-gradient(from 0deg, transparent 0%, rgba(255,200,50,0.4) 14%, transparent 30%, rgba(255,80,0,0.32) 48%, transparent 62%, rgba(255,160,20,0.36) 80%, transparent 100%)',
 	sparkColors: ['#FFE566', '#FF9500', '#FFCC00'],
-	borderColor: 'rgba(255,120,0,0.5)',
-	bolts: false, boltColor: '', swirlDur: '2.2s', swirlDir: 'orbSwirl',
+	borderColor: 'rgba(255,120,0,0.45)',
+	bolts: false, boltColor: '', swirlDur: '4.2s', swirlDir: 'orbSwirl',
 };
 
 export const CFG_C2: OrbCfg = {
@@ -83,10 +87,10 @@ export const CFG_C2: OrbCfg = {
 	pendingGradient: 'radial-gradient(circle at 38% 38%, #FFFFFF 0%, #FFF200 16%, #FFC000 38%, #E88000 60%, #7A3800 80%, #220F00 100%)',
 	extGradient:     'radial-gradient(circle at 38% 36%, #2A1A00 0%, #1A1000 50%, #0D0800 100%)',
 	glowColor: '210,160,0',
-	swirlGradient: 'conic-gradient(from 0deg, transparent 0%, rgba(255,255,180,0.6) 12%, rgba(255,220,50,0.8) 20%, transparent 34%, rgba(255,170,0,0.5) 50%, rgba(255,240,100,0.6) 60%, transparent 74%, rgba(255,200,40,0.55) 88%, transparent 100%)',
+	swirlGradient: 'conic-gradient(from 0deg, transparent 0%, rgba(255,255,180,0.4) 12%, rgba(255,220,50,0.5) 22%, transparent 38%, rgba(255,170,0,0.32) 56%, transparent 72%, rgba(255,200,40,0.36) 88%, transparent 100%)',
 	sparkColors: ['#FFFDE7', '#FFD700', '#FFA000'],
-	borderColor: 'rgba(255,200,0,0.6)',
-	bolts: false, boltColor: '', swirlDur: '3.5s', swirlDir: 'orbSwirlRev',
+	borderColor: 'rgba(255,200,0,0.5)',
+	bolts: false, boltColor: '', swirlDur: '5.6s', swirlDir: 'orbSwirlRev',
 };
 
 export const CFG_C3: OrbCfg = {
@@ -95,132 +99,105 @@ export const CFG_C3: OrbCfg = {
 	pendingGradient: 'radial-gradient(circle at 38% 40%, #FFFFFF 0%, #C8E8FF 10%, #42A5F5 30%, #1565C0 56%, #001266 78%, #000022 100%)',
 	extGradient:     'radial-gradient(circle at 38% 36%, #0A1A30 0%, #050E1C 50%, #020508 100%)',
 	glowColor: '30,130,255',
-	swirlGradient: 'conic-gradient(from 0deg, transparent 0%, rgba(180,230,255,0.65) 16%, rgba(100,200,255,0.8) 24%, transparent 40%, rgba(30,160,255,0.5) 56%, rgba(160,220,255,0.65) 68%, transparent 82%, rgba(80,190,255,0.55) 94%, transparent 100%)',
+	swirlGradient: 'conic-gradient(from 0deg, transparent 0%, rgba(180,230,255,0.42) 16%, rgba(100,200,255,0.5) 26%, transparent 44%, rgba(30,160,255,0.32) 60%, transparent 76%, rgba(80,190,255,0.36) 92%, transparent 100%)',
 	sparkColors: ['#E8F4FD', '#42A5F5', '#90CAF9'],
-	borderColor: 'rgba(80,170,255,0.65)',
-	bolts: true, boltColor: '#90CAFF', swirlDur: '1.6s', swirlDir: 'orbSwirl',
+	borderColor: 'rgba(80,170,255,0.55)',
+	bolts: true, boltColor: '#90CAFF', swirlDur: '3.4s', swirlDir: 'orbSwirl',
 };
 
 // ── CSS Keyframes ─────────────────────────────────────────────────────────────
+// One purposeful loop per element. Flicker reads as fire because the timing is
+// slightly off-beat between layers, not because everything pulses at once.
 
 export const STYLES = `
-/* ─────── VARIANT A: Campfire ─────── */
-@keyframes flameCoreA {
-  0%   { transform: scaleX(1)    scaleY(1)    rotate(-0.5deg); }
-  25%  { transform: scaleX(0.93) scaleY(1.06) rotate(0.9deg);  }
-  50%  { transform: scaleX(1.07) scaleY(0.95) rotate(-0.3deg); }
-  75%  { transform: scaleX(0.96) scaleY(1.04) rotate(0.6deg);  }
-  100% { transform: scaleX(1)    scaleY(1)    rotate(-0.5deg); }
+/* ─────── VARIANT A: Campfire (crisp vector) ─────── */
+@keyframes fireSwayA {
+  0%   { transform: skewX(0deg)    scaleY(1);     }
+  28%  { transform: skewX(-2.4deg) scaleY(1.035); }
+  52%  { transform: skewX(1.6deg)  scaleY(0.975); }
+  76%  { transform: skewX(-1.1deg) scaleY(1.02);  }
+  100% { transform: skewX(0deg)    scaleY(1);     }
 }
-@keyframes flameLickA {
-  0%   { transform: translateY(0)    scaleX(1)    scaleY(1);   opacity: 0;    }
-  8%   { opacity: 0.85; }
-  35%  { transform: translateY(-8px)  scaleX(0.7)  scaleY(1.25); opacity: 0.75; }
-  65%  { transform: translateY(-18px) scaleX(0.4)  scaleY(1.0);  opacity: 0.38; }
-  85%  { transform: translateY(-25px) scaleX(0.18) scaleY(0.7);  opacity: 0.08; }
-  100% { transform: translateY(-28px) scaleX(0.08) scaleY(0.4);  opacity: 0;    }
+@keyframes fireInnerA {
+  0%   { transform: translateY(0)     scale(1);    opacity: 0.96; }
+  40%  { transform: translateY(-1.2px) scale(0.94); opacity: 0.85; }
+  70%  { transform: translateY(0.4px)  scale(1.04); opacity: 1;    }
+  100% { transform: translateY(0)     scale(1);    opacity: 0.96; }
+}
+@keyframes emberRiseA {
+  0%   { transform: translateY(0)    scale(1);   opacity: 0;   }
+  12%  { opacity: 0.95; }
+  70%  { transform: translateY(-19px) scale(0.6); opacity: 0.4; }
+  100% { transform: translateY(-26px) scale(0.3); opacity: 0;   }
 }
 @keyframes smokeRiseA {
-  0%   { opacity: 0.55; transform: translateY(0)     scaleX(1);   }
-  50%  { opacity: 0.22; transform: translateY(-9px)  scaleX(1.45);}
-  100% { opacity: 0;    transform: translateY(-22px) scaleX(0.55);}
+  0%   { opacity: 0.5; transform: translateY(0)     scaleX(1);   }
+  50%  { opacity: 0.2; transform: translateY(-9px)  scaleX(1.4); }
+  100% { opacity: 0;   transform: translateY(-20px) scaleX(0.5); }
 }
 
-/* ─────── VARIANT B: Arcane Crystal Flame ─────── */
-@keyframes crystalBodyB {
-  0%   { clip-path: polygon(50% 0%, 77% 24%, 94% 53%, 74% 84%, 50% 100%, 26% 84%, 6%  53%, 23% 24%);
-         transform: rotate(0deg)   translateX(0px)  scaleY(1);    }
-  18%  { clip-path: polygon(63% 1%, 84% 24%, 97% 54%, 76% 85%, 50% 100%, 24% 84%, 5%  53%, 20% 23%);
-         transform: rotate(5deg)   translateX(4px)  scaleY(0.96); }
-  36%  { clip-path: polygon(56% 1%, 80% 25%, 95% 54%, 75% 83%, 50% 100%, 25% 85%, 7%  52%, 22% 24%);
-         transform: rotate(2deg)   translateX(2px)  scaleY(1.04); }
-  54%  { clip-path: polygon(37% 1%, 67% 22%, 89% 53%, 72% 86%, 50% 100%, 28% 83%, 4%  57%, 27% 21%);
-         transform: rotate(-5deg)  translateX(-4px) scaleY(0.95); }
-  72%  { clip-path: polygon(44% 1%, 73% 23%, 92% 53%, 73% 84%, 50% 100%, 27% 85%, 7%  52%, 25% 25%);
-         transform: rotate(-2deg)  translateX(-2px) scaleY(1.03); }
-  100% { clip-path: polygon(50% 0%, 77% 24%, 94% 53%, 74% 84%, 50% 100%, 26% 84%, 6%  53%, 23% 24%);
-         transform: rotate(0deg)   translateX(0px)  scaleY(1);    }
+/* ─────── VARIANT B: Arcane Crystal ─────── */
+@keyframes crystalSwayB {
+  0%   { transform: rotate(0deg)    scaleY(1);     }
+  30%  { transform: rotate(2.6deg)  scaleY(0.985); }
+  62%  { transform: rotate(-2.2deg) scaleY(1.025); }
+  100% { transform: rotate(0deg)    scaleY(1);     }
+}
+@keyframes crystalGlintB {
+  0%, 64%  { transform: translateX(-26px) rotate(18deg); opacity: 0;   }
+  70%      { opacity: 0.85; }
+  80%      { transform: translateX(22px)  rotate(18deg); opacity: 0.5; }
+  86%, 100%{ transform: translateX(26px)  rotate(18deg); opacity: 0;   }
 }
 @keyframes crystalCoreB {
-  0%   { transform: rotate(0deg)    translateX(0px)  scaleY(1);    }
-  22%  { transform: rotate(4deg)    translateX(3px)  scaleY(0.97); }
-  50%  { transform: rotate(-4deg)   translateX(-3px) scaleY(0.96); }
-  75%  { transform: rotate(-1.5deg) translateX(-1px) scaleY(1.03); }
-  100% { transform: rotate(0deg)    translateX(0px)  scaleY(1);    }
+  0%, 100% { opacity: 0.85; transform: scale(1);    }
+  50%       { opacity: 1;    transform: scale(1.06); }
 }
-@keyframes crystalLickB {
-  0%   { transform: translateY(0)    scaleX(1);   opacity: 0;    }
-  10%  { opacity: 0.85; }
-  38%  { transform: translateY(-10px) scaleX(0.65); opacity: 0.7;  }
-  68%  { transform: translateY(-20px) scaleX(0.38); opacity: 0.28; }
-  100% { transform: translateY(-26px) scaleX(0.1);  opacity: 0;    }
+@keyframes runeFloatB {
+  0%, 100% { transform: translateY(0);    opacity: 0.85; }
+  50%       { transform: translateY(-4px); opacity: 0.45; }
 }
 @keyframes crystalSmokeB {
-  0%   { opacity: 0.5;  transform: translateY(0)     scaleX(1);   }
-  50%  { opacity: 0.2;  transform: translateY(-8px)  scaleX(1.3); }
-  100% { opacity: 0;    transform: translateY(-18px) scaleX(0.5); }
-}
-@keyframes crystalGlowB {
-  0%, 100% { filter: drop-shadow(0 0 8px rgba(180,0,255,0.8))  drop-shadow(0 0 3px rgba(255,100,255,0.5));  }
-  50%       { filter: drop-shadow(0 0 18px rgba(220,80,255,1.0)) drop-shadow(0 0 8px rgba(255,150,255,0.7)); }
+  0%   { opacity: 0.45; transform: translateY(0)     scaleX(1);   }
+  50%  { opacity: 0.18; transform: translateY(-8px)  scaleX(1.3); }
+  100% { opacity: 0;    transform: translateY(-17px) scaleX(0.5); }
 }
 
 /* ─────── ORBS (C1 / C2 / C3) ─────── */
-@keyframes orbPulse {
-  0%, 100% { transform: scale(1); }
-  50%       { transform: scale(1.05); }
+@keyframes orbBreathe {
+  0%, 100% { transform: scale(1);     }
+  50%       { transform: scale(1.035); }
 }
-@keyframes orbSwirl {
-  from { transform: rotate(0deg);   }
-  to   { transform: rotate(360deg); }
-}
-@keyframes orbSwirlRev {
-  from { transform: rotate(0deg);    }
-  to   { transform: rotate(-360deg); }
-}
+@keyframes orbSwirl    { from { transform: rotate(0deg); }   to { transform: rotate(360deg);  } }
+@keyframes orbSwirlRev { from { transform: rotate(0deg); }   to { transform: rotate(-360deg); } }
 @keyframes orbSmoke {
-  0%   { opacity: 0.5;  transform: translateY(0)     scaleX(1);    }
-  50%  { opacity: 0.18; transform: translateY(-10px) scaleX(1.4);  }
-  100% { opacity: 0;    transform: translateY(-22px) scaleX(0.55); }
+  0%   { opacity: 0.45; transform: translateY(0)     scaleX(1);    }
+  50%  { opacity: 0.16; transform: translateY(-9px)  scaleX(1.35); }
+  100% { opacity: 0;    transform: translateY(-19px) scaleX(0.5);  }
 }
 @keyframes orbitSpark {
-  from { transform: rotate(0deg)   translateX(24px) rotate(0deg);   }
+  from { transform: rotate(0deg)   translateX(24px) rotate(0deg);    }
   to   { transform: rotate(360deg) translateX(24px) rotate(-360deg); }
 }
 @keyframes innerFlameC1 {
-  0%   { transform: scaleX(1)    scaleY(1)    rotate(-1.5deg); opacity: 0.92; }
-  20%  { transform: scaleX(0.7)  scaleY(1.26) rotate(2.5deg);  opacity: 0.78; }
-  45%  { transform: scaleX(1.14) scaleY(0.86) rotate(-0.8deg); opacity: 0.85; }
-  70%  { transform: scaleX(0.82) scaleY(1.16) rotate(1.8deg);  opacity: 0.72; }
-  100% { transform: scaleX(1)    scaleY(1)    rotate(-1.5deg); opacity: 0.92; }
+  0%   { transform: scaleY(1)    skewX(0deg);  opacity: 0.85; }
+  35%  { transform: scaleY(1.14) skewX(-3deg); opacity: 0.7;  }
+  65%  { transform: scaleY(0.9)  skewX(2deg);  opacity: 0.8;  }
+  100% { transform: scaleY(1)    skewX(0deg);  opacity: 0.85; }
 }
 @keyframes goldSweep {
-  0%   { transform: translateX(-55px) skewX(-20deg); opacity: 0;    }
-  12%  { opacity: 0.9; }
-  42%  { transform: translateX(52px)  skewX(-20deg); opacity: 0.65; }
-  52%  { opacity: 0; }
-  100% { transform: translateX(-55px) skewX(-20deg); opacity: 0;    }
-}
-@keyframes causticsC2 {
-  0%, 100% { transform: translate(0px, 0px)   scale(1);    opacity: 0.22; }
-  35%       { transform: translate(4px, -3px)  scale(1.25); opacity: 0.38; }
-  70%       { transform: translate(-3px, 2px)  scale(0.82); opacity: 0.14; }
-}
-@keyframes electricCrown {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(100,200,255,0.5), 0 0 10px 2px rgba(50,150,255,0.3); }
-  33%       { box-shadow: 0 0 0 3px rgba(180,230,255,0.9), 0 0 20px 6px rgba(30,130,255,0.6); }
-  66%       { box-shadow: 0 0 0 1px rgba(120,210,255,0.6), 0 0 14px 4px rgba(60,160,255,0.4); }
+  0%, 58%  { transform: translateX(-52px) skewX(-20deg); opacity: 0;    }
+  64%      { opacity: 0.75; }
+  78%      { transform: translateX(50px)  skewX(-20deg); opacity: 0.45; }
+  84%,100% { transform: translateX(52px)  skewX(-20deg); opacity: 0;    }
 }
 @keyframes zapBolt {
-  0%, 58%, 100% { opacity: 0;    }
-  60%  { opacity: 1;    }
-  63%  { opacity: 0.12; }
-  66%  { opacity: 0.95; }
-  70%  { opacity: 0.3;  }
-  73%  { opacity: 0.88; }
-  77%  { opacity: 0.05; }
-  80%  { opacity: 0.72; }
-  85%  { opacity: 0;    }
+  0%, 78%, 100% { opacity: 0;    }
+  80%  { opacity: 1;    }
+  83%  { opacity: 0.15; }
+  86%  { opacity: 0.9;  }
+  90%  { opacity: 0.25; }
+  94%  { opacity: 0;    }
 }
 
 /* ─────── VARIANT D: Pixel Art ─────── */
@@ -247,51 +224,37 @@ export const STYLES = `
   58%  { transform: scale(0.92); }
   100% { transform: scale(1);    }
 }
-@keyframes claimBtnPulse {
-  0%, 100% { box-shadow: 0 0 0 0px rgba(255,165,0,0.6); }
-  50%       { box-shadow: 0 0 0 8px rgba(255,165,0,0);   }
-}
-@keyframes slideDown {
-  from { transform: translateX(-50%) translateY(-120%); opacity: 0; }
-  to   { transform: translateX(-50%) translateY(0);     opacity: 1; }
-}
 
-/* ─────── CLAIM BURST ANIMATIONS (one-shot on button press) ─────── */
-@keyframes claimBurstA {
-  0%   { transform: scale(1);    box-shadow: none; }
-  18%  { transform: scale(1.16); box-shadow: 0 0 24px rgba(255,100,0,0.85); }
-  40%  { transform: scale(0.91); box-shadow: 0 0 8px rgba(255,100,0,0.4); }
-  65%  { transform: scale(1.06); }
-  82%  { transform: scale(0.98); }
-  100% { transform: scale(1);    box-shadow: none; }
+/* Claim button — one shape for every skin, tinted via --claim-accent */
+@keyframes claimPulseK {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--claim-accent, #FF8C00) 45%, transparent); }
+  60%       { box-shadow: 0 0 0 9px color-mix(in srgb, var(--claim-accent, #FF8C00) 0%, transparent); }
 }
-@keyframes claimBurstB {
-  0%   { transform: scale(1);    filter: brightness(1); }
-  15%  { transform: scale(1.14); filter: brightness(2.2); }
-  38%  { transform: scale(0.92); filter: brightness(1.3); }
-  65%  { transform: scale(1.05); filter: brightness(1.1); }
-  100% { transform: scale(1);    filter: brightness(1); }
-}
-@keyframes claimBurstOrb {
-  0%   { transform: scale(1);    filter: brightness(1); }
-  20%  { transform: scale(1.13); filter: brightness(1.7); }
-  45%  { transform: scale(0.93); filter: brightness(1.2); }
-  70%  { transform: scale(1.05); }
-  100% { transform: scale(1);    filter: brightness(1); }
+@keyframes claimBurstK {
+  0%   { transform: scale(1);    filter: brightness(1);   }
+  18%  { transform: scale(1.07); filter: brightness(1.45); }
+  45%  { transform: scale(0.96); filter: brightness(1.1);  }
+  72%  { transform: scale(1.02); }
+  100% { transform: scale(1);    filter: brightness(1);   }
 }
 @keyframes claimBurstPx {
   0%        { opacity: 1; transform: scale(1);    }
-  12%, 22%  { opacity: 0; transform: scale(1.1);  }
+  12%, 22%  { opacity: 0; transform: scale(1.06); }
   32%, 42%  { opacity: 1; transform: scale(1);    }
-  52%, 62%  { opacity: 0; transform: scale(1.05); }
+  52%, 62%  { opacity: 0; transform: scale(1.03); }
   72%, 100% { opacity: 1; transform: scale(1);    }
 }
 `;
 
 // ── Shared layout ─────────────────────────────────────────────────────────────
 
-const dateLabel: React.CSSProperties = {
-	fontSize: 9, color: 'var(--text-tertiary, #666)', fontWeight: 500,
+const weekLabel: React.CSSProperties = {
+	fontFamily: 'var(--font-mono, monospace)',
+	fontSize: 8,
+	letterSpacing: '0.08em',
+	textTransform: 'uppercase',
+	color: 'var(--text-4, #666)',
+	fontWeight: 600,
 };
 
 export function FlameRow({
@@ -309,17 +272,16 @@ export function FlameRow({
 				const scale = SLOT_SCALES[i];
 				const isCurrent = i === 6;
 				return (
-					<div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flex: 1 }}>
+					<div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 1 }}>
 						<div style={{ height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
 							{pendingDotEl(i)}
 						</div>
 						<div style={{ position: 'relative', transform: `scale(${scale})`, transformOrigin: 'bottom center' }}>
 							{isCurrent && (
 								<div style={{
-									position: 'absolute', inset: '-16px -14px', borderRadius: 22,
+									position: 'absolute', inset: '-12px -13px -6px', borderRadius: 14,
 									background: highlightColor,
-									border: `1px solid ${highlightColor.replace('0.14', '0.28').replace('0.15', '0.30')}`,
-									boxShadow: `0 0 22px 8px ${highlightColor.replace('0.14', '0.1').replace('0.15', '0.1')}`,
+									border: `1px solid ${highlightColor.replace('0.14', '0.3').replace('0.15', '0.3')}`,
 									pointerEvents: 'none', zIndex: 0,
 								}} />
 							)}
@@ -327,7 +289,7 @@ export function FlameRow({
 								{getSlot(w, i, isCurrent)}
 							</div>
 						</div>
-						<span style={{ ...dateLabel, ...dateFont, opacity: 0.35 + scale * 0.65 }}>
+						<span style={{ ...weekLabel, ...dateFont, opacity: 0.35 + scale * 0.65 }}>
 							{i === 6 ? 'Now' : `W-${6 - i}`}
 						</span>
 					</div>
@@ -338,97 +300,142 @@ export function FlameRow({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VARIANT A — Campfire
+// VARIANT A — Campfire. Crisp layered flame over crossed logs; embers when hot.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const FLAME_PATH = 'M20 2 C22 9 14 12 14 20 a6 6 0 0 0 12 0 c0-3 5 2 5 9 a11 11 0 1 1 -22 0 c0-8 9-13 11-27z';
+
+function CampfireLogs() {
+	return (
+		<svg width="34" height="9" viewBox="0 0 34 9" style={{ display: 'block' }}>
+			<rect x="1" y="2.4" width="32" height="4.2" rx="2.1" fill="#4A2E14" transform="rotate(-6 17 4.5)" />
+			<rect x="1" y="2.4" width="32" height="4.2" rx="2.1" fill="#5C3A1A" transform="rotate(6 17 4.5)" />
+		</svg>
+	);
+}
+
 export function FlameSlotA({ state, index, flashing }: { state: FlameState; index: number; flashing?: boolean }) {
-	const d = index * 0.18;
+	const d = index * 0.22;
 	if (state === 'empty') return (
-		<div style={{ width: 40, height: 56, borderRadius: '50%', border: '1px dashed rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)' }} />
+		<div style={{ width: 40, height: 56, borderRadius: 12, border: '1px dashed rgba(255,140,0,0.18)', background: 'rgba(255,140,0,0.03)' }} />
 	);
 	if (state === 'extinguished') return (
 		<div style={{ position: 'relative', width: 40, height: 56 }}>
-			<div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 26, height: 8, background: 'rgba(60,60,60,0.8)', borderRadius: '50%' }} />
-			{[{ x: '50%', d: '0s' }, { x: '38%', d: '0.9s' }, { x: '63%', d: '1.8s' }].map((s, i) => (
-				<div key={i} style={{ position: 'absolute', bottom: 6, left: s.x, transform: 'translateX(-50%)', width: 5, height: 10, borderRadius: '50%', background: 'rgba(150,150,150,0.35)', animation: `smokeRiseA 2.5s ease-out ${s.d} infinite` }} />
+			<div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)' }}><CampfireLogs /></div>
+			<div style={{ position: 'absolute', bottom: 7, left: '50%', transform: 'translateX(-50%)', width: 14, height: 6, borderRadius: '50%', background: '#3A3A3A' }} />
+			{[{ x: '46%', d: '0s' }, { x: '58%', d: '1.2s' }].map((s, i) => (
+				<div key={i} style={{ position: 'absolute', bottom: 12, left: s.x, transform: 'translateX(-50%)', width: 4, height: 9, borderRadius: '50%', background: 'rgba(150,150,150,0.32)', animation: `smokeRiseA 2.6s ease-out ${s.d} infinite` }} />
 			))}
 		</div>
 	);
 	const p = state === 'pending';
-	const licks = [
-		{ left: '26%', w: 7,  h: 20, dur: 1.1,  dOff: 0    },
-		{ left: '48%', w: 9,  h: 24, dur: 1.38, dOff: 0.33 },
-		{ left: '69%', w: 6,  h: 17, dur: 0.95, dOff: 0.64 },
-	];
 	return (
 		<div style={{ position: 'relative', width: 40, height: 56, animation: flashing ? 'claimFlash 0.5s ease-out' : undefined }}>
-			<div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
-				<div style={{ width: p ? 34 : 30, height: p ? 44 : 40, background: `rgba(255,69,0,${p ? 0.38 : 0.26})`, borderRadius: '50% 50% 30% 30% / 80% 80% 40% 40%', filter: 'blur(8px)', animation: `flameCoreA 1.3s ease-in-out ${d}s infinite` }} />
-			</div>
-			<div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
-				<div style={{ width: p ? 20 : 17, height: p ? 28 : 25, background: 'linear-gradient(to top, #FF4500, #FF8C00)', borderRadius: '50% 50% 30% 30% / 80% 80% 40% 40%', animation: `flameCoreA 1.0s ease-in-out ${d}s infinite` }} />
-			</div>
-			<div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
-				<div style={{ width: 7, height: 13, background: 'linear-gradient(to top, #FFD700, #FFF8DC)', borderRadius: '50% 50% 30% 30% / 80% 80% 40% 40%', animation: `flameCoreA 0.75s ease-in-out ${d}s infinite` }} />
-			</div>
-			{licks.map((lk, li) => (
-				<div key={li} style={{ position: 'absolute', bottom: 11, left: lk.left, width: lk.w, height: lk.h, background: 'linear-gradient(to top, rgba(255,150,0,0.95), rgba(255,230,60,0.5), transparent)', borderRadius: '50% 50% 40% 40% / 70% 70% 50% 50%', transformOrigin: 'bottom center', animation: `flameLickA ${lk.dur}s ease-in-out ${d + lk.dOff}s infinite` }} />
+			{/* embers — only while the week is still hot (pending) */}
+			{p && [{ x: 13, dur: 1.9, off: 0 }, { x: 25, dur: 2.3, off: 0.8 }].map((e, i) => (
+				<div key={i} style={{ position: 'absolute', bottom: 26, left: e.x, width: 3, height: 3, borderRadius: '50%', background: '#FFCC55', boxShadow: '0 0 4px 1px rgba(255,160,40,0.7)', animation: `emberRiseA ${e.dur}s ease-out ${d + e.off}s infinite` }} />
 			))}
+			{/* flame body — two crisp layers, slightly off-beat */}
+			<svg
+				width="40" height="48" viewBox="0 0 40 48"
+				style={{
+					position: 'absolute', bottom: 5, left: 0,
+					transformOrigin: 'bottom center',
+					animation: `fireSwayA ${p ? 1.9 : 2.6}s ease-in-out ${d}s infinite`,
+					filter: `drop-shadow(0 2px 7px rgba(255,100,0,${p ? 0.5 : 0.32}))`,
+				}}
+			>
+				<defs>
+					<linearGradient id="fgA" x1="0" y1="1" x2="0" y2="0">
+						<stop offset="0" stopColor="#E03000" />
+						<stop offset="0.55" stopColor="#FF6A00" />
+						<stop offset="1" stopColor="#FFA62B" />
+					</linearGradient>
+				</defs>
+				<path d={FLAME_PATH} fill="url(#fgA)" transform={`translate(20 47) scale(${p ? 1.06 : 0.96}) translate(-20 -47) translate(0 4)`} />
+			</svg>
+			<svg
+				width="40" height="48" viewBox="0 0 40 48"
+				style={{
+					position: 'absolute', bottom: 5, left: 0,
+					transformOrigin: 'bottom center',
+					animation: `fireInnerA ${p ? 1.3 : 1.8}s ease-in-out ${d + 0.25}s infinite`,
+				}}
+			>
+				<defs>
+					<linearGradient id="fgAi" x1="0" y1="1" x2="0" y2="0">
+						<stop offset="0" stopColor="#FFD24A" />
+						<stop offset="1" stopColor="#FFF6D8" />
+					</linearGradient>
+				</defs>
+				<path d={FLAME_PATH} fill="url(#fgAi)" transform="translate(20 47) scale(0.46) translate(-20 -47) translate(0 1)" />
+			</svg>
+			<div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)' }}><CampfireLogs /></div>
 		</div>
 	);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VARIANT B — Arcane Crystal Flame
+// VARIANT B — Arcane Crystal. Faceted shard, slow sway, periodic glint.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function FlameSlotB({ state, index, flashing }: { state: FlameState; index: number; flashing?: boolean }) {
-	const d = index * 0.16;
+	const d = index * 0.3;
 	if (state === 'empty') return (
-		<div style={{ width: 36, height: 54, clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)', background: 'rgba(180,0,255,0.08)' }}>
-			<div style={{ position: 'absolute', inset: 0, clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)', border: '1px dashed rgba(180,0,255,0.25)' }} />
+		<div style={{ position: 'relative', width: 36, height: 54 }}>
+			<div style={{ position: 'absolute', bottom: 0, left: 3, width: 30, height: 46, clipPath: CRYSTAL_CLIP, background: 'rgba(180,0,255,0.06)', border: '1px dashed rgba(180,0,255,0.2)' }} />
 		</div>
 	);
 	if (state === 'extinguished') return (
 		<div style={{ position: 'relative', width: 36, height: 54 }}>
-			{[{ w: 10, h: 18, l: '30%', b: 10, r: -8 }, { w: 7, h: 14, l: '55%', b: 12, r: 6 }, { w: 5, h: 10, l: '45%', b: 24, r: -4 }].map((s, i) => (
-				<div key={i} style={{ position: 'absolute', bottom: s.b, left: s.l, transform: `translateX(-50%) rotate(${s.r}deg)`, width: s.w, height: s.h, background: 'linear-gradient(to top, #1a0030, #2d0050)', clipPath: CRYSTAL_CLIP, opacity: 0.5 + i * 0.1 }} />
+			{[{ w: 11, h: 19, l: '30%', b: 0, r: -9 }, { w: 8, h: 14, l: '58%', b: 0, r: 7 }, { w: 5, h: 10, l: '46%', b: 14, r: -3 }].map((s, i) => (
+				<div key={i} style={{ position: 'absolute', bottom: s.b, left: s.l, transform: `translateX(-50%) rotate(${s.r}deg)`, width: s.w, height: s.h, background: 'linear-gradient(to top, #170028, #2A0048)', clipPath: CRYSTAL_CLIP, opacity: 0.55 + i * 0.12 }} />
 			))}
-			{[{ x: '50%', d: '0s' }, { x: '42%', d: '1s' }].map((s, i) => (
-				<div key={i} style={{ position: 'absolute', bottom: 28, left: s.x, transform: 'translateX(-50%)', width: 5, height: 9, borderRadius: '50%', background: 'rgba(120,80,150,0.3)', animation: `crystalSmokeB 2.2s ease-out ${s.d} infinite` }} />
+			{[{ x: '48%', d: '0s' }, { x: '40%', d: '1.1s' }].map((s, i) => (
+				<div key={i} style={{ position: 'absolute', bottom: 24, left: s.x, transform: 'translateX(-50%)', width: 4, height: 8, borderRadius: '50%', background: 'rgba(120,80,150,0.28)', animation: `crystalSmokeB 2.4s ease-out ${s.d} infinite` }} />
 			))}
 		</div>
 	);
 	const p = state === 'pending';
-	const licks = [
-		{ left: '28%', w: 9,  h: 20, dur: 1.05, dOff: 0    },
-		{ left: '50%', w: 11, h: 26, dur: 1.3,  dOff: 0.3  },
-		{ left: '72%', w: 7,  h: 17, dur: 0.92, dOff: 0.58 },
-	];
 	return (
 		<div style={{ position: 'relative', width: 36, height: 58, animation: flashing ? 'claimFlash 0.5s ease-out' : undefined }}>
-			<div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
-				<div style={{ width: p ? 44 : 38, height: p ? 56 : 50, background: `rgba(150,0,230,${p ? 0.38 : 0.24})`, clipPath: CRYSTAL_CLIP, filter: 'blur(10px)', animation: `crystalBodyB 2.8s ease-in-out ${d}s infinite` }} />
+			{/* shard */}
+			<div style={{
+				position: 'absolute', bottom: 0, left: '50%', marginLeft: p ? -15 : -13,
+				width: p ? 30 : 26, height: p ? 50 : 44,
+				transformOrigin: 'bottom center',
+				animation: `crystalSwayB ${p ? 2.6 : 3.4}s ease-in-out ${d}s infinite`,
+				filter: `drop-shadow(0 0 ${p ? 10 : 6}px rgba(200,80,255,${p ? 0.6 : 0.4}))`,
+			}}>
+				<div style={{ position: 'absolute', inset: 0, clipPath: CRYSTAL_CLIP, background: 'linear-gradient(to top, #2E0055, #7B1FA2 45%, #C45FE0 72%, #F2D8FF 94%)', overflow: 'hidden' }}>
+					{/* facet edge */}
+					<div style={{ position: 'absolute', top: '12%', bottom: '8%', left: '46%', width: 1.5, background: 'rgba(255,255,255,0.32)', transform: 'rotate(4deg)' }} />
+					<div style={{ position: 'absolute', top: '30%', left: '12%', right: '14%', height: 1.2, background: 'rgba(255,255,255,0.18)', transform: 'rotate(-14deg)' }} />
+					{/* travelling glint */}
+					<div style={{ position: 'absolute', top: '-12%', bottom: '-12%', left: '38%', width: 7, background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.85), transparent)', animation: `crystalGlintB 3.6s ease-in-out ${d}s infinite` }} />
+				</div>
 			</div>
-			<div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
-				<div style={{ width: p ? 32 : 27, height: p ? 48 : 42, background: 'linear-gradient(to top, #3D0070, #7B1FA2, #B248D0, #E1BEE7, #fff)', clipPath: CRYSTAL_CLIP, animation: `crystalBodyB 2.5s ease-in-out ${d}s infinite, crystalGlowB 2.4s ease-in-out ${d}s infinite` }} />
-			</div>
-			<div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
-				<div style={{ width: 13, height: 22, background: 'linear-gradient(to top, #CC00FF, #F080FF, #FFF)', clipPath: CRYSTAL_CLIP, animation: `crystalCoreB 1.6s ease-in-out ${d}s infinite, crystalGlowB 1.4s ease-in-out ${d + 0.4}s infinite` }} />
-			</div>
-			{licks.map((lk, li) => (
-				<div key={li} style={{ position: 'absolute', bottom: 16, left: lk.left, width: lk.w, height: lk.h, background: 'linear-gradient(to top, rgba(200,0,255,0.9), rgba(240,160,255,0.55), transparent)', clipPath: 'polygon(50% 0%, 100% 100%, 0% 100%)', transformOrigin: 'bottom center', animation: `crystalLickB ${lk.dur}s ease-in-out ${d + lk.dOff}s infinite` }} />
-			))}
+			{/* inner core */}
+			<div style={{
+				position: 'absolute', bottom: 11, left: '50%', marginLeft: -5,
+				width: 10, height: 16, clipPath: CRYSTAL_CLIP,
+				background: 'linear-gradient(to top, #D02CFF, #FFC8FF)',
+				animation: `crystalCoreB ${p ? 1.6 : 2.2}s ease-in-out ${d + 0.4}s infinite`,
+			}} />
+			{/* floating rune mote */}
+			{p && (
+				<div style={{ position: 'absolute', top: 4, left: '50%', marginLeft: 8, width: 4, height: 4, clipPath: CRYSTAL_CLIP, background: '#E9B5FF', boxShadow: '0 0 5px 2px rgba(210,130,255,0.7)', animation: `runeFloatB 1.6s ease-in-out ${d}s infinite` }} />
+			)}
 		</div>
 	);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ORBS — C1 / C2 / C3
+// ORBS — C1 / C2 / C3. Gradient sphere, one slow swirl, calm breathing.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function FlameSlotOrb({ cfg, state, index, flashing }: { cfg: OrbCfg; state: FlameState; index: number; flashing?: boolean }) {
-	const d = index * 0.28;
+	const d = index * 0.35;
 	const ORB = 46;
 
 	if (state === 'empty') return (
@@ -439,69 +446,60 @@ export function FlameSlotOrb({ cfg, state, index, flashing }: { cfg: OrbCfg; sta
 
 	if (state === 'extinguished') return (
 		<div style={{ position: 'relative', width: ORB, height: ORB + 14 }}>
-			{[{ x: '50%', d: '0s' }, { x: '40%', d: '1.1s' }, { x: '60%', d: '2.1s' }].map((s, i) => (
-				<div key={i} style={{ position: 'absolute', bottom: ORB - 4, left: s.x, transform: 'translateX(-50%)', width: 5, height: 10, borderRadius: '50%', background: 'rgba(130,130,130,0.3)', animation: `orbSmoke 2.2s ease-out ${s.d} infinite` }} />
+			{[{ x: '50%', d: '0s' }, { x: '40%', d: '1.2s' }].map((s, i) => (
+				<div key={i} style={{ position: 'absolute', bottom: ORB - 4, left: s.x, transform: 'translateX(-50%)', width: 4, height: 9, borderRadius: '50%', background: 'rgba(130,130,130,0.28)', animation: `orbSmoke 2.4s ease-out ${s.d} infinite` }} />
 			))}
-			<div style={{ position: 'absolute', bottom: 0, left: 0, width: ORB, height: ORB, borderRadius: '50%', background: cfg.extGradient, border: '1.5px solid rgba(60,60,60,0.4)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-				<div style={{ width: 10, height: 10, borderRadius: '50%', background: 'radial-gradient(circle, rgba(100,30,0,0.5) 0%, transparent 70%)' }} />
+			<div style={{ position: 'absolute', bottom: 0, left: 0, width: ORB, height: ORB, borderRadius: '50%', background: cfg.extGradient, border: '1.5px solid rgba(60,60,60,0.4)', overflow: 'hidden' }}>
 				<div style={{ position: 'absolute', top: 6, left: 8, width: 11, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', transform: 'rotate(-20deg)' }} />
 			</div>
 		</div>
 	);
 
 	const p = state === 'pending';
-	const boltAngles = cfg.id === 'c3' ? [8, -28, 46, -52, 70, -80, 20, -14] : [];
+	const boltAngles = cfg.id === 'c3' ? [12, -40, 64, -78] : [];
 	const innerFlamesC1 = [
-		{ left: '18%', w: 7,  h: ORB * 0.46, dur: '0.82s', dOff: 0      },
-		{ left: '36%', w: 9,  h: ORB * 0.56, dur: '1.0s',  dOff: 0.18  },
-		{ left: '55%', w: 8,  h: ORB * 0.50, dur: '0.76s', dOff: 0.36  },
-		{ left: '73%', w: 6,  h: ORB * 0.40, dur: '0.90s', dOff: 0.12  },
+		{ left: '22%', w: 7, h: ORB * 0.42, dur: '1.5s', dOff: 0    },
+		{ left: '44%', w: 9, h: ORB * 0.52, dur: '1.9s', dOff: 0.4  },
+		{ left: '66%', w: 6, h: ORB * 0.38, dur: '1.3s', dOff: 0.75 },
 	];
 
 	return (
 		<div style={{ position: 'relative', width: ORB, height: ORB + 14 }}>
-			{cfg.id === 'c3' && (
-				<div style={{ position: 'absolute', bottom: -4, left: '50%', marginLeft: -(ORB + 8) / 2, width: ORB + 8, height: ORB + 8, borderRadius: '50%', pointerEvents: 'none', animation: `electricCrown 0.45s ease-in-out ${d}s infinite` }} />
-			)}
 			<div style={{
 				position: 'absolute', bottom: 0, left: '50%', marginLeft: -ORB / 2,
 				width: ORB, height: ORB, borderRadius: '50%',
 				background: p ? cfg.pendingGradient : cfg.gradient,
 				border: `1.5px solid ${cfg.borderColor}`,
 				overflow: 'hidden',
-				animation: `${flashing ? 'claimFlash 0.5s ease-out, ' : ''}orbPulse ${p ? '1.2s' : '1.8s'} ease-in-out ${d}s infinite`,
-				boxShadow: `0 0 ${p ? 22 : 14}px ${p ? 7 : 4}px rgba(${cfg.glowColor},${p ? 0.7 : 0.48}), 0 0 ${p ? 44 : 30}px ${p ? 16 : 10}px rgba(${cfg.glowColor},${p ? 0.32 : 0.18})`,
+				animation: `${flashing ? 'claimFlash 0.5s ease-out, ' : ''}orbBreathe ${p ? '2s' : '3s'} ease-in-out ${d}s infinite`,
+				boxShadow: `0 0 ${p ? 18 : 12}px ${p ? 5 : 3}px rgba(${cfg.glowColor},${p ? 0.5 : 0.3})`,
 			}}>
+				{/* single slow swirl */}
 				<div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: cfg.swirlGradient, animation: `${cfg.swirlDir} ${cfg.swirlDur} linear ${d}s infinite` }} />
-				<div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: cfg.swirlGradient, opacity: 0.45, animation: `${cfg.swirlDir === 'orbSwirl' ? 'orbSwirlRev' : 'orbSwirl'} ${parseFloat(cfg.swirlDur) * 1.7}s linear ${d}s infinite` }} />
 				{cfg.id === 'c1' && innerFlamesC1.map((f, fi) => (
-					<div key={fi} style={{ position: 'absolute', bottom: 0, left: f.left, width: f.w, height: f.h, background: 'linear-gradient(to top, rgba(255,50,0,0.95), rgba(255,180,0,0.65), rgba(255,250,80,0.25), transparent)', borderRadius: '50% 50% 30% 30% / 80% 80% 40% 40%', transformOrigin: 'bottom center', animation: `innerFlameC1 ${f.dur} ease-in-out ${f.dOff}s infinite` }} />
+					<div key={fi} style={{ position: 'absolute', bottom: 0, left: f.left, width: f.w, height: f.h, background: 'linear-gradient(to top, rgba(255,50,0,0.85), rgba(255,180,0,0.5), transparent)', borderRadius: '50% 50% 30% 30% / 80% 80% 40% 40%', transformOrigin: 'bottom center', animation: `innerFlameC1 ${f.dur} ease-in-out ${d + f.dOff}s infinite` }} />
 				))}
 				{cfg.id === 'c2' && (
-					<div style={{ position: 'absolute', top: -4, left: -14, width: '55%', height: '115%', background: 'linear-gradient(108deg, transparent 0%, rgba(255,255,210,0.75) 35%, rgba(255,248,180,0.9) 50%, rgba(255,255,210,0.75) 65%, transparent 100%)', animation: `goldSweep 2.6s ease-in-out ${d * 0.5}s infinite` }} />
+					<div style={{ position: 'absolute', top: -4, left: -14, width: '55%', height: '115%', background: 'linear-gradient(108deg, transparent 0%, rgba(255,255,210,0.6) 35%, rgba(255,248,180,0.78) 50%, rgba(255,255,210,0.6) 65%, transparent 100%)', animation: `goldSweep 4.4s ease-in-out ${d}s infinite` }} />
 				)}
-				{cfg.id === 'c2' && (
-					<div style={{ position: 'absolute', bottom: 6, left: 8, width: 12, height: 8, borderRadius: '50%', background: 'rgba(255,240,120,0.35)', animation: `causticsC2 2.8s ease-in-out ${d}s infinite` }} />
-				)}
-				<div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -44%)', width: cfg.id === 'c1' ? 18 : 14, height: cfg.id === 'c1' ? 20 : 16, borderRadius: '50% 50% 40% 40% / 60% 60% 50% 50%', background: 'radial-gradient(circle at 50% 60%, rgba(255,255,240,0.9) 0%, rgba(255,230,80,0.35) 55%, transparent 100%)' }} />
-				<div style={{ position: 'absolute', top: 5, left: 7, width: 14, height: 9, borderRadius: '50%', background: 'rgba(255,255,255,0.28)', transform: 'rotate(-22deg)' }} />
-				{cfg.id === 'c2' && <>
-					<div style={{ position: 'absolute', top: 11, right: 7, width: 9, height: 6, borderRadius: '50%', background: 'rgba(255,248,180,0.32)', transform: 'rotate(18deg)' }} />
-					<div style={{ position: 'absolute', bottom: 8, left: 10, width: 11, height: 6, borderRadius: '50%', background: 'rgba(255,240,100,0.22)', transform: 'rotate(-8deg)' }} />
-				</>}
+				{/* molten core */}
+				<div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -44%)', width: cfg.id === 'c1' ? 18 : 14, height: cfg.id === 'c1' ? 20 : 16, borderRadius: '50% 50% 40% 40% / 60% 60% 50% 50%', background: 'radial-gradient(circle at 50% 60%, rgba(255,255,240,0.85) 0%, rgba(255,230,80,0.3) 55%, transparent 100%)' }} />
+				{/* spec highlight */}
+				<div style={{ position: 'absolute', top: 5, left: 7, width: 14, height: 9, borderRadius: '50%', background: 'rgba(255,255,255,0.26)', transform: 'rotate(-22deg)' }} />
 				{cfg.id === 'c3' && boltAngles.map((angle, bi) => (
-					<div key={bi} style={{ position: 'absolute', top: '50%', left: '50%', width: bi % 3 === 0 ? 2.5 : 1.5, height: ORB * (bi % 3 === 0 ? 0.75 : 0.62), marginTop: -(ORB * (bi % 3 === 0 ? 0.375 : 0.31)), marginLeft: bi % 3 === 0 ? -1.25 : -0.75, background: `linear-gradient(to bottom, transparent 0%, ${cfg.boltColor}44 15%, ${cfg.boltColor} 42%, #ffffff 50%, ${cfg.boltColor} 58%, ${cfg.boltColor}44 85%, transparent 100%)`, transform: `rotate(${angle}deg)`, animation: `zapBolt ${0.8 + bi * 0.18}s ease-in-out ${bi * 0.22}s infinite`, borderRadius: 1 }} />
+					<div key={bi} style={{ position: 'absolute', top: '50%', left: '50%', width: bi % 2 === 0 ? 2.5 : 1.5, height: ORB * (bi % 2 === 0 ? 0.72 : 0.6), marginTop: -(ORB * (bi % 2 === 0 ? 0.36 : 0.3)), marginLeft: bi % 2 === 0 ? -1.25 : -0.75, background: `linear-gradient(to bottom, transparent 0%, ${cfg.boltColor}44 15%, ${cfg.boltColor} 42%, #ffffff 50%, ${cfg.boltColor} 58%, ${cfg.boltColor}44 85%, transparent 100%)`, transform: `rotate(${angle}deg)`, animation: `zapBolt ${2.6 + bi * 0.5}s ease-in-out ${d + bi * 0.4}s infinite`, borderRadius: 1 }} />
 				))}
 			</div>
-			{p && cfg.sparkColors.map((color, si) => (
-				<div key={si} style={{ position: 'absolute', bottom: ORB / 2, left: '50%', marginLeft: -(si === 0 ? 2.5 : 1.5), marginBottom: -(si === 0 ? 2.5 : 1.5), width: si === 0 ? 5 : 3, height: si === 0 ? 5 : 3, borderRadius: '50%', background: color, boxShadow: `0 0 5px 3px ${color}99`, animation: `orbitSpark ${1.4 + si * 0.3}s linear ${-0.5 * si}s infinite` }} />
-			))}
+			{/* one orbiting spark while claimable */}
+			{p && (
+				<div style={{ position: 'absolute', bottom: ORB / 2, left: '50%', marginLeft: -2.5, marginBottom: -2.5, width: 5, height: 5, borderRadius: '50%', background: cfg.sparkColors[0], boxShadow: `0 0 5px 3px ${cfg.sparkColors[0]}88`, animation: `orbitSpark 2.6s linear ${d}s infinite` }} />
+			)}
 		</div>
 	);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VARIANT D — Pixel Art
+// VARIANT D — Pixel Art. Kept chunky on purpose; slightly slower step timing.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function FlameSlotD({ state, index, flashing }: { state: FlameState; index: number; flashing?: boolean }) {
@@ -521,11 +519,11 @@ export function FlameSlotD({ state, index, flashing }: { state: FlameState; inde
 	);
 	const p = state === 'pending';
 	const layers = [
-		{ w: p ? 30 : 28, b: 0,  c: PX_COLORS.l1,  anim: `pxL1 0.5s steps(3) ${d}s infinite`          },
-		{ w: p ? 24 : 22, b: 8,  c: PX_COLORS.l2,  anim: `pxL2 0.5s steps(3) ${d + 0.08}s infinite`  },
-		{ w: p ? 18 : 16, b: 16, c: PX_COLORS.l3,  anim: `pxL3 0.5s steps(3) ${d + 0.16}s infinite`  },
-		{ w: p ? 12 : 10, b: 24, c: PX_COLORS.l4,  anim: `pxL4 0.5s steps(3) ${d + 0.24}s infinite`  },
-		{ w: p ? 7  : 5,  b: 32, c: PX_COLORS.tip, anim: `pxL5 0.55s steps(3) ${d + 0.05}s infinite` },
+		{ w: p ? 30 : 28, b: 0,  c: PX_COLORS.l1,  anim: `pxL1 0.62s steps(3) ${d}s infinite`          },
+		{ w: p ? 24 : 22, b: 8,  c: PX_COLORS.l2,  anim: `pxL2 0.62s steps(3) ${d + 0.1}s infinite`   },
+		{ w: p ? 18 : 16, b: 16, c: PX_COLORS.l3,  anim: `pxL3 0.62s steps(3) ${d + 0.2}s infinite`   },
+		{ w: p ? 12 : 10, b: 24, c: PX_COLORS.l4,  anim: `pxL4 0.62s steps(3) ${d + 0.3}s infinite`   },
+		{ w: p ? 7  : 5,  b: 32, c: PX_COLORS.tip, anim: `pxL5 0.68s steps(3) ${d + 0.06}s infinite`  },
 	];
 	return (
 		<div style={{ position: 'relative', width: 34, height: 52, imageRendering: 'pixelated', animation: flashing ? 'claimFlash 0.5s ease-out' : undefined }}>
@@ -534,7 +532,7 @@ export function FlameSlotD({ state, index, flashing }: { state: FlameState; inde
 				<div key={li} style={{ position: 'absolute', bottom: lyr.b, left: '50%', transform: 'translateX(-50%)', width: lyr.w, height: 8, background: lyr.c, borderRadius: 0, animation: lyr.anim }} />
 			))}
 			{p && !flashing && (
-				<div style={{ position: 'absolute', inset: -3, border: `2px solid ${PX_COLORS.l4}`, borderRadius: 0, animation: 'pxBlink 0.6s steps(2) infinite', pointerEvents: 'none' }} />
+				<div style={{ position: 'absolute', inset: -3, border: `2px solid ${PX_COLORS.l4}`, borderRadius: 0, animation: 'pxBlink 0.7s steps(2) infinite', pointerEvents: 'none' }} />
 			)}
 			<div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0px, rgba(0,0,0,0.22) 1px, transparent 1px, transparent 3px)', pointerEvents: 'none' }} />
 		</div>
@@ -542,7 +540,7 @@ export function FlameSlotD({ state, index, flashing }: { state: FlameState; inde
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// LiveStreakRow — used on Dashboard with active skin
+// LiveStreakRow — used on Home with the active skin
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const SKIN_HIGHLIGHT: Record<string, string> = {

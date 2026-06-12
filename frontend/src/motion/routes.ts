@@ -21,8 +21,8 @@ export const motionTokens = {
 		standard: [0.32, 0.72, 0, 1] as const,
 	},
 	spring: {
-		tap: { type: 'spring', stiffness: 540, damping: 30, mass: 0.8 },
-		nav: { type: 'spring', stiffness: 440, damping: 32, mass: 0.9 },
+		tap: { type: 'spring' as const, stiffness: 540, damping: 30, mass: 0.8 },
+		nav: { type: 'spring' as const, stiffness: 440, damping: 32, mass: 0.9 },
 	},
 	distance: {
 		publicY: 24,

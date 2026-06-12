@@ -23,13 +23,16 @@ export default defineConfig({
 		react(),
 		VitePWA({
 			registerType: 'prompt',
-			includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png'],
+			includeAssets: ['favicon.ico', 'robots.txt', 'apple-touch-icon.png', 'fonts/*.woff2'],
+			workbox: {
+				globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+			},
 			manifest: {
 				name: 'Kairos lift',
 				short_name: 'Kairos',
 				description: 'Offline-first training journal. Seize the moment.',
-				theme_color: '#ffffff',
-				background_color: '#ffffff',
+				theme_color: '#0b0d0c',
+				background_color: '#0b0d0c',
 				display: 'standalone',
 				scope: '/',
 				start_url: '/',

@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './LanguageSwitcher';
 import PublicLegalLinks from './PublicLegalLinks';
+import KairosLogo from './KairosLogo';
 import { publicSite } from '../config/publicSite';
 import { useAuthStore } from '../store/authStore';
 import '../pages/Legal.css';
+import './PublicAuthShell.css';
 
 interface PublicPageShellProps {
 	eyebrow: string;
@@ -20,49 +22,40 @@ export default function PublicPageShell({ eyebrow, title, description, children 
 
 	return (
 		<div className="legal-page-shell">
-			<div className="legal-page-bg" aria-hidden="true">
-				<div className="legal-page-grid" />
-				<div className="legal-page-glow legal-page-glow-left" />
-				<div className="legal-page-glow legal-page-glow-right" />
-			</div>
-
-			<nav className="legal-page-nav">
-				<Link to="/" className="legal-page-logo" aria-label={`${publicSite.siteName} home`}>
-					<span>Gym</span>
-					<strong>AI</strong>
-				</Link>
-				<div className="legal-page-nav-actions">
-					<LanguageSwitcher compact />
+			<div className="legal-col">
+				<div className="topbar">
+					<Link to="/" aria-label={`${publicSite.siteName} home`}>
+						<KairosLogo size="sm" />
+					</Link>
+					<span className="spacer" />
+					<LanguageSwitcher />
 					{isAuthenticated ? (
-						<Link to="/home" className="legal-page-nav-cta">{t('Back to app')}</Link>
+						<Link to="/home" className="legal-nav-link">{t('Back to app')}</Link>
 					) : (
-						<>
-							<Link to="/" className="legal-page-nav-link">{t('Home')}</Link>
-							<Link to="/login" className="legal-page-nav-link">{t('Login')}</Link>
-							<Link to="/register" className="legal-page-nav-cta">{t('Register')}</Link>
-						</>
+						<Link to="/login" className="legal-nav-link">{t('Login')}</Link>
 					)}
 				</div>
-			</nav>
 
-			<main className="legal-page-content">
-				<section className="legal-page-hero">
-					<span className="legal-page-kicker">{eyebrow}</span>
-					<h1>{title}</h1>
-					<p>{description}</p>
-					<div className="legal-page-meta">
+				<section className="legal-hero">
+					<span className="legal-eyebrow"><span className="ey-line" />{eyebrow}</span>
+					<h1 className="legal-title">{title}</h1>
+					<p className="legal-desc">{description}</p>
+					<div className="legal-meta mono">
 						<span>{publicSite.publicDomain}</span>
+						<span>·</span>
 						<span>{t('Self-hosted service')}</span>
 					</div>
 				</section>
 
-				<section className="legal-page-card">{children}</section>
-			</main>
+				<section className="legal-card">{children}</section>
 
-			<footer className="legal-page-footer">
-				<div>{publicSite.siteName}</div>
-				<PublicLegalLinks centered showSupport />
-			</footer>
+				<div className="legalfoot">
+					<span className="lf-brand mono">Kairos lift · {t('Offline-first training log')}</span>
+					<div className="lf-links">
+						<PublicLegalLinks centered compact showSupport />
+					</div>
+				</div>
+			</div>
 		</div>
 	);
 }

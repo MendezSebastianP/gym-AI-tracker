@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../api/client';
 import { db } from '../db/schema';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuthStore } from '../store/authStore';
 import {
-    BarChart2, Flame, Dumbbell, Calendar, TrendingUp,
-    ChevronRight, Star, HelpCircle, X, User as UserIcon, Scale, Activity, Shield
+    BarChart2, Flame, Calendar, HelpCircle, X, User as UserIcon, Scale, Shield, Star,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
     Area, AreaChart
 } from 'recharts';
+import { useTranslation } from 'react-i18next';
+import { K, SecLabel } from '../components/kit';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface ProgressPoint {
@@ -44,9 +45,19 @@ function fmtDate(iso: string): string {
 
 const MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Full Body', 'Cardio'];
 
+const tickStyle = { fill: 'var(--text-4)', fontSize: 10, fontFamily: 'var(--font-mono)' } as const;
+const tooltipStyle = {
+    background: 'var(--card-solid)',
+    border: '1px solid var(--line-strong)',
+    borderRadius: 12,
+    fontSize: 12,
+    fontFamily: 'var(--font-disp)',
+} as const;
+
 // ── Component ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
     const { user } = useAuthStore();
+    const { t } = useTranslation();
     const [progressData, setProgressData] = useState<ProgressPoint[]>([]);
     const [loading, setLoading] = useState(true);
     const [demoMode, setDemoMode] = useState(false);
@@ -153,7 +164,7 @@ export default function Dashboard() {
             const res = await api.post('/gamification/joker-streak');
             setJokerTokens(res.data.joker_tokens);
             setStreakAtRisk(false);
-            setJokerMsg(`Streak saved! +${res.data.streak_coins} coins`);
+            setJokerMsg(`${t('Streak saved!')} +${res.data.streak_coins} ${t('coins')}`);
             setTimeout(() => setJokerMsg(null), 4000);
         } catch (e: any) {
             setJokerMsg(e?.response?.data?.detail || 'Failed to use joker');
@@ -300,25 +311,32 @@ export default function Dashboard() {
         return () => { cancelled = true; };
     }, [demoMode, effortTrackingEnabled]);
 
-    const lineColor = demoMode ? '#FFB347' : 'var(--primary)';
+    const lineColor = demoMode ? 'var(--amber)' : 'var(--lime)';
     const hasData = progressData.length > 0;
+
+    // Headline numbers for the strength card
+    const firstPts = hasData ? progressData[0].nss : 0;
+    const lastPts = hasData ? progressData[progressData.length - 1].nss : 0;
+    const trendPct = (hasData && progressData.length > 1 && firstPts > 0)
+        ? Math.round(((lastPts - firstPts) / firstPts) * 100)
+        : null;
+    const avgEffort = effortTrend.length > 0
+        ? Math.round(effortTrend.reduce((a, e) => a + e.effort, 0) / effortTrend.length)
+        : null;
 
     // Custom tooltip
     const CustomTooltip = ({ active, payload }: any) => {
         if (!active || !payload?.length) return null;
         const d = payload[0].payload as ProgressPoint;
         return (
-            <div style={{
-                background: '#1E1E1E', border: '1px solid #333', borderRadius: '8px',
-                padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-            }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
+            <div style={{ ...tooltipStyle, padding: '10px 14px' }}>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', marginBottom: 4 }}>
                     {fmtDate(d.date)}
                 </div>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: lineColor }}>
+                <div className="num" style={{ fontSize: 16, fontWeight: 800, color: lineColor }}>
                     {fmtKg(d.nss)} pts
                 </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                <div className="mono num" style={{ fontSize: 9, color: 'var(--text-4)', marginTop: 2 }}>
                     Session #{d.session_number}
                 </div>
             </div>
@@ -326,212 +344,181 @@ export default function Dashboard() {
     };
 
     return (
-        <div className="container" style={{ paddingBottom: '90px' }}>
+        <div className="container">
 
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <BarChart2 size={26} color="var(--primary)" />
-                    <h1 style={{ fontSize: '22px', fontWeight: 700 }}>Stats</h1>
-                    <button onClick={() => setShowHelp(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                        <HelpCircle size={22} color="var(--text-tertiary)" />
+            <header className="page-hdr" style={{ alignItems: 'center' }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span className="page-title" style={{ flex: 'none' }}>{t('Stats')}</span>
+                    <button className="icon-btn sm" onClick={() => setShowHelp(true)} aria-label={t('Help')} style={{ width: 32, height: 32, borderRadius: 9 }}>
+                        <HelpCircle size={17} />
                     </button>
                 </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                    <button
-                        onClick={() => setDemoMode(!demoMode)}
-                        style={{
-                            background: demoMode ? 'rgba(255,179,71,0.15)' : 'none',
-                            border: demoMode ? '1px solid #FFB347' : '1px solid transparent',
-                            borderRadius: '8px', cursor: 'pointer', padding: '4px 8px',
-                            display: 'flex', alignItems: 'center', gap: '4px'
-                        }}
-                    >
-                        <UserIcon size={18} color={demoMode ? '#FFB347' : 'var(--text-tertiary)'} />
-                        {demoMode && <span style={{ fontSize: '11px', color: '#FFB347', fontWeight: 600 }}>Demo</span>}
-                    </button>
-                </div>
-            </div>
+                <button
+                    className="icon-btn sm"
+                    onClick={() => setDemoMode(!demoMode)}
+                    aria-label={t('Toggle Demo Mode')}
+                    style={demoMode ? {
+                        color: 'var(--reward)',
+                        borderColor: 'color-mix(in oklab, var(--reward) 40%, transparent)',
+                        background: 'color-mix(in oklab, var(--reward) 12%, transparent)',
+                    } : undefined}
+                >
+                    <UserIcon size={18} />
+                </button>
+            </header>
 
             {/* Demo banner */}
             {demoMode && (
-                <div style={{
-                    background: 'linear-gradient(135deg, rgba(255,179,71,0.12), rgba(255,179,71,0.05))',
-                    border: '1px solid rgba(255,179,71,0.3)',
-                    borderRadius: '10px', padding: '10px 14px', marginBottom: '16px',
-                    display: 'flex', gap: '8px', alignItems: 'center'
-                }}>
-                    <Star size={16} color="#FFB347" />
-                    <span style={{ fontSize: '12px', color: '#FFB347' }}>
-                        Viewing demo profile — 16 months of training data
+                <div
+                    className="coach"
+                    style={{
+                        marginTop: 10,
+                        borderColor: 'color-mix(in oklab, var(--reward) 30%, transparent)',
+                        background: 'color-mix(in oklab, var(--reward) 7%, var(--card-solid))',
+                    }}
+                >
+                    <span className="badge" style={{ background: 'color-mix(in oklab, var(--reward) 16%, transparent)', color: 'var(--reward)' }}>
+                        <Star size={14} />
                     </span>
+                    <div>
+                        <b style={{ color: 'var(--reward)' }}>{t('Demo mode')}</b>
+                        <p>{t('Viewing demo profile — 16 months of training data')}</p>
+                    </div>
                 </div>
             )}
 
-            {/* Overview Cards */}
+            {/* Overview cards */}
             {!demoMode && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-                    <div className="card text-center" style={{ marginBottom: 0, padding: '12px 6px' }}>
-                        <Calendar size={16} color="var(--accent)" style={{ margin: '0 auto 4px' }} />
-                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 9, marginTop: 14 }}>
+                    <div className="card" style={{ marginBottom: 0, padding: '13px 8px', textAlign: 'center' }}>
+                        <Calendar size={15} style={{ color: 'var(--green-mid)', margin: '0 auto 5px', display: 'block' }} />
+                        <div className="num" style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.02em' }}>
                             {overview?.totalSessions ?? 0}
                         </div>
-                        <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>Sessions</div>
+                        <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', marginTop: 3 }}>{t('Sessions')}</div>
                     </div>
-                    <div className="card text-center" style={{ marginBottom: 0, padding: '12px 6px' }}>
-                        <Dumbbell size={16} color="var(--primary)" style={{ margin: '0 auto 4px' }} />
-                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary)' }}>
+                    <div className="card" style={{ marginBottom: 0, padding: '13px 8px', textAlign: 'center' }}>
+                        <K.dumbbell width={16} height={16} style={{ color: 'var(--lime)', margin: '0 auto 5px', display: 'block' }} />
+                        <div className="num" style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.02em' }}>
                             {fmtKg(overview?.totalVolume ?? 0)}
                         </div>
-                        <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>Total Volume</div>
+                        <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', marginTop: 3 }}>{t('Total Volume')}</div>
                     </div>
-                    <div className="card text-center" style={{ marginBottom: 0, padding: '12px 6px' }}>
-                        <Flame size={16} color="#FF6B6B" style={{ margin: '0 auto 4px' }} />
-                        <div style={{ fontSize: '20px', fontWeight: 700, color: '#FF6B6B' }}>
-                            {overview?.streakWeeks ?? 0}<span style={{ fontSize: '11px', fontWeight: 400 }}>w</span>
+                    <div className="card" style={{ marginBottom: 0, padding: '13px 8px', textAlign: 'center' }}>
+                        <Flame size={15} style={{ color: 'var(--reward)', margin: '0 auto 5px', display: 'block' }} />
+                        <div className="num" style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.02em' }}>
+                            {overview?.streakWeeks ?? 0}<span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>w</span>
                         </div>
-                        <div style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>Streak</div>
+                        <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', marginTop: 3 }}>{t('Streak')}</div>
                     </div>
                 </div>
             )}
 
             {/* Streak-at-risk banner */}
             {streakAtRisk && (overview?.streakWeeks ?? 0) > 0 && (
-                <div style={{
-                    marginBottom: '12px', padding: '12px 16px',
-                    background: 'linear-gradient(135deg, rgba(251,146,60,0.15), rgba(239,68,68,0.1))',
-                    border: '1px solid rgba(251,146,60,0.4)',
-                    borderRadius: '12px',
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                }}>
-                    <Flame size={20} color="#fb923c" style={{ flexShrink: 0 }} />
+                <div
+                    className="coach"
+                    style={{
+                        marginTop: 12,
+                        borderColor: 'color-mix(in oklab, var(--reward) 38%, transparent)',
+                        background: 'color-mix(in oklab, var(--reward) 8%, var(--card-solid))',
+                        alignItems: 'center',
+                    }}
+                >
+                    <span className="badge" style={{ background: 'color-mix(in oklab, var(--reward) 16%, transparent)', color: 'var(--reward)' }}>
+                        <Flame size={14} />
+                    </span>
                     <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#fb923c' }}>
-                            {overview?.streakWeeks}w streak at risk!
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                            No sessions this week. Train or use a Joker.
-                        </div>
+                        <b style={{ color: 'var(--reward)' }}>{overview?.streakWeeks}w {t('streak at risk!')}</b>
+                        <p>{t('No sessions this week. Train or use a Joker.')}</p>
                     </div>
                     {jokerTokens > 0 && (
                         <button
+                            className="tool-chip"
                             onClick={useJokerForStreak}
                             disabled={jokerUsing}
-                            style={{
-                                padding: '6px 12px', borderRadius: '8px', border: 'none',
-                                background: 'rgba(139,92,246,0.25)', color: '#a78bfa',
-                                fontWeight: 700, fontSize: '12px', cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
-                            }}
+                            style={{ flexShrink: 0 }}
                         >
                             <Shield size={13} />
-                            Use Joker ({jokerTokens})
+                            {t('Joker')} ({jokerTokens})
                         </button>
                     )}
                 </div>
             )}
             {jokerMsg && (
-                <div style={{
-                    marginBottom: '12px', padding: '10px 14px',
-                    background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)',
-                    borderRadius: '10px', fontSize: '13px', color: '#a78bfa', textAlign: 'center',
-                }}>
-                    {jokerMsg}
-                </div>
+                <div className="topmark" style={{ marginTop: 10, color: 'var(--lime)' }}>{jokerMsg}</div>
             )}
 
-            {/* Progress Chart */}
-            <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                    <TrendingUp size={18} color="var(--primary)" />
-                    <h3 style={{ fontWeight: 600, fontSize: '15px' }}>Strength Progress</h3>
+            {/* ── Strength progress ── */}
+            <SecLabel>{t('Strength Progress')}</SecLabel>
+            <div className="card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{t('Strength trend')}</span>
+                    {hasData && (
+                        <span className="mono num" style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 700, color: lineColor, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                            <K.spark width={13} height={13} />{t('Last')} {progressData.length} {t('sessions')}
+                        </span>
+                    )}
                 </div>
-
-                {/* Filter Level 1 */}
-                <div style={{
-                    display: 'flex', gap: 0, marginBottom: '10px',
-                    background: 'var(--bg-tertiary)', borderRadius: '8px', padding: '3px',
-                    overflowX: 'auto'
-                }}>
-                    {([['total', 'Total'], ['muscle_group', 'Group'], ['muscle', 'Muscle'], ['exercise', 'Exercise']] as [FilterLevel, string][]).map(([key, label]) => (
+                <div className="seg" style={{ display: 'flex', width: '100%' }}>
+                    {([['total', t('Total')], ['muscle_group', t('Group')], ['muscle', t('Muscle')], ['exercise', t('Exercise')]] as [FilterLevel, string][]).map(([key, label]) => (
                         <button
                             key={key}
+                            className={filterLevel === key ? 'on' : ''}
                             onClick={() => { setFilterLevel(key); }}
-                            style={{
-                                flex: 1, padding: '6px 4px', fontSize: '11px', whiteSpace: 'nowrap',
-                                fontWeight: filterLevel === key ? 700 : 400,
-                                borderRadius: '6px', border: 'none', cursor: 'pointer',
-                                background: filterLevel === key ? 'var(--bg-secondary)' : 'transparent',
-                                color: filterLevel === key ? 'var(--primary)' : 'var(--text-secondary)',
-                                transition: 'all 0.2s',
-                                boxShadow: filterLevel === key ? '0 2px 4px rgba(0,0,0,0.3)' : 'none',
-                            }}
+                            style={{ flex: 1, justifyContent: 'center', padding: '7px 4px', whiteSpace: 'nowrap' }}
                         >
                             {label}
                         </button>
                     ))}
                 </div>
 
-                {/* Filter Level 2 — sub-filter blocks */}
+                {/* Sub-filters */}
                 {filterLevel === 'muscle_group' && (
-                    <select
-                        value={selectedGroup ?? ''}
-                        onChange={e => setSelectedGroup(e.target.value)}
-                        style={{
-                            width: '100%', padding: '10px 12px', borderRadius: '8px',
-                            background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-                            border: '1px solid #444', fontSize: '14px', marginBottom: '16px',
-                            outline: 'none'
-                        }}
-                    >
-                        <option value="">Select muscle group...</option>
-                        {MUSCLE_GROUPS.map(g => (
-                            <option key={g} value={g}>{g}</option>
-                        ))}
-                    </select>
+                    <div className="field" style={{ marginTop: 12 }}>
+                        <select value={selectedGroup ?? ''} onChange={e => setSelectedGroup(e.target.value)} style={{ marginTop: 0 }}>
+                            <option value="">{t('Select muscle group...')}</option>
+                            {MUSCLE_GROUPS.map(g => (
+                                <option key={g} value={g}>{g}</option>
+                            ))}
+                        </select>
+                    </div>
                 )}
 
                 {filterLevel === 'muscle' && (
-                    <select
-                        value={selectedMuscle ?? ''}
-                        onChange={e => setSelectedMuscle(e.target.value)}
-                        style={{
-                            width: '100%', padding: '10px 12px', borderRadius: '8px',
-                            background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-                            border: '1px solid #444', fontSize: '14px', marginBottom: '16px',
-                            outline: 'none'
-                        }}
-                    >
-                        <option value="">Select muscle...</option>
-                        {muscles.map(m => (
-                            <option key={m} value={m}>{m}</option>
-                        ))}
-                    </select>
+                    <div className="field" style={{ marginTop: 12 }}>
+                        <select value={selectedMuscle ?? ''} onChange={e => setSelectedMuscle(e.target.value)} style={{ marginTop: 0 }}>
+                            <option value="">{t('Select muscle...')}</option>
+                            {muscles.map(m => (
+                                <option key={m} value={m}>{m}</option>
+                            ))}
+                        </select>
+                    </div>
                 )}
 
                 {filterLevel === 'exercise' && (
-                    <div style={{ position: 'relative', marginBottom: '16px' }}>
-                        <input
-                            type="text"
-                            placeholder="Search exercises..."
-                            value={exerciseSearchTerm}
-                            onChange={(e) => {
-                                setExerciseSearchTerm(e.target.value);
-                                if (!e.target.value) {
-                                    setSelectedExerciseId(null);
-                                }
-                            }}
-                            style={{
-                                width: '100%', padding: '10px 12px', borderRadius: '8px',
-                                background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-                                border: '1px solid #444', fontSize: '14px', outline: 'none'
-                            }}
-                        />
+                    <div style={{ position: 'relative', marginTop: 12 }}>
+                        <div className="field" style={{ marginTop: 0 }}>
+                            <input
+                                type="text"
+                                placeholder={t('Search exercises...')}
+                                value={exerciseSearchTerm}
+                                onChange={(e) => {
+                                    setExerciseSearchTerm(e.target.value);
+                                    if (!e.target.value) {
+                                        setSelectedExerciseId(null);
+                                    }
+                                }}
+                                style={{ marginTop: 0 }}
+                            />
+                        </div>
                         {exerciseSearchTerm && !selectedExerciseId && searchExercises.length > 0 && (
                             <div style={{
                                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
-                                background: 'var(--bg-secondary)', border: '1px solid #333',
-                                borderRadius: '8px', marginTop: '4px', overflow: 'hidden'
+                                background: 'var(--card-solid)', border: '1px solid var(--line-strong)',
+                                borderRadius: 13, marginTop: 4, overflow: 'hidden',
+                                boxShadow: '0 14px 34px -14px rgba(0,0,0,0.6)',
                             }}>
                                 {searchExercises.map((e: any) => (
                                     <button
@@ -541,9 +528,10 @@ export default function Dashboard() {
                                             setExerciseSearchTerm(e.name);
                                         }}
                                         style={{
-                                            width: '100%', padding: '10px 12px', textAlign: 'left',
-                                            background: 'none', border: 'none', color: 'var(--text-primary)',
-                                            borderBottom: '1px solid #333', cursor: 'pointer', fontSize: '13px'
+                                            width: '100%', padding: '11px 14px', textAlign: 'left',
+                                            background: 'none', border: 'none', color: 'var(--text)',
+                                            borderBottom: '1px solid var(--line)', cursor: 'pointer',
+                                            fontFamily: 'var(--font-disp)', fontWeight: 600, fontSize: 13.5,
                                         }}
                                     >
                                         {e.name}
@@ -556,126 +544,149 @@ export default function Dashboard() {
 
                 {/* Chart */}
                 {loading ? (
-                    <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
-                        Loading…
+                    <div className="mono" style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text-4)' }}>
+                        {t('Loading...')}
                     </div>
                 ) : !hasData ? (
-                    <div style={{ height: '200px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                        <BarChart2 size={40} color="var(--text-tertiary)" style={{ opacity: 0.3 }} />
-                        <p style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
-                            {demoMode ? 'No demo data found' : 'Complete a session to see your progress'}
+                    <div style={{ height: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                        <BarChart2 size={36} style={{ color: 'var(--text-4)', opacity: 0.4 }} />
+                        <p style={{ fontSize: 13, color: 'var(--text-3)' }}>
+                            {demoMode ? t('No demo data found') : t('Complete a session to see your progress')}
                         </p>
                         {!demoMode && (
-                            <button onClick={() => setDemoMode(true)} style={{
-                                fontSize: '12px', color: '#FFB347', background: 'none', border: '1px solid #FFB347',
-                                borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', marginTop: '4px'
-                            }}>
-                                View demo profile →
+                            <button className="tool-chip" onClick={() => setDemoMode(true)}>
+                                {t('View demo profile')} →
                             </button>
                         )}
                     </div>
                 ) : (
-                    <ResponsiveContainer width="100%" height={220}>
-                        <AreaChart data={progressData}>
-                            <defs>
-                                <linearGradient id="nssGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor={lineColor} stopOpacity={0.2} />
-                                    <stop offset="95%" stopColor={lineColor} stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <XAxis
-                                dataKey="session_number"
-                                tick={{ fill: '#757575', fontSize: 10 }}
-                                axisLine={{ stroke: '#333' }}
-                                tickLine={false}
-                            />
-                            <YAxis
-                                tickFormatter={(v: number) => fmtKg(v)}
-                                tick={{ fill: '#757575', fontSize: 10 }}
-                                axisLine={false}
-                                tickLine={false}
-                                width={45}
-                            />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Area
-                                type="monotone"
-                                dataKey="nss"
-                                stroke={lineColor}
-                                strokeWidth={2}
-                                fill="url(#nssGrad)"
-                                dot={false}
-                                activeDot={{
-                                    r: 5,
-                                    stroke: lineColor,
-                                    strokeWidth: 2,
-                                    fill: '#1E1E1E'
-                                }}
-                                animationDuration={800}
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
+                    <div style={{ marginTop: 16 }}>
+                        <div className="num" style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                            {trendPct !== null
+                                ? <span style={{ color: trendPct >= 0 ? lineColor : 'var(--danger)' }}>{trendPct >= 0 ? '+' : ''}{trendPct}%</span>
+                                : <span>{fmtKg(lastPts)} <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>pts</span></span>}
+                        </div>
+                        <div style={{ marginTop: 5, marginBottom: 12, fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
+                            {trendPct !== null ? (
+                                <>
+                                    {t('Score')} <b className="num" style={{ color: lineColor }}>{fmtKg(firstPts)} → {fmtKg(lastPts)} pts</b>
+                                    {' · '}
+                                    {trendPct > 2 ? t('trending up') : trendPct < -2 ? t('trending down') : t('holding steady')}
+                                </>
+                            ) : t('Normalised strength score per session')}
+                        </div>
+                        <ResponsiveContainer width="100%" height={220}>
+                            <AreaChart data={progressData}>
+                                <defs>
+                                    <linearGradient id="nssGrad" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor={lineColor} stopOpacity={0.22} />
+                                        <stop offset="95%" stopColor={lineColor} stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <XAxis
+                                    dataKey="session_number"
+                                    tick={tickStyle}
+                                    axisLine={{ stroke: 'var(--line)' }}
+                                    tickLine={false}
+                                />
+                                <YAxis
+                                    tickFormatter={(v: number) => fmtKg(v)}
+                                    tick={tickStyle}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    width={45}
+                                />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Area
+                                    type="monotone"
+                                    dataKey="nss"
+                                    stroke={lineColor}
+                                    strokeWidth={2.4}
+                                    fill="url(#nssGrad)"
+                                    dot={false}
+                                    activeDot={{
+                                        r: 5,
+                                        stroke: lineColor,
+                                        strokeWidth: 2,
+                                        fill: 'var(--card-solid)'
+                                    }}
+                                    animationDuration={800}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
                 )}
             </div>
 
             {effortTrackingEnabled && effortTrend && effortTrend.length > 0 && (
-                <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                        <Activity size={16} color="#22c55e" />
-                        <h3 style={{ fontWeight: 600, fontSize: '15px' }}>Effort Trend</h3>
+                <>
+                    <SecLabel>{t('Effort Trend')}</SecLabel>
+                    <div className="card">
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 10 }}>
+                            <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{t('Average effort')}</span>
+                            <span className="mono num" style={{ marginLeft: 'auto', fontSize: 9.5, color: 'var(--text-4)' }}>
+                                {demoMode ? t('Demo') : `${t('Last')} ${effortTrend.length} ${t('sessions')}`} · 0-100
+                            </span>
+                        </div>
+                        {avgEffort !== null && (
+                            <div style={{ marginBottom: 12 }}>
+                                <span className="num" style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1 }}>{avgEffort}</span>
+                                <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 6 }}>
+                                    {avgEffort >= 78 ? t('All out') : avgEffort >= 55 ? t('Hard') : avgEffort >= 30 ? t('Moderate') : t('Easy')}
+                                </span>
+                            </div>
+                        )}
+                        <ResponsiveContainer width="100%" height={170}>
+                            <LineChart data={effortTrend}>
+                                <XAxis dataKey="index" tick={tickStyle} axisLine={false} tickLine={false} />
+                                <YAxis domain={[0, 100]} tick={tickStyle} axisLine={false} tickLine={false} width={30} />
+                                <Tooltip
+                                    contentStyle={tooltipStyle}
+                                    formatter={(v: any) => [`${v}`, t('Effort')]}
+                                />
+                                <Line type="monotone" dataKey="effort" stroke="var(--green-mid)" strokeWidth={2.4} dot={{ r: 2, fill: 'var(--green-mid)' }} />
+                            </LineChart>
+                        </ResponsiveContainer>
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
-                        {demoMode ? 'Demo effort trend example (0-100)' : `Last ${effortTrend.length} sessions (0-100)`}
-                    </div>
-                    <ResponsiveContainer width="100%" height={170}>
-                        <LineChart data={effortTrend}>
-                            <XAxis dataKey="index" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-                            <YAxis domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={30} />
-                            <Tooltip
-                                contentStyle={{
-                                    background: 'rgba(10,10,15,0.95)',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                    borderRadius: 8,
-                                    fontSize: 12,
-                                }}
-                                formatter={(v: any) => [`${v}`, 'Effort']}
-                            />
-                            <Line type="monotone" dataKey="effort" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 2 }} />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
+                </>
             )}
 
             {/* Body Weight Chart */}
-            <div className="card" style={{ marginTop: '20px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <Scale size={18} color="var(--primary)" />
-                    <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Body Weight</h3>
+            <SecLabel>{t('Body Weight')}</SecLabel>
+            <div className="card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{t('Body weight')}</span>
+                    <span className="mono num" style={{ marginLeft: 'auto', fontSize: 9.5, color: 'var(--text-4)' }}>{t('Last 90 days')}</span>
                 </div>
+                {(weightCurrent || weightChange30d !== null) && (
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
+                        {weightCurrent && (
+                            <span className="num" style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                                {weightCurrent}<span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 4 }}>kg</span>
+                            </span>
+                        )}
+                        {weightChange30d !== null && (
+                            <span className="num" style={{ fontSize: 13.5, fontWeight: 700, color: weightChange30d < 0 ? 'var(--lime)' : weightChange30d > 0 ? 'var(--danger)' : 'var(--text-2)' }}>
+                                {weightChange30d > 0 ? '+' : ''}{weightChange30d} kg / 30d
+                            </span>
+                        )}
+                    </div>
+                )}
                 {weightData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={180}>
                         <LineChart data={weightData}>
-                            <XAxis dataKey="date" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                            <YAxis domain={['auto', 'auto']} tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
-                            <Tooltip
-                                contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }}
-                                labelStyle={{ color: 'var(--text-secondary)' }}
-                            />
-                            <Line type="stepAfter" dataKey="kg" stroke="#CCFF00" strokeWidth={2} dot={{ r: 3, fill: '#CCFF00' }} />
+                            <XAxis dataKey="date" tick={tickStyle} axisLine={false} tickLine={false} />
+                            <YAxis domain={['auto', 'auto']} tick={tickStyle} axisLine={false} tickLine={false} width={35} />
+                            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--text-2)' }} />
+                            <Line type="stepAfter" dataKey="kg" stroke="var(--lime)" strokeWidth={2.2} dot={{ r: 3, fill: 'var(--lime)' }} />
                         </LineChart>
                     </ResponsiveContainer>
                 ) : (
-                    <p style={{ fontSize: '13px', color: 'var(--text-tertiary)', margin: '8px 0 12px' }}>
-                        Log your body weight during workouts to track your progress here.
+                    <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '4px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Scale size={15} style={{ color: 'var(--text-4)' }} />
+                        {t('Log your body weight during workouts to track your progress here.')}
                     </p>
                 )}
-                <div style={{ marginTop: weightData.length > 0 ? '8px' : '0', fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', gap: '16px' }}>
-                    {weightCurrent && <span>{weightCurrent} kg</span>}
-                    {weightChange30d !== null && (
-                        <span style={{ color: weightChange30d < 0 ? '#4ade80' : weightChange30d > 0 ? '#f87171' : 'var(--text-secondary)' }}>
-                            {weightChange30d > 0 ? '+' : ''}{weightChange30d} kg / 30d
-                        </span>
-                    )}
-                </div>
             </div>
 
             {/* Cardio Stats */}
@@ -687,155 +698,145 @@ export default function Dashboard() {
                 const activeData = activeExId ? cardioByExercise[activeExId] : null;
 
                 return (
-                    <div className="card" style={{ marginTop: '20px', padding: '16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                            <Activity size={18} color="var(--primary)" />
-                            <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Cardio</h3>
-                        </div>
-
-                        {/* Tab bar */}
-                        <div style={{ display: 'flex', gap: '4px', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '0' }}>
-                            {tabExercises.map(ex => (
-                                <button
-                                    key={ex.exercise_id}
-                                    onClick={() => setActiveCardioTab(ex.exercise_id)}
-                                    style={{
-                                        padding: '6px 12px', fontSize: '13px', fontWeight: activeCardioTab === ex.exercise_id ? 600 : 400,
-                                        color: activeCardioTab === ex.exercise_id ? 'var(--accent, #6366f1)' : 'var(--text-secondary)',
-                                        background: 'none', border: 'none', borderBottom: activeCardioTab === ex.exercise_id ? '2px solid var(--accent, #6366f1)' : '2px solid transparent',
-                                        cursor: 'pointer', whiteSpace: 'nowrap',
-                                    }}
-                                >
-                                    {ex.name}
-                                </button>
-                            ))}
-                            {hasOther && (
-                                <button
-                                    onClick={() => setActiveCardioTab('other')}
-                                    style={{
-                                        padding: '6px 12px', fontSize: '13px', fontWeight: activeCardioTab === 'other' ? 600 : 400,
-                                        color: activeCardioTab === 'other' ? 'var(--accent, #6366f1)' : 'var(--text-secondary)',
-                                        background: 'none', border: 'none', borderBottom: activeCardioTab === 'other' ? '2px solid var(--accent, #6366f1)' : '2px solid transparent',
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    Other ▾
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Other tab: exercise picker */}
-                        {activeCardioTab === 'other' && (
-                            <div style={{ marginBottom: '12px' }}>
-                                <select
-                                    className="input"
-                                    style={{ fontSize: '13px', padding: '8px' }}
-                                    value={otherExerciseId ?? ''}
-                                    onChange={e => {
-                                        const id = parseInt(e.target.value);
-                                        setOtherExerciseId(id);
-                                        if (!cardioByExercise[id]) {
-                                            const base = demoMode ? '/stats/cardio/demo' : '/stats/cardio';
-                                            api.get(`${base}?days=90&exercise_id=${id}`).then(res => {
-                                                setCardioByExercise(prev => ({ ...prev, [id]: res.data }));
-                                            }).catch(() => {});
-                                        }
-                                    }}
-                                >
-                                    {otherExercises.map(ex => (
-                                        <option key={ex.exercise_id} value={ex.exercise_id}>{ex.name}</option>
-                                    ))}
-                                </select>
+                    <>
+                        <SecLabel>{t('Cardio')}</SecLabel>
+                        <div className="card">
+                            {/* Tab bar */}
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {tabExercises.map(ex => (
+                                    <button
+                                        key={ex.exercise_id}
+                                        className={`tool-chip ${activeCardioTab === ex.exercise_id ? 'on' : ''}`}
+                                        onClick={() => setActiveCardioTab(ex.exercise_id)}
+                                        style={{ height: 34 }}
+                                    >
+                                        {ex.name}
+                                    </button>
+                                ))}
+                                {hasOther && (
+                                    <button
+                                        className={`tool-chip ${activeCardioTab === 'other' ? 'on' : ''}`}
+                                        onClick={() => setActiveCardioTab('other')}
+                                        style={{ height: 34 }}
+                                    >
+                                        {t('Other')} ▾
+                                    </button>
+                                )}
                             </div>
-                        )}
 
-                        {/* Charts for active tab */}
-                        {activeData && activeData.distance_trend.length > 0 && (
-                            <>
-                                <div style={{ marginBottom: '16px' }}>
-                                    <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>Distance (km)</div>
-                                    <ResponsiveContainer width="100%" height={140}>
-                                        <LineChart data={activeData.distance_trend}>
-                                            <XAxis dataKey="date" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                                            <YAxis domain={['auto', 'auto']} tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
-                                            <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }} labelStyle={{ color: 'var(--text-secondary)' }} />
-                                            <Line type="monotone" dataKey="distance_km" stroke="#60a5fa" strokeWidth={2} dot={false} />
-                                        </LineChart>
-                                    </ResponsiveContainer>
+                            {/* Other tab: exercise picker */}
+                            {activeCardioTab === 'other' && (
+                                <div className="field" style={{ marginTop: 12 }}>
+                                    <select
+                                        style={{ marginTop: 0, height: 44 }}
+                                        value={otherExerciseId ?? ''}
+                                        onChange={e => {
+                                            const id = parseInt(e.target.value);
+                                            setOtherExerciseId(id);
+                                            if (!cardioByExercise[id]) {
+                                                const base = demoMode ? '/stats/cardio/demo' : '/stats/cardio';
+                                                api.get(`${base}?days=90&exercise_id=${id}`).then(res => {
+                                                    setCardioByExercise(prev => ({ ...prev, [id]: res.data }));
+                                                }).catch(() => {});
+                                            }
+                                        }}
+                                    >
+                                        {otherExercises.map(ex => (
+                                            <option key={ex.exercise_id} value={ex.exercise_id}>{ex.name}</option>
+                                        ))}
+                                    </select>
                                 </div>
+                            )}
 
-                                {activeData.pace_trend.length > 0 && (
-                                    <div style={{ marginBottom: '12px' }}>
-                                        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>Pace (min/km)</div>
+                            {/* Charts for active tab */}
+                            {activeData && activeData.distance_trend.length > 0 && (
+                                <>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 16 }}>
+                                        <span className="num" style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                                            {activeData.total_distance_km}<span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 4 }}>km</span>
+                                        </span>
+                                        <span className="mono num" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+                                            {activeData.avg_pace ? `${formatPace(activeData.avg_pace)} /km ${t('avg')} · ` : ''}{activeData.total_sessions} {t('sessions')}
+                                        </span>
+                                    </div>
+                                    <div style={{ marginTop: 12 }}>
+                                        <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', marginBottom: 6 }}>{t('Distance')} (km)</div>
                                         <ResponsiveContainer width="100%" height={140}>
-                                            <LineChart data={activeData.pace_trend}>
-                                                <XAxis dataKey="date" tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                                                <YAxis reversed domain={['auto', 'auto']} tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
-                                                <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }} labelStyle={{ color: 'var(--text-secondary)' }} formatter={(value: number) => [formatPace(value), 'Pace']} />
-                                                <Line type="monotone" dataKey="avg_pace" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                                            <LineChart data={activeData.distance_trend}>
+                                                <XAxis dataKey="date" tick={tickStyle} axisLine={false} tickLine={false} />
+                                                <YAxis domain={['auto', 'auto']} tick={tickStyle} axisLine={false} tickLine={false} width={35} />
+                                                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--text-2)' }} />
+                                                <Line type="monotone" dataKey="distance_km" stroke="var(--green-mid)" strokeWidth={2.2} dot={false} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
-                                )}
 
-                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                                    <span>{activeData.total_distance_km} km total</span>
-                                    {activeData.avg_pace && <span>{formatPace(activeData.avg_pace)} /km avg</span>}
-                                    <span>{activeData.total_sessions} sessions</span>
-                                </div>
-                            </>
-                        )}
-                    </div>
+                                    {activeData.pace_trend.length > 0 && (
+                                        <div style={{ marginTop: 12 }}>
+                                            <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', marginBottom: 6 }}>{t('Pace')} (min/km)</div>
+                                            <ResponsiveContainer width="100%" height={140}>
+                                                <LineChart data={activeData.pace_trend}>
+                                                    <XAxis dataKey="date" tick={tickStyle} axisLine={false} tickLine={false} />
+                                                    <YAxis reversed domain={['auto', 'auto']} tick={tickStyle} axisLine={false} tickLine={false} width={35} />
+                                                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--text-2)' }} formatter={(value: number) => [formatPace(value), t('Pace')]} />
+                                                    <Line type="monotone" dataKey="avg_pace" stroke="var(--amber)" strokeWidth={2.2} dot={false} />
+                                                </LineChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    )}
+
+                                </>
+                            )}
+                        </div>
+                    </>
                 );
             })()}
 
-            {/* Help modal */}
-            {showHelp && (
-                <div style={{
-                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    zIndex: 1000, padding: '20px'
-                }} onClick={() => setShowHelp(false)}>
-                    <div style={{
-                        background: 'var(--bg-secondary)', borderRadius: '16px', padding: '24px',
-                        maxWidth: '380px', width: '100%', border: '1px solid #333'
-                    }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                            <h3 style={{ fontWeight: 700, fontSize: '16px' }}>How Scoring Works</h3>
-                            <button onClick={() => setShowHelp(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                                <X size={20} color="var(--text-tertiary)" />
+            {/* Help sheet */}
+            {showHelp && createPortal(
+                <div className="sheet-scrim" onClick={(e) => { if (e.target === e.currentTarget) setShowHelp(false); }}>
+                    <div className="sheet" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+                        <div className="sheet-grab" />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <h3 style={{ flex: 1 }}>{t('How Scoring Works')}</h3>
+                            <button onClick={() => setShowHelp(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }} aria-label={t('Close')}>
+                                <X size={18} />
                             </button>
                         </div>
-                        <div style={{ fontSize: '13px', lineHeight: '1.7', color: 'var(--text-secondary)' }}>
-                            <p style={{ marginBottom: '12px' }}>
-                                <strong style={{ color: 'var(--primary)' }}>What we measure:</strong> Estimated 1 Rep Max strength
+                        <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--text-2)', marginTop: 12 }}>
+                            <p style={{ marginBottom: 12 }}>
+                                <strong style={{ color: 'var(--lime)' }}>{t('What we measure:')}</strong> Estimated 1 Rep Max strength
                                 per session, normalised across all exercises.
                             </p>
-                            <p style={{ marginBottom: '12px' }}>
-                                <strong style={{ color: 'var(--primary)' }}>What we don't measure:</strong> Stamina, endurance, or
+                            <p style={{ marginBottom: 12 }}>
+                                <strong style={{ color: 'var(--lime)' }}>{t('What we don\'t measure:')}</strong> Stamina, endurance, or
                                 cardio output. This is a <em>strength</em> progression tracker.
                             </p>
-                            <p style={{ marginBottom: '12px' }}>
-                                <strong style={{ color: 'var(--primary)' }}>Why normalised?</strong> So you can compare a session
+                            <p style={{ marginBottom: 12 }}>
+                                <strong style={{ color: 'var(--lime)' }}>{t('Why normalised?')}</strong> So you can compare a session
                                 of bench press with a session of calisthenics. Each exercise has a difficulty factor.
                             </p>
-                            <p style={{ marginBottom: '12px' }}>
-                                <strong style={{ color: 'var(--primary)' }}>Bodyweight exercises:</strong> Scaled by your bodyweight
+                            <p style={{ marginBottom: 12 }}>
+                                <strong style={{ color: 'var(--lime)' }}>{t('Bodyweight exercises:')}</strong> Scaled by your bodyweight
                                 and exercise difficulty (pull-up = 1.0, planche = 4.5).
                             </p>
-                            <p style={{ marginBottom: '12px' }}>
-                                <strong style={{ color: 'var(--primary)' }}>Switching exercises:</strong> Expect a small dip — mastering
+                            <p style={{ marginBottom: 12 }}>
+                                <strong style={{ color: 'var(--lime)' }}>{t('Switching exercises:')}</strong> Expect a small dip — mastering
                                 a harder move takes time, but score recovers as you improve.
                             </p>
-                            <div style={{ padding: '12px', background: 'rgba(255, 179, 71, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 179, 71, 0.3)' }}>
-                                <strong style={{ color: '#FFB347', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                                    <Star size={14} /> Demo Mode
-                                </strong>
-                                Toggle the user icon 👤 at the top to view a perfectly simulated 16-month strength progression from our mock user dataset.
+                            <div className="coach">
+                                <span className="badge" style={{ background: 'color-mix(in oklab, var(--reward) 16%, transparent)', color: 'var(--reward)' }}>
+                                    <Star size={14} />
+                                </span>
+                                <div>
+                                    <b style={{ color: 'var(--reward)' }}>{t('Demo Mode')}</b>
+                                    <p>Toggle the user icon at the top to view a simulated 16-month strength progression from our mock dataset.</p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

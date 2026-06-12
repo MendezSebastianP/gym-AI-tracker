@@ -1,14 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Star, Archive, RotateCcw, Trash2, ChevronDown, ChevronUp, HelpCircle, X, Sparkles, ChevronRight } from 'lucide-react';
+import { Plus, Star, Archive, RotateCcw, Trash2, ChevronDown, ChevronUp, HelpCircle, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useTranslation } from 'react-i18next';
-import StarIcon from '../components/icons/StarIcon';
+import { K, SecLabel } from '../components/kit';
 
 export default function Routines() {
 	const routines = useLiveQuery(() => db.routines.toArray());
+	const sessions = useLiveQuery(() => db.sessions.orderBy('started_at').reverse().toArray());
 	const navigate = useNavigate();
 	const { t } = useTranslation();
 	const [showArchive, setShowArchive] = useState(false);
@@ -17,7 +18,6 @@ export default function Routines() {
 
 	// AI Report state
 	const [reportRoutineId, setReportRoutineId] = useState<number | null>(null);
-
 
 	const draftName = localStorage.getItem('draftRoutineName');
 	const draftMode = localStorage.getItem('draftRoutineMode');
@@ -121,272 +121,264 @@ export default function Routines() {
 		navigate(`/routines/${reportRoutineId}/report`);
 	};
 
-	return (
-		<div className="container" style={{ paddingBottom: '80px' }}>
-			<style>{`
-				@keyframes reportGlow {
-					0%, 100% { box-shadow: 0 0 16px rgba(204,255,0,0.12), 0 0 32px rgba(204,255,0,0.06); }
-					50% { box-shadow: 0 0 24px rgba(204,255,0,0.22), 0 0 48px rgba(204,255,0,0.10); }
-				}
-				@keyframes sparkleFloat {
-					0% { transform: translateY(0) rotate(0deg); opacity: 0.6; }
-					50% { transform: translateY(-6px) rotate(15deg); opacity: 1; }
-					100% { transform: translateY(0) rotate(0deg); opacity: 0.6; }
-				}
-				@keyframes reportBtnPulse {
-					0%, 100% { box-shadow: 0 0 0 0 rgba(204,255,0,0.4); }
-					50% { box-shadow: 0 0 0 6px rgba(204,255,0,0); }
-				}
-				@keyframes shimmer {
-					0% { background-position: -200% 0; }
-					100% { background-position: 200% 0; }
-				}
-			`}</style>
+	/** Days since the last completed session of a routine, or null. */
+	const lastSessionDays = (routineId: number): number | null => {
+		const last = sessions?.find((s: any) => s.routine_id === routineId && s.completed_at);
+		if (!last) return null;
+		return Math.max(0, Math.floor((Date.now() - new Date(last.completed_at!).getTime()) / 86400000));
+	};
 
-			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-				<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-					<h1 className="text-2xl font-bold">{t('Routines')}</h1>
-					<button className="btn btn-ghost" onClick={() => setShowHelp(!showHelp)} style={{ padding: '4px' }}>
-						<HelpCircle size={18} color="var(--text-tertiary)" />
+	/** Start the next session of a routine (same day-cycling as the Sessions page). */
+	const startWorkout = async (e: React.MouseEvent, routine: any) => {
+		e.preventDefault();
+		e.stopPropagation();
+		if (!routine.days || routine.days.length === 0) return;
+
+		// Resume an in-progress session for this routine if one exists
+		const inProgress = sessions?.find((s: any) => !s.completed_at && s.routine_id === routine.id);
+		if (inProgress) {
+			navigate(`/sessions/${inProgress.id}`);
+			return;
+		}
+
+		const lastCompleted = sessions?.find((s: any) => s.completed_at && s.routine_id === routine.id);
+		let nextDayIndex = 0;
+		if (lastCompleted && typeof lastCompleted.day_index === 'number') {
+			nextDayIndex = (lastCompleted.day_index + 1) % routine.days.length;
+		}
+		const id = await db.sessions.add({
+			user_id: routine.user_id,
+			routine_id: routine.id,
+			day_index: nextDayIndex,
+			started_at: new Date().toISOString(),
+			syncStatus: 'created',
+			locked_exercises: []
+		});
+		navigate(`/sessions/${id}`);
+	};
+
+	return (
+		<div className="container">
+			<header className="page-hdr" style={{ alignItems: 'center' }}>
+				<div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+					<span className="page-title" style={{ flex: 'none' }}>{t('Routines')}</span>
+					<button className="icon-btn sm" onClick={() => setShowHelp(!showHelp)} aria-label={t('Help')} style={{ width: 32, height: 32, borderRadius: 9 }}>
+						<HelpCircle size={17} />
 					</button>
 				</div>
-				<Link to="/routines/new" className="btn btn-primary motion-btn motion-btn--cta" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-					<Plus size={20} />
-					<span>{t('New')}</span>
+				<Link to="/routines/new" className="btn-new">
+					<Plus size={17} />{t('New')}
 				</Link>
-			</div>
+			</header>
 
 			{showHelp && (
-				<div style={{
-					background: 'var(--bg-tertiary)', padding: '12px 16px', borderRadius: '8px',
-					fontSize: '13px', color: 'var(--text-secondary)', border: '1px solid rgba(99,102,241,0.3)',
-					marginBottom: '16px', lineHeight: '1.6', position: 'relative'
-				}}>
-					<button onClick={() => setShowHelp(false)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+				<div className="coach" style={{ marginTop: 10, position: 'relative' }}>
+					<span className="badge"><HelpCircle size={15} /></span>
+					<div style={{ paddingRight: 18 }}>
+						<b>{t('How routines work')}</b>
+						<p>
+							{t('A routine is a workout plan with one or more days (e.g. Push, Pull, Legs).')}{' '}
+							{t('Tap')} <Star size={11} style={{ verticalAlign: -1 }} /> {t('to set your active routine — sessions will follow that plan.')}{' '}
+							{t('Tap the archive icon to soft-delete a routine (recoverable for 10 days).')}{' '}
+							{t('Open a routine to edit exercises, sets, reps, and lock configurations.')}
+						</p>
+					</div>
+					<button
+						onClick={() => setShowHelp(false)}
+						style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}
+						aria-label={t('Close')}
+					>
 						<X size={14} />
 					</button>
-					<strong style={{ color: 'var(--text-primary)' }}>{t('How routines work')}</strong><br />
-					{t('A routine is a workout plan with one or more days (e.g. Push, Pull, Legs).')}<br />
-					{t('Tap')} <StarIcon size={12} style={{ color: 'var(--primary)', position: 'relative', top: '2px' }} /> {t('to set your active routine — sessions will follow that plan.')}<br />
-					{t('Tap the archive icon to soft-delete a routine (recoverable for 10 days).')}<br />
-					{t('Open a routine to edit exercises, sets, reps, and lock configurations.')}
 				</div>
 			)}
 
-			{/* ── AI Progression Report Card ─────────────────────────── */}
+			{/* ── AI Progression Report ── */}
 			{activeRoutines.length > 0 && (
-				<div style={{
-					background: 'linear-gradient(135deg, rgba(204,255,0,0.07) 0%, rgba(0,230,120,0.04) 100%)',
-					border: '1px solid rgba(204,255,0,0.28)',
-					borderRadius: '16px',
-					padding: '20px',
-					marginBottom: '24px',
-					position: 'relative',
-					overflow: 'hidden',
-					animation: 'reportGlow 4s ease-in-out infinite',
-				}}>
-					{/* Background shimmer */}
-					<div style={{
-						position: 'absolute', inset: 0, pointerEvents: 'none',
-						background: 'linear-gradient(105deg, transparent 40%, rgba(204,255,0,0.04) 50%, transparent 60%)',
-						backgroundSize: '200% 100%',
-						animation: 'shimmer 6s linear infinite',
-					}} />
-
-					{/* Floating sparkles */}
-					<div style={{ position: 'absolute', top: '14px', right: '20px', animation: 'sparkleFloat 3s ease-in-out infinite' }}>
-						<Sparkles size={18} color="rgba(204,255,0,0.5)" />
-					</div>
-					<div style={{ position: 'absolute', top: '38px', right: '44px', animation: 'sparkleFloat 3s ease-in-out infinite 1.2s' }}>
-						<Sparkles size={10} color="rgba(204,255,0,0.3)" />
-					</div>
-
-					<div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-						<Sparkles size={20} color="var(--primary)" />
-						<h2 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--primary)', letterSpacing: '-0.3px' }}>
-							AI Progression Report
-						</h2>
-					</div>
-					<p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
-						Analyse your training history and get AI-powered suggestions to keep progressing.
-					</p>
-
-					{/* Routine picker */}
-					{activeRoutines.length > 1 && (
-						<div style={{ marginBottom: '12px' }}>
-							<label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>
-								Routine
-							</label>
-							<select
-								value={reportRoutineId ?? ''}
-								onChange={e => setReportRoutineId(Number(e.target.value))}
-								style={{
-									width: '100%', padding: '10px 12px', borderRadius: '8px',
-									background: 'var(--bg-secondary)', border: '1px solid rgba(204,255,0,0.25)',
-									color: 'var(--text-primary)', fontSize: '14px', fontWeight: 600,
-									appearance: 'none', cursor: 'pointer',
-								}}
-							>
-								{activeRoutines.map(r => (
-									<option key={r.id} value={r.id}>{r.name}</option>
-								))}
-							</select>
+				<div className="ai-card" style={{ marginTop: 14 }}>
+					<span className="ai-spark"><K.sparkBig /></span>
+					<div className="ai-body">
+						<div className="ai-head">
+							<span className="ai-badge"><K.spark width={18} height={18} /></span>
+							<span className="ai-title">{t('AI Progression Report')}</span>
 						</div>
-					)}
+						<p className="ai-desc">{t('Analyse your training history and get suggestions to keep progressing.')}</p>
 
+						{activeRoutines.length > 1 && (
+							<div className="routine-select" style={{ marginTop: 13, background: 'rgba(0,0,0,0.22)' }}>
+								<span className="rs-ic"><K.dumbbell width={16} height={16} /></span>
+								<span className="rs-name">
+									{activeRoutines.find(r => r.id === reportRoutineId)?.name || t('Routine')}
+								</span>
+								<span className="rs-chev"><K.updown /></span>
+								<select
+									value={reportRoutineId ?? ''}
+									onChange={e => setReportRoutineId(Number(e.target.value))}
+									aria-label={t('Routine')}
+								>
+									{activeRoutines.map(r => (
+										<option key={r.id} value={r.id}>{r.name}</option>
+									))}
+								</select>
+							</div>
+						)}
 
-					<button
-						onClick={goToReport}
-						disabled={!reportRoutineId}
-						style={{
-							width: '100%', padding: '13px', borderRadius: '10px', border: 'none',
-							background: 'var(--primary)', color: '#000', fontWeight: 800,
-							fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center',
-							justifyContent: 'center', gap: '8px',
-							animation: 'reportBtnPulse 2.5s ease-in-out infinite',
-						}}
-					>
-						<Sparkles size={16} />
-						Analyse my training
-						<ChevronRight size={16} />
-					</button>
+						<button className="btn-primary ai-cta" onClick={goToReport} disabled={!reportRoutineId}>
+							<K.spark />{t('Analyse my training')}
+						</button>
+					</div>
 				</div>
 			)}
 
-			{/* ── Routine List ─────────────────────────────────────────── */}
+			{/* ── Routine list ── */}
+			<SecLabel>{t('Your routines')} · {activeRoutines.length}</SecLabel>
+
 			{activeRoutines.length === 0 && (
-				<div style={{ textAlign: 'center', marginTop: '50px', color: 'var(--text-tertiary)' }}>
+				<div className="topmark" style={{ padding: '24px 0' }}>
 					{t("It looks like you don't have any routines yet. Let's get you set up!")}
 				</div>
 			)}
 
-			<div style={{ display: 'grid', gap: '12px' }}>
-				{activeRoutines.map(routine => (
-					<Link
+			{activeRoutines.map(routine => {
+				const lastDays = lastSessionDays(routine.id!);
+				const totalEx = routine.days.reduce((acc: number, d: any) => acc + d.exercises.length, 0);
+				return (
+					<div
 						key={routine.id}
-						to={`/routines/${routine.id}`}
-						className="card"
-						style={{
-							display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-							textDecoration: 'none', color: 'inherit',
-							border: routine.is_favorite ? '1px solid var(--primary)' : '1px solid var(--border)',
-							position: 'relative', overflow: 'hidden'
-						}}
+						className={`rt-card ${routine.is_favorite ? 'active' : ''}`}
+						onClick={() => navigate(`/routines/${routine.id}`)}
+						role="link"
+						tabIndex={0}
+						onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/routines/${routine.id}`); }}
 					>
-						{routine.is_favorite && (
-							<div style={{ position: 'absolute', top: 0, left: 0, background: 'var(--primary)', width: '4px', height: '100%' }} />
-						)}
-						<div style={{ paddingLeft: routine.is_favorite ? '8px' : '0', flex: 1 }}>
-							<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-								<h3 style={{ margin: 0, fontSize: '16px' }}>{routine.name}</h3>
-								{routine.is_favorite && (
-									<span style={{ fontSize: '10px', background: 'rgba(204,255,0,0.1)', color: 'var(--primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
-										{t('Active')}
-									</span>
-								)}
+						<div className="rt-head">
+							<div style={{ flex: 1, minWidth: 0 }}>
+								<div>
+									<span className="rt-name">{routine.name}</span>
+									{routine.is_favorite && <span className="rt-badge">{t('Active')}</span>}
+								</div>
+								<div className="rt-meta num">
+									{routine.days.length} {t('days')} · {totalEx} {t('exercises')}
+								</div>
 							</div>
-							<p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '13px' }}>
-								{routine.days.length} {t('days')} • {routine.days.reduce((acc: number, d: any) => acc + d.exercises.length, 0)} {t('exercises')}
-							</p>
+							<div className="rt-actions">
+								<button
+									className={`rt-icon fav ${routine.is_favorite ? 'on' : ''}`}
+									onClick={(e) => toggleFavorite(e, routine.id!, routine.is_favorite)}
+									aria-label={t('Favorite')}
+								>
+									<Star size={17} fill={routine.is_favorite ? 'currentColor' : 'none'} />
+								</button>
+								<button
+									className="rt-icon"
+									onClick={(e) => archiveRoutine(e, routine.id!)}
+									aria-label={t('Archive')}
+								>
+									<Archive size={17} />
+								</button>
+							</div>
 						</div>
-						<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-							<button
-								onClick={(e) => toggleFavorite(e, routine.id!, routine.is_favorite)}
-								className="btn btn-ghost"
-								style={{ color: routine.is_favorite ? 'var(--primary)' : 'var(--text-tertiary)', padding: '8px' }}
-							>
-								<Star size={18} fill={routine.is_favorite ? "currentColor" : "none"} />
-							</button>
-							<button
-								onClick={(e) => archiveRoutine(e, routine.id!)}
-								className="btn btn-ghost"
-								style={{ color: 'var(--text-tertiary)', padding: '8px' }}
-								title={t('Archive')}
-							>
-								<Archive size={18} />
-							</button>
-						</div>
-					</Link>
-				))}
 
-				{draftName && (
-					<Link
-						to="/routines/new"
-						className="card"
-						style={{
-							display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-							textDecoration: 'none', color: 'inherit',
-							border: '1px dashed var(--border)', position: 'relative', overflow: 'hidden',
-							opacity: 0.8, backgroundColor: 'var(--bg-secondary)', marginTop: '4px'
-						}}
-					>
-						<div style={{ flex: 1 }}>
-							<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-								<h3 style={{ margin: 0, fontSize: '16px', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
-									{draftName || t('Untitled Draft')}
-								</h3>
-								<span style={{ fontSize: '10px', background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>
+						{routine.days.length > 0 && (
+							<div className="day-chips">
+								{routine.days.slice(0, 4).map((d: any, di: number) => (
+									<div key={di} className="day-chip">
+										<span className="dc-day">{d.day_name || `${t('Day')} ${di + 1}`}</span>
+										<span className="dc-count num">{d.exercises.length} {t('exercises')}</span>
+									</div>
+								))}
+							</div>
+						)}
+
+						<div className="rt-foot">
+							<button className="btn-primary rt-start" onClick={(e) => startWorkout(e, routine)}>
+								<K.bolt />{t('Start Workout')}
+							</button>
+							<span className="rt-last">
+								{lastDays !== null ? `${t('Last')} · ${lastDays}${t('d')} ${t('ago')}` : t('Not trained yet')}
+							</span>
+						</div>
+					</div>
+				);
+			})}
+
+			{draftName && (
+				<Link to="/routines/new" className="rt-card" style={{ border: '1.5px dashed var(--line-strong)', opacity: 0.85 }}>
+					<div className="rt-head">
+						<div style={{ flex: 1, minWidth: 0 }}>
+							<div>
+								<span className="rt-name" style={{ color: 'var(--text-2)' }}>{draftName || t('Untitled Draft')}</span>
+								<span className="rt-badge" style={{ background: 'var(--raised-2)', color: 'var(--text-3)' }}>
 									{draftMode === 'ai' ? t('AI Draft') : t('Draft')}
 								</span>
 							</div>
-							<p style={{ color: 'var(--text-tertiary)', marginTop: '4px', fontSize: '13px' }}>
-								{t('Tap to resume editing')}
-							</p>
+							<div className="rt-meta">{t('Tap to resume editing')}</div>
 						</div>
-					</Link>
-				)}
-			</div>
+					</div>
+				</Link>
+			)}
 
-			{/* ── Archive ───────────────────────────────────────────────── */}
+			<button className="new-ghost" onClick={() => navigate('/routines/new')}>
+				<Plus size={17} />{t('New routine')}
+			</button>
+
+			<div className="hint" style={{ marginTop: 18 }}>{t('Star a routine to set it active')}</div>
+
+			{/* ── Archive ── */}
 			{archivedRoutines.length > 0 && (
-				<div style={{ marginTop: '32px' }}>
+				<div style={{ marginTop: 26 }}>
 					<button
 						onClick={() => setShowArchive(!showArchive)}
-						className="btn btn-ghost"
-						style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', color: 'var(--text-secondary)', fontSize: '14px', borderBottom: '1px solid var(--border)' }}
+						style={{
+							width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+							padding: '12px 2px', background: 'none', border: 'none', borderBottom: '1px solid var(--line)',
+							color: 'var(--text-2)', fontFamily: 'var(--font-disp)', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+						}}
 					>
-						<span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-							<Archive size={16} />
+						<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+							<Archive size={15} />
 							{t('Archive')} ({archivedRoutines.length})
 						</span>
 						{showArchive ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
 					</button>
 
-					{showArchive && (
-						<div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
-							{archivedRoutines.map(routine => {
-								const daysLeft = getDaysUntilDeletion(routine.archived_at!);
-								return (
-									<div key={routine.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.6, border: '1px solid var(--border)' }}>
-										<div>
-											<h3 style={{ margin: 0, fontSize: '14px', textDecoration: 'line-through', color: 'var(--text-secondary)' }}>
-												{routine.name}
-											</h3>
-											<p style={{ color: 'var(--text-tertiary)', marginTop: '4px', fontSize: '11px' }}>
-												{daysLeft > 0
-													? t('Auto-delete in {{days}} days', { days: daysLeft })
-													: t('Scheduled for deletion')}
-											</p>
-										</div>
-										<div style={{ display: 'flex', gap: '4px' }}>
-											<button onClick={() => restoreRoutine(routine.id!)} className="btn btn-ghost" style={{ color: 'var(--accent)', padding: '8px' }} title={t('Restore')}>
-												<RotateCcw size={16} />
-											</button>
-											{confirmDelete === routine.id ? (
-												<button onClick={() => permanentlyDelete(routine.id!)} className="btn btn-ghost" style={{ color: '#ff4444', padding: '8px', fontSize: '11px', fontWeight: 'bold' }}>
-													{t('Confirm')}
-												</button>
-											) : (
-												<button onClick={() => setConfirmDelete(routine.id!)} className="btn btn-ghost" style={{ color: 'var(--text-tertiary)', padding: '8px' }} title={t('Delete permanently')}>
-													<Trash2 size={16} />
-												</button>
-											)}
+					{showArchive && archivedRoutines.map(routine => {
+						const daysLeft = getDaysUntilDeletion(routine.archived_at!);
+						return (
+							<div key={routine.id} className="rt-card archived" style={{ cursor: 'default' }}>
+								<div className="rt-head">
+									<div style={{ flex: 1, minWidth: 0 }}>
+										<span className="rt-name" style={{ fontSize: 16, textDecoration: 'line-through', color: 'var(--text-2)' }}>
+											{routine.name}
+										</span>
+										<div className="rt-meta mono" style={{ fontSize: 9.5 }}>
+											{daysLeft > 0
+												? t('Auto-delete in {{days}} days', { days: daysLeft })
+												: t('Scheduled for deletion')}
 										</div>
 									</div>
-								);
-							})}
-						</div>
-					)}
+									<div className="rt-actions">
+										<button className="rt-icon" onClick={() => restoreRoutine(routine.id!)} aria-label={t('Restore')} style={{ color: 'var(--green-mid)' }}>
+											<RotateCcw size={16} />
+										</button>
+										{confirmDelete === routine.id ? (
+											<button
+												className="rt-icon"
+												onClick={() => permanentlyDelete(routine.id!)}
+												style={{ color: 'var(--danger)', borderColor: 'color-mix(in oklab, var(--danger) 45%, transparent)', width: 'auto', padding: '0 10px', fontWeight: 700, fontSize: 12, fontFamily: 'var(--font-disp)' }}
+											>
+												{t('Confirm')}
+											</button>
+										) : (
+											<button className="rt-icon" onClick={() => setConfirmDelete(routine.id!)} aria-label={t('Delete permanently')}>
+												<Trash2 size={16} />
+											</button>
+										)}
+									</div>
+								</div>
+							</div>
+						);
+					})}
 				</div>
 			)}
 		</div>

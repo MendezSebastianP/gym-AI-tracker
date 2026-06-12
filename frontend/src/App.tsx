@@ -43,19 +43,17 @@ const AdminErrors = lazy(() => import('./pages/admin/AdminErrors'));
 function RouteLoadingFallback() {
 	return (
 		<div
+			className="mono"
 			style={{
 				minHeight: '100vh',
 				display: 'grid',
 				placeItems: 'center',
 				padding: '24px',
-				background: 'var(--bg-primary)',
-				color: 'var(--text-secondary)',
-				fontSize: '14px',
-				letterSpacing: '0.04em',
-				textTransform: 'uppercase',
+				color: 'var(--text-4)',
+				fontSize: '10.5px',
 			}}
 		>
-			Loading...
+			Loading…
 		</div>
 	);
 }
@@ -248,26 +246,27 @@ function App() {
 	return (
 		<MotionProvider>
 			<MotionPreferenceSync />
+			<div className="grain-fixed" aria-hidden="true" />
 			<OnboardingToast />
 			{needRefresh[0] && (
 			<div style={{
 				position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-				background: 'var(--bg-secondary)', borderBottom: '1px solid var(--overlay-medium)',
-				padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px',
-				fontSize: '13px', color: 'var(--text-primary)'
+				background: 'var(--card-solid)', borderBottom: '1px solid var(--line-strong)',
+				padding: 'calc(10px + env(safe-area-inset-top, 0px)) 16px 10px', display: 'flex', alignItems: 'center', gap: '12px',
+				fontSize: '13px', fontWeight: 600, color: 'var(--text)'
 			}}>
 				<span style={{ flex: 1 }}>New version available</span>
 				<button
 					onClick={() => updateServiceWorker(true)}
 					style={{
-						background: 'var(--accent)', color: '#000', border: 'none',
-						borderRadius: '6px', padding: '5px 12px', fontSize: '12px',
-						fontWeight: 600, cursor: 'pointer'
+						background: 'var(--lime)', color: 'var(--on-lime)', border: 'none',
+						borderRadius: '9px', padding: '6px 14px', fontSize: '12.5px',
+						fontFamily: 'var(--font-disp)', fontWeight: 700, cursor: 'pointer'
 					}}
 				>Update</button>
 				<button
 					onClick={() => needRefresh[1](false)}
-					style={{ background: 'transparent', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '4px' }}
+					style={{ background: 'transparent', border: 'none', color: 'var(--text-3)', cursor: 'pointer', padding: '4px' }}
 				>✕</button>
 			</div>
 		)}

@@ -6,22 +6,13 @@ import { useTranslation } from 'react-i18next';
 import { LiveStreakRow, SKIN_ACCENTS } from '../components/StreakFlames';
 import type { WeekSlot } from '../components/StreakFlames';
 import {
-	TrendingUp, Dumbbell, Star, Coins, Clock,
-	Target, Trophy, Rocket, Medal, Crown, Repeat, Zap, Mountain, Sparkles,
-	ShoppingBag, Palette, Check, Gift, User as UserIcon, Flame
+	Clock, Target, Trophy, Rocket, Medal, Crown, Repeat, Zap, Mountain, Sparkles,
+	Palette, Check, Gift, User as UserIcon, Flame, Star, ChevronRight,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useLiveQuery } from 'dexie-react-hooks';
-import CoinIcon from '../components/icons/CoinIcon';
-import StarIcon from '../components/icons/StarIcon';
 import GettingStartedCard from '../components/GettingStartedCard';
-
-function formatPace(secondsPerKm: number): string {
-	if (!secondsPerKm || !isFinite(secondsPerKm)) return '--:--';
-	const m = Math.floor(secondsPerKm / 60);
-	const s = Math.round(secondsPerKm % 60);
-	return `${m}:${s.toString().padStart(2, '0')}`;
-}
+import { Coin, SecLabel } from '../components/kit';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -86,65 +77,31 @@ const ICON_MAP: Record<string, any> = {
 	weight: Target, mountain: Mountain, sparkles: Sparkles,
 };
 
-// Per-skin styles for the claim button and claimed badge
+// Per-skin claim styling: one kairos button shape for every skin, tinted by the
+// skin accent. Only the pixel skin keeps its own letterform (that IS the skin).
 interface SkinClaimCfg {
-	btnBg: string; btnColor: string; btnBorder: string;
-	btnRadius: number | string; btnFont?: string; btnSpacing?: string;
-	btnAnim: string; burstAnim: string;
-	claimedBg: string; claimedBorder: string; claimedColor: string;
-	btnLabel: (coins: number) => string;
-	claimedLabel: (streak: number) => string;
+	accent: string;    // skin accent color
+	onAccent: string;  // readable text on the accent
+	pixel?: boolean;   // skin_d: mono font, square corners, outline style
 }
 const SKIN_CLAIM_CFG: Record<string, SkinClaimCfg> = {
-	skin_a: {
-		btnBg: 'linear-gradient(135deg, #FF8C00, #FF4500)', btnColor: '#fff', btnBorder: 'none',
-		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
-		burstAnim: 'claimBurstA 0.48s ease-out forwards',
-		claimedBg: 'rgba(255,140,0,0.07)', claimedBorder: '1px solid rgba(255,140,0,0.2)', claimedColor: '#FF8C00',
-		btnLabel: (c) => `Claim week · ${c} coins`,
-		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
-	},
-	skin_b: {
-		btnBg: 'linear-gradient(135deg, #7B1FA2, #E040FB)', btnColor: '#fff', btnBorder: 'none',
-		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
-		burstAnim: 'claimBurstB 0.44s ease-out forwards',
-		claimedBg: 'rgba(170,0,255,0.07)', claimedBorder: '1px solid rgba(170,0,255,0.22)', claimedColor: '#CE93D8',
-		btnLabel: (c) => `Claim week · ${c} coins`,
-		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
-	},
-	skin_c1: {
-		btnBg: 'rgba(255,80,0,0.18)', btnColor: '#FF9500', btnBorder: '1.5px solid rgba(255,80,0,0.38)',
-		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
-		burstAnim: 'claimBurstOrb 0.46s ease-out forwards',
-		claimedBg: 'rgba(255,80,0,0.07)', claimedBorder: '1px solid rgba(255,80,0,0.22)', claimedColor: '#FF9500',
-		btnLabel: (c) => `Claim week · ${c} coins`,
-		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
-	},
-	skin_c2: {
-		btnBg: 'rgba(210,160,0,0.18)', btnColor: '#FFD700', btnBorder: '1.5px solid rgba(210,160,0,0.38)',
-		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
-		burstAnim: 'claimBurstOrb 0.46s ease-out forwards',
-		claimedBg: 'rgba(210,160,0,0.07)', claimedBorder: '1px solid rgba(210,160,0,0.22)', claimedColor: '#FFD700',
-		btnLabel: (c) => `Claim week · ${c} coins`,
-		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
-	},
-	skin_c3: {
-		btnBg: 'rgba(30,130,255,0.18)', btnColor: '#42A5F5', btnBorder: '1.5px solid rgba(30,130,255,0.38)',
-		btnRadius: 10, btnAnim: 'claimBtnPulse 1.8s ease-in-out infinite',
-		burstAnim: 'claimBurstOrb 0.46s ease-out forwards',
-		claimedBg: 'rgba(30,130,255,0.07)', claimedBorder: '1px solid rgba(30,130,255,0.22)', claimedColor: '#42A5F5',
-		btnLabel: (c) => `Claim week · ${c} coins`,
-		claimedLabel: (s) => `${s}w streak — all rewards claimed`,
-	},
-	skin_d: {
-		btnBg: 'transparent', btnColor: '#FF9900', btnBorder: '2px solid #FF6600',
-		btnRadius: 0, btnFont: 'monospace', btnSpacing: '0.06em', btnAnim: 'pxBlink 1.2s steps(2) infinite',
-		burstAnim: 'claimBurstPx 0.5s steps(2) forwards',
-		claimedBg: 'transparent', claimedBorder: '1px solid rgba(255,102,0,0.28)', claimedColor: '#FF9900',
-		btnLabel: (c) => `CLAIM WEEK · ${c} COINS`,
-		claimedLabel: (s) => `${s}W STREAK — CLAIMED`,
-	},
+	skin_a:  { accent: '#FF8C00', onAccent: '#1D0E00' },
+	skin_b:  { accent: '#CE93D8', onAccent: '#23062E' },
+	skin_c1: { accent: '#FF9500', onAccent: '#1D0E00' },
+	skin_c2: { accent: '#FFD700', onAccent: '#201700' },
+	skin_c3: { accent: '#42A5F5', onAccent: '#04121F' },
+	skin_d:  { accent: '#FF9900', onAccent: '#FF9900', pixel: true },
 };
+
+function claimLabel(cfg: SkinClaimCfg, coins: number) {
+	const txt = `Claim week · ${coins} coins`;
+	return cfg.pixel ? txt.toUpperCase() : txt;
+}
+
+function claimedLabel(cfg: SkinClaimCfg, streak: number) {
+	const txt = `${streak}w streak — all rewards claimed`;
+	return cfg.pixel ? txt.toUpperCase() : txt;
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -505,32 +462,35 @@ export default function Stats() {
 	})();
 
 	const unclaimedWeeks = isDemo ? 2 : (gamification?.unclaimed_streak_weeks ?? 0);
-	const unclaimedCoins = isDemo ? 42 : (gamification?.unclaimed_streak_coins ?? 0);
 	const nextClaimCoins = isDemo ? 21 : (gamification?.unclaimed_next_coins ?? 0);
 	const activeSkinId = isDemo ? 'skin_a' : ((shop?.active_streak_skin) ?? (user?.settings as any)?.active_streak_skin ?? 'skin_a');
 	const skinAccent = SKIN_ACCENTS[activeSkinId] ?? '#FF8C00';
+
+	const xpPct = gamification
+		? Math.max(3, Math.round((gamification.experience / gamification.exp_to_next) * 100))
+		: 0;
+
 	// ── Render ────────────────────────────────────────────────────────────────
 	return (
-		<div className="container" style={{ paddingBottom: '80px' }}>
+		<div className="container">
 			{/* Header */}
-			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-				<div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-					<Dumbbell size={28} color="var(--primary)" />
-					<h1 className="text-2xl font-bold">{t('Weights Lifted')}</h1>
+			<header className="page-hdr" style={{ alignItems: 'center' }}>
+				<div style={{ flex: 1 }}>
+					<div className="page-title">{t('Home')}</div>
 				</div>
 				<button
+					className="icon-btn sm"
 					onClick={() => setIsDemo(!isDemo)}
-					style={{
-						background: isDemo ? 'rgba(255,179,71,0.15)' : 'none',
-						border: isDemo ? '1px solid #FFB347' : '1px solid transparent',
-						borderRadius: '8px', cursor: 'pointer', padding: '4px 8px',
-						display: 'flex', alignItems: 'center', gap: '4px'
-					}}
+					aria-label={t('Toggle Demo Mode')}
+					style={isDemo ? {
+						color: 'var(--reward)',
+						borderColor: 'color-mix(in oklab, var(--reward) 40%, transparent)',
+						background: 'color-mix(in oklab, var(--reward) 12%, transparent)',
+					} : undefined}
 				>
-					<UserIcon size={18} color={isDemo ? '#FFB347' : 'var(--text-tertiary)'} />
-					{isDemo && <span style={{ fontSize: '11px', color: '#FFB347', fontWeight: 600 }}>Demo</span>}
+					<UserIcon size={18} />
 				</button>
-			</div>
+			</header>
 
 			{!isDemo && (
 				<GettingStartedCard
@@ -545,205 +505,119 @@ export default function Stats() {
 				/>
 			)}
 
-			{/* ─── Level Card ──────────────────────────────────────────────── */}
+			{/* ── Level / XP ── */}
 			{gamification && (
-				<div className="card" style={{
-					padding: '20px', marginBottom: '16px',
-					background: 'linear-gradient(135deg, rgba(204, 255, 0, 0.1), rgba(0, 229, 176, 0.05))',
-					border: '1px solid rgba(204, 255, 0, 0.25)',
-					position: 'relative',
-					animation: 'xpCardGlow 4s ease-in-out infinite'
-				}}>
-					<style>{`
-						@keyframes xpCardGlow {
-							0%, 100% { box-shadow: 0 0 10px rgba(204,255,0,0.05); }
-							50% { box-shadow: 0 0 20px rgba(204,255,0,0.15); }
-						}
-						@keyframes xpStripesFlow {
-							0% { background-position: 0 0; }
-							100% { background-position: 40px 0; }
-						}
-						@keyframes xpPulseGlow {
-							0%, 100% { filter: drop-shadow(0 0 3px rgba(0, 229, 176, 0.4)); }
-							50% { filter: drop-shadow(0 0 8px rgba(0, 229, 176, 0.8)); }
-						}
-					`}</style>
-					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-						<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-							<StarIcon size={20} style={{ color: 'var(--primary)' }} />
-							<span style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '0.5px' }}>
-								{t('Level')} {gamification.level}
+				<div className="card" style={{ marginTop: 8 }}>
+					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+						<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+							<Star size={17} style={{ color: 'var(--lime)' }} fill="currentColor" />
+							<span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-0.01em' }}>
+								{t('Level')} <span className="num">{gamification.level}</span>
 							</span>
 						</div>
-						<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-							<CoinIcon size={16} style={{ color: 'var(--gold)' }} />
-							<span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--gold)' }}>
-								{gamification.currency} {t('coins')}
-							</span>
+						<div className="num" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 700, color: 'var(--reward)' }}>
+							<Coin size={16} />
+							{gamification.currency}
 						</div>
 					</div>
 
-					{/* Highly Animated 3D Game XP Bar */}
-					<div style={{
-						height: '24px', borderRadius: '12px',
-						background: 'rgba(0,0,0,0.4)', padding: '4px',
-						border: '1px solid rgba(255,255,255,0.08)',
-						boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.7)',
-						marginBottom: '10px'
-					}}>
-						<div style={{
-							height: '100%', borderRadius: '8px',
-							width: `${Math.max(3, Math.round((gamification.experience / gamification.exp_to_next) * 100))}%`,
-							background: 'linear-gradient(90deg, #008f6b 0%, var(--primary) 70%, #00ffc4 100%)',
-							position: 'relative',
-							transition: 'width 1s cubic-bezier(0.34, 1.56, 0.64, 1)',
-							animation: 'xpPulseGlow 3s infinite ease-in-out'
-						}}>
-							{/* Diagonal Moving Stripes overlay */}
-							<div style={{
-								position: 'absolute', inset: 0, borderRadius: '8px',
-								background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.15) 0px, rgba(255,255,255,0.15) 10px, transparent 10px, transparent 20px)',
-								animation: 'xpStripesFlow 1s linear infinite'
-							}} />
-
-							{/* Glossy top highlight */}
-							<div style={{
-								position: 'absolute', top: 0, left: '2px', right: '2px', height: '45%',
-								background: 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%)',
-								borderRadius: '8px 8px 0 0'
-							}} />
-
-							{/* Bright leading spark edge */}
-							<div style={{
-								position: 'absolute', right: 0, top: 0, bottom: 0, width: '4px',
-								background: '#fff', borderRadius: '4px',
-								boxShadow: '0 0 10px var(--primary), 0 0 4px #fff'
-							}} />
-						</div>
+					<div className="meter" style={{ height: 8, marginTop: 14 }}>
+						<span style={{ width: `${xpPct}%` }} />
 					</div>
 
-					<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-						<span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-							<span style={{ color: 'var(--text-primary)' }}>{gamification.experience}</span>
-							/ {gamification.exp_to_next} XP
+					<div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9 }}>
+						<span className="mono num" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+							{gamification.experience} / {gamification.exp_to_next} XP
 						</span>
-						<span>{t('Level')} {gamification.level + 1}</span>
+						<span className="mono num" style={{ fontSize: 9.5, color: 'var(--text-4)' }}>
+							{t('Level')} {gamification.level + 1}
+						</span>
 					</div>
 				</div>
 			)}
 
-			{/* ── Stats Cards ─────────────────────────────────────────────── */}
+			{/* ── Time stats ── */}
 			{user?.settings?.track_time && stats && (stats.avg_duration_seconds > 0 || stats.total_duration_seconds > 0) && (
-				<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+				<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
 					{stats.avg_duration_seconds > 0 && (
-						<div className="card text-center p-4" style={{ marginBottom: 0 }}>
-							<div className="text-3xl font-bold mb-1" style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-								<Clock size={20} />
+						<div className="card" style={{ textAlign: 'center', marginBottom: 0 }}>
+							<div className="num" style={{ fontSize: 27, fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4 }}>
+								<Clock size={16} style={{ color: 'var(--green-mid)', alignSelf: 'center' }} />
 								{Math.round(stats.avg_duration_seconds / 60)}
-								<span className="text-sm font-normal text-tertiary">min</span>
+								<span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>min</span>
 							</div>
-							<div className="text-secondary text-sm">{t('Avg Duration')}</div>
+							<div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 5 }}>{t('Avg Duration')}</div>
 						</div>
 					)}
 
 					{stats.total_duration_seconds > 0 && (
-						<div className="card text-center p-4" style={{ marginBottom: 0 }}>
-							<div className="text-3xl font-bold mb-1" style={{ color: 'var(--accent)' }}>
+						<div className="card" style={{ textAlign: 'center', marginBottom: 0 }}>
+							<div className="num" style={{ fontSize: 27, fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4 }}>
 								{stats.total_duration_seconds >= 3600
 									? `${(stats.total_duration_seconds / 3600).toFixed(1)}`
 									: Math.round(stats.total_duration_seconds / 60)}
-								<span className="text-sm font-normal text-tertiary" style={{ marginLeft: '4px' }}>
+								<span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>
 									{stats.total_duration_seconds >= 3600 ? 'hrs' : 'min'}
 								</span>
 							</div>
-							<div className="text-secondary text-sm">{t('Total Time')}</div>
+							<div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 5 }}>{t('Total Time')}</div>
 						</div>
 					)}
 				</div>
 			)}
 
-			{/* ─── Consistency Card ────────────────────────────────────────── */}
-			<div className="card p-4">
-				<div className="flex items-center justify-between mb-4">
-					<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-						<TrendingUp size={18} className="text-primary" />
-						<h3 className="font-semibold">{t('Consistency')}</h3>
-					</div>
-				</div>
-
-				<div style={{
-					display: 'flex', gap: '0', marginBottom: '16px',
-					background: 'var(--bg-tertiary)', borderRadius: '8px', padding: '3px',
-				}}>
+			{/* ── Consistency ── */}
+			<SecLabel>{t('Consistency')}</SecLabel>
+			<div className="card">
+				<div className="seg" style={{ display: 'flex', width: '100%' }}>
 					<button
+						className={consistencyTab === 'streak' ? 'on' : ''}
 						onClick={() => setConsistencyTab('streak')}
-						style={{
-							flex: 1, padding: '8px 10px', fontSize: '12px',
-							fontWeight: consistencyTab === 'streak' ? 'bold' : 'normal',
-							borderRadius: '6px', border: 'none', cursor: 'pointer',
-							background: consistencyTab === 'streak' ? 'var(--bg-secondary)' : 'transparent',
-							color: consistencyTab === 'streak' ? skinAccent : 'var(--text-secondary)',
-							transition: 'all 0.2s ease',
-							boxShadow: consistencyTab === 'streak' ? '0 2px 4px rgba(0,0,0,0.2)' : 'none',
-							display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-							position: 'relative',
-						}}
+						style={{ flex: 1, justifyContent: 'center', position: 'relative', ...(consistencyTab === 'streak' ? { color: skinAccent } : {}) }}
 					>
-						<Flame size={12} />Streak
+						<Flame size={13} />{t('Streak')}
 						{unclaimedWeeks > 0 && (
 							<span style={{
-								position: 'absolute', top: -5, right: -4,
-								background: '#E53935', color: '#fff',
-								borderRadius: '50%', minWidth: 16, height: 16,
+								position: 'absolute', top: -4, right: -2,
+								background: 'var(--danger)', color: '#fff',
+								borderRadius: 99, minWidth: 16, height: 16,
 								fontSize: 9, fontWeight: 800,
 								display: 'flex', alignItems: 'center', justifyContent: 'center',
 								lineHeight: 1, padding: '0 3px',
-								boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
-								pointerEvents: 'none',
 							}}>
 								{unclaimedWeeks}
 							</span>
 						)}
 					</button>
 					<button
+						className={consistencyTab === 'weeks' ? 'on' : ''}
 						onClick={() => setConsistencyTab('weeks')}
-						style={{
-							flex: 1, padding: '8px 10px', fontSize: '12px',
-							fontWeight: consistencyTab === 'weeks' ? 'bold' : 'normal',
-							borderRadius: '6px', border: 'none', cursor: 'pointer',
-							background: consistencyTab === 'weeks' ? 'var(--bg-secondary)' : 'transparent',
-							color: consistencyTab === 'weeks' ? 'var(--primary)' : 'var(--text-secondary)',
-							transition: 'all 0.2s ease',
-							boxShadow: consistencyTab === 'weeks' ? '0 2px 4px rgba(0,0,0,0.2)' : 'none'
-						}}
+						style={{ flex: 1, justifyContent: 'center' }}
 					>
 						{t('Weeks')}
 					</button>
 					<button
+						className={consistencyTab === 'days' ? 'on' : ''}
 						onClick={() => setConsistencyTab('days')}
-						style={{
-							flex: 1, padding: '8px 10px', fontSize: '12px',
-							fontWeight: consistencyTab === 'days' ? 'bold' : 'normal',
-							borderRadius: '6px', border: 'none', cursor: 'pointer',
-							background: consistencyTab === 'days' ? 'var(--bg-secondary)' : 'transparent',
-							color: consistencyTab === 'days' ? 'var(--primary)' : 'var(--text-secondary)',
-							transition: 'all 0.2s ease',
-							boxShadow: consistencyTab === 'days' ? '0 2px 4px rgba(0,0,0,0.2)' : 'none'
-						}}
+						style={{ flex: 1, justifyContent: 'center' }}
 					>
 						{t('Days')}
 					</button>
 				</div>
 
 				{consistencyTab === 'streak' && weekSlotsDisplay.length > 0 && (
-					<div>
+					<div style={{ marginTop: 16 }}>
 						{(() => {
 							const cfg = SKIN_CLAIM_CFG[activeSkinId] ?? SKIN_CLAIM_CFG.skin_a;
 							return (
 								<>
 									<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-										<span style={{ fontSize: 13, fontWeight: 700, color: skinAccent }}>{streakWeeks}w streak</span>
-										<Link to="/shop#skins" style={{ fontSize: 11, color: 'var(--text-tertiary)', textDecoration: 'none' }}>More +</Link>
+										<span className="num" style={{ fontSize: 13.5, fontWeight: 800, color: skinAccent }}>
+											{streakWeeks}w {t('streak')}
+										</span>
+										<Link to="/shop#skins" className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+											{t('More')} +
+										</Link>
 									</div>
 									<LiveStreakRow skinId={activeSkinId} weeks={weekSlotsDisplay} />
 
@@ -751,50 +625,47 @@ export default function Stats() {
 										<button
 											onClick={() => { if (!isDemo) claimStreak(); }}
 											disabled={isDemo || claimingStreak || claimCooldown}
-											className={`motion-btn motion-btn--claim ${isDemo ? '' : 'is-ready'} ${claimFlash ? 'is-bursting' : ''}`.trim()}
 											style={{
-												marginTop: 14, width: '100%', padding: '11px 10px',
-												borderRadius: cfg.btnRadius, background: cfg.btnBg,
-												color: cfg.btnColor, fontWeight: 700, fontSize: 14,
-												border: cfg.btnBorder,
-												fontFamily: cfg.btnFont,
-												letterSpacing: cfg.btnSpacing,
+												['--claim-accent' as any]: cfg.accent,
+												marginTop: 14, width: '100%', height: 50,
+												borderRadius: cfg.pixel ? 0 : 13,
+												background: cfg.pixel ? 'transparent' : cfg.accent,
+												color: cfg.pixel ? cfg.accent : cfg.onAccent,
+												border: cfg.pixel ? `2px solid ${cfg.accent}` : 'none',
+												fontFamily: cfg.pixel ? 'monospace' : 'var(--font-disp)',
+												letterSpacing: cfg.pixel ? '0.06em' : '-0.01em',
+												fontWeight: 700, fontSize: cfg.pixel ? 13 : 14.5,
 												cursor: (isDemo || claimingStreak || claimCooldown) ? 'not-allowed' : 'pointer',
 												opacity: isDemo ? 0.72 : (claimCooldown ? 0.55 : (claimingStreak ? 0.7 : 1)),
 												display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
 												animation: isDemo
 													? 'none'
 													: claimFlash
-													? cfg.burstAnim
-													: (claimCooldown || claimingStreak ? 'none' : cfg.btnAnim),
+													? (cfg.pixel ? 'claimBurstPx 0.5s steps(2) forwards' : 'claimBurstK 0.5s ease-out forwards')
+													: (claimCooldown || claimingStreak ? 'none' : 'claimPulseK 2s ease-in-out infinite'),
 											}}
 										>
-											{cfg.btnLabel(nextClaimCoins)}
+											{claimLabel(cfg, nextClaimCoins)}
 										</button>
 									)}
 									{isDemo && (
-										<div style={{
-											marginTop: 8,
-											fontSize: 11,
-											color: 'var(--text-tertiary)',
-											textAlign: 'center',
-										}}>
-											Demo preview: 2 claimable weeks (21 + 21 coins)
+										<div className="hint" style={{ marginTop: 8 }}>
+											Demo preview · 2 claimable weeks (21 + 21 coins)
 										</div>
 									)}
 									{unclaimedWeeks === 0 && streakWeeks > 0 && (
 										<div style={{
-											marginTop: 12, padding: '8px 14px',
-											borderRadius: cfg.btnRadius,
-											background: cfg.claimedBg,
-											border: cfg.claimedBorder,
-											fontFamily: cfg.btnFont,
-											letterSpacing: cfg.btnSpacing,
+											marginTop: 12, padding: '9px 14px',
+											borderRadius: cfg.pixel ? 0 : 11,
+											background: `color-mix(in srgb, ${cfg.accent} 8%, transparent)`,
+											border: `1px solid color-mix(in srgb, ${cfg.accent} 25%, transparent)`,
+											fontFamily: cfg.pixel ? 'monospace' : 'var(--font-disp)',
+											letterSpacing: cfg.pixel ? '0.06em' : undefined,
 											display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-											fontSize: 12, fontWeight: 600, color: cfg.claimedColor,
+											fontSize: 12, fontWeight: 600, color: cfg.accent,
 										}}>
 											<Check size={13} />
-											{cfg.claimedLabel(streakWeeks)}
+											{claimedLabel(cfg, streakWeeks)}
 										</div>
 									)}
 								</>
@@ -803,301 +674,210 @@ export default function Stats() {
 					</div>
 				)}
 
-				<div style={{ height: consistencyTab === 'streak' ? 0 : '140px', overflow: 'hidden', display: consistencyTab !== 'streak' ? 'flex' : 'none', alignItems: 'flex-end', gap: '8px', padding: consistencyTab !== 'streak' ? '10px 0' : 0 }}>
-					{consistencyTab === 'weeks' ? (
-						weeklyData.map((count: number, i: number) => {
-							const isCurrentWeek = i === weeklyData.length - 1;
+				{consistencyTab !== 'streak' && (
+					<div style={{ height: 140, display: 'flex', alignItems: 'flex-end', gap: 8, padding: '24px 0 0' }}>
+						{(consistencyTab === 'weeks' ? weeklyData : dailyData).map((count: number, i: number) => {
+							const data = consistencyTab === 'weeks' ? weeklyData : dailyData;
+							const maxVal = consistencyTab === 'weeks' ? maxWeekly : maxDaily;
+							const isCurrent = i === data.length - 1;
 							const isEmpty = count === 0;
-							const barHeight = isEmpty ? 12 : Math.max(20, (count / maxWeekly) * 100);
+							const barHeight = isEmpty ? 10 : Math.max(20, (count / maxVal) * 100);
 							return (
-								<div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%', justifySelf: 'end' }}>
+								<div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%' }}>
 									<div style={{ flex: 1, width: '100%', display: 'flex', alignItems: 'flex-end' }}>
 										<div style={{
 											width: '100%', height: `${barHeight}%`,
-											backgroundColor: isEmpty ? 'rgba(255,255,255,0.05)' : (isCurrentWeek ? 'var(--primary)' : 'var(--accent)'),
-											borderRadius: '4px', opacity: isEmpty ? 1 : (isCurrentWeek ? 1 : 0.8),
-											position: 'relative', transition: 'all 0.3s ease', minHeight: '4px'
+											background: isEmpty
+												? 'var(--raised)'
+												: isCurrent
+													? 'linear-gradient(180deg, var(--lime), var(--green-mid))'
+													: 'var(--green-mid)',
+											borderRadius: 5, opacity: isEmpty ? 1 : (isCurrent ? 1 : 0.75),
+											position: 'relative', transition: 'all 0.3s ease', minHeight: 4,
 										}}>
 											{!isEmpty && (
-												<span style={{
-													position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)',
-													fontSize: '10px', color: isCurrentWeek ? 'var(--primary)' : 'var(--text-tertiary)',
-													fontWeight: isCurrentWeek ? 'bold' : 'normal'
+												<span className="num" style={{
+													position: 'absolute', top: -17, left: '50%', transform: 'translateX(-50%)',
+													fontSize: 10, fontWeight: isCurrent ? 800 : 600,
+													color: isCurrent ? 'var(--lime)' : 'var(--text-3)',
 												}}>
 													{count}
 												</span>
 											)}
 										</div>
 									</div>
-									<span style={{ fontSize: '10px', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
-										{i === weeklyData.length - 1 ? t('Now') : `W${weeklyData.length - i}`}
+									<span className="mono" style={{ fontSize: 8.5, color: isCurrent ? 'var(--text-2)' : 'var(--text-4)', whiteSpace: 'nowrap' }}>
+										{consistencyTab === 'weeks'
+											? (isCurrent ? t('Now') : `W${weeklyData.length - i}`)
+											: adjustedDayLabels[i]}
 									</span>
-								</div>
-							);
-						})
-					) : (
-						dailyData.map((count: number, i: number) => {
-							const isToday = i === dailyData.length - 1;
-							const isEmpty = count === 0;
-							const barHeight = isEmpty ? 12 : Math.max(20, (count / maxDaily) * 100);
-							return (
-								<div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%' }}>
-									<div style={{ flex: 1, width: '100%', display: 'flex', alignItems: 'flex-end' }}>
-										<div style={{
-											width: '100%', height: `${barHeight}%`,
-											backgroundColor: isEmpty ? 'rgba(255,255,255,0.05)' : (isToday ? 'var(--primary)' : 'var(--accent)'),
-											borderRadius: '4px', opacity: isEmpty ? 1 : (isToday ? 1 : 0.8),
-											position: 'relative', transition: 'all 0.3s ease', minHeight: '4px'
-										}}>
-											{!isEmpty && (
-												<span style={{
-													position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)',
-													fontSize: '10px', color: isToday ? 'var(--primary)' : 'var(--text-tertiary)',
-													fontWeight: isToday ? 'bold' : 'normal'
-												}}>
-													{count}
-												</span>
-											)}
-										</div>
-									</div>
-									<span style={{ fontSize: '10px', color: isToday ? 'var(--text-primary)' : 'var(--text-tertiary)', fontWeight: isToday ? 'bold' : 'normal' }}>
-										{adjustedDayLabels[i]}
-									</span>
-								</div>
-							);
-						})
-					)}
-				</div>
-			</div>
-
-			{/* ─── Quests Section (max 3 on home) ──────────────────────────── */}
-			{quests.length > 0 && (
-				<div style={{ marginTop: '24px' }}>
-					<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-						<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-							<Trophy size={20} color="var(--primary)" />
-							<h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('Quests')}</h2>
-						</div>
-						{quests.length > 3 && (
-							<Link to="/quests" style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-								{t('See All')} →
-							</Link>
-						)}
-					</div>
-
-					{/* Active quests (show max 3) */}
-					{activeQuests.length > 0 && (
-						<div style={{ display: 'grid', gap: '10px' }}>
-							{activeQuests.slice(0, 3).map(quest => {
-								const IconComponent = ICON_MAP[quest.icon] || Target;
-								const progress = Math.min(quest.progress, quest.req_value);
-								const pct = Math.round((progress / quest.req_value) * 100);
-
-								return (
-									<div key={quest.id} className="card" style={{ padding: '14px 16px', marginBottom: 0 }}>
-										<div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-											<div style={{
-												width: '42px', height: '42px', borderRadius: '12px',
-												background: quest.completed
-													? 'linear-gradient(135deg, rgba(204, 255, 0, 0.2), rgba(0, 229, 176, 0.1))'
-													: 'rgba(255, 255, 255, 0.05)',
-												display: 'flex', alignItems: 'center', justifyContent: 'center',
-												flexShrink: 0,
-												border: quest.completed ? '1px solid rgba(204, 255, 0, 0.3)' : '1px solid rgba(255,255,255,0.08)'
-											}}>
-												<IconComponent size={20} color={quest.completed ? 'var(--primary)' : 'var(--text-tertiary)'} />
-											</div>
-
-											<div style={{ flex: 1, minWidth: 0 }}>
-												<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-													<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-														<h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{quest.name}</h3>
-														{quest.is_weekly && (
-															<span style={{
-																fontSize: '9px', fontWeight: 700, textTransform: 'uppercase',
-																background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1',
-																padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.5px'
-															}}>Weekly</span>
-														)}
-													</div>
-													<span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-														{progress}/{quest.req_value}
-													</span>
-												</div>
-												<p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 8px 0' }}>
-													{quest.description}
-												</p>
-
-												{/* Progress bar */}
-												<div style={{
-													height: '6px', borderRadius: '3px',
-													background: 'rgba(255, 255, 255, 0.08)',
-													overflow: 'hidden', marginBottom: '8px'
-												}}>
-													<div style={{
-														height: '100%', borderRadius: '3px',
-														width: `${pct}%`,
-														background: quest.completed
-															? 'linear-gradient(90deg, var(--primary), #00e5b0)'
-															: 'var(--primary)',
-														transition: 'width 0.5s ease'
-													}} />
-												</div>
-
-												{/* Rewards + Claim */}
-												<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-													<div style={{ display: 'flex', gap: '8px' }}>
-														<span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-															<StarIcon size={12} /> {quest.exp_reward} XP
-														</span>
-														<span style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-															<CoinIcon size={13} style={{ color: 'var(--gold)' }} /> {quest.currency_reward}
-														</span>
-													</div>
-
-													{quest.completed && !quest.claimed && (
-														<button
-															onClick={() => !isDemo && claimReward(quest.id)}
-															disabled={!!isDemo || claiming === quest.id}
-															className={`motion-btn motion-btn--claim ${isDemo ? '' : 'is-ready'} ${claiming === quest.id ? 'is-bursting' : ''}`.trim()}
-															style={{
-																padding: '6px 16px', fontSize: '12px',
-																fontWeight: 700, borderRadius: '8px',
-																background: isDemo ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, var(--primary), var(--primary-dim))',
-																color: isDemo ? 'var(--text-tertiary)' : '#000',
-																border: 'none',
-																cursor: isDemo ? 'not-allowed' : 'pointer',
-																opacity: claiming === quest.id ? 0.6 : 1,
-																transition: 'all 0.2s'
-															}}
-														>
-															{isDemo ? 'Demo' : (claiming === quest.id ? '...' : t('Claim'))}
-														</button>
-													)}
-												</div>
-											</div>
-										</div>
-									</div>
-								);
-							})}
-						</div>
-					)}
-
-					{activeQuests.length === 0 && (
-						<div className="card" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-tertiary)' }}>
-							<Trophy size={32} style={{ opacity: 0.3, margin: '0 auto 8px' }} />
-							<p style={{ fontSize: '13px' }}>{t('All quests completed!')}</p>
-						</div>
-					)}
-				</div>
-			)}
-
-			{/* ─── Shop Section ─────────────────────────────────────────────── */}
-			{shop && (
-				<div style={{ marginTop: '24px' }}>
-					<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-						<ShoppingBag size={20} color="var(--primary)" />
-						<h2 style={{ fontSize: '18px', fontWeight: 700 }}>{t('Shop')}</h2>
-						<Link to="/shop#skins" style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', padding: '4px 10px', borderRadius: 8, border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.08)' }}>More +</Link>
-					</div>
-
-					{/* Theme items */}
-					<div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
-						{shop.items.map(item => {
-							const themeKey = item.id.replace('theme_', '');
-							const isActive = shop.active_theme === themeKey;
-							return (
-								<div key={item.id} className="card" style={{ padding: '14px 16px', marginBottom: 0 }}>
-									<div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-										{/* Theme preview swatch */}
-										<div style={{
-											width: '44px', height: '44px', borderRadius: '12px',
-											background: `linear-gradient(135deg, ${item.preview.primary}, ${item.preview.accent})`,
-											display: 'flex', alignItems: 'center', justifyContent: 'center',
-											flexShrink: 0,
-											border: isActive ? '2px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)',
-											boxShadow: isActive ? '0 0 12px rgba(204, 255, 0, 0.3)' : 'none'
-										}}>
-											<Palette size={20} color={item.preview.text_primary || '#fff'} />
-										</div>
-
-										<div style={{ flex: 1, minWidth: 0 }}>
-											<div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-												<h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{item.name}</h3>
-												{isActive && (
-													<span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(204,255,0,0.15)', color: 'var(--primary)', fontWeight: 600 }}>
-														{t('Active')}
-													</span>
-												)}
-											</div>
-											<p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
-												{item.description}
-											</p>
-										</div>
-
-										{/* Action button */}
-										<div style={{ flexShrink: 0 }}>
-											{item.owned && isActive ? (
-												<Check size={20} color="var(--primary)" />
-											) : item.owned ? (
-												<button
-													onClick={() => !isDemo && activateTheme(themeKey)}
-													disabled={!!isDemo}
-													style={{
-														padding: '6px 12px', fontSize: '11px', fontWeight: 600,
-														borderRadius: '8px',
-														border: isDemo ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(99,102,241,0.3)',
-														background: isDemo ? 'rgba(255,255,255,0.05)' : 'rgba(99,102,241,0.1)',
-														color: isDemo ? 'var(--text-tertiary)' : 'var(--primary)',
-														cursor: isDemo ? 'not-allowed' : 'pointer',
-														transition: 'all 0.2s'
-													}}
-												>
-													{isDemo ? 'Demo' : t('Use')}
-												</button>
-											) : (
-												<button
-													onClick={() => !isDemo && buyItem(item.id)}
-													disabled={!!isDemo || buying === item.id || (gamification?.currency || 0) < item.price}
-													style={{
-														padding: '6px 12px', fontSize: '11px', fontWeight: 700,
-														borderRadius: '8px', border: 'none',
-														background: isDemo
-															? 'rgba(255,255,255,0.06)'
-															: (gamification?.currency || 0) >= item.price
-																? 'linear-gradient(135deg, var(--gold), #DAA520)'
-																: 'rgba(255,255,255,0.06)',
-														color: isDemo
-															? 'var(--text-tertiary)'
-															: (gamification?.currency || 0) >= item.price ? '#000' : 'var(--text-tertiary)',
-														cursor: (isDemo || (gamification?.currency || 0) < item.price) ? 'not-allowed' : 'pointer',
-														opacity: buying === item.id ? 0.6 : 1,
-														transition: 'all 0.2s',
-														display: 'flex', alignItems: 'center', gap: '4px'
-													}}
-												>
-													{isDemo ? 'Demo' : <><Coins size={12} />{item.price}</>}
-												</button>
-											)}
-										</div>
-									</div>
 								</div>
 							);
 						})}
 					</div>
+				)}
+			</div>
 
-					{/* Promo code - only for non-demo */}
-					{!isDemo && (
-						<div className="card" style={{
-							padding: '14px 16px', marginBottom: 0,
-							background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.06), rgba(218, 165, 32, 0.03))',
-							border: '1px solid rgba(255, 215, 0, 0.15)',
-						}}>
-							<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-								<Gift size={16} color="var(--gold)" />
-								<span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Promo Code')}</span>
+			{/* ── Quests (max 3 on home) ── */}
+			{quests.length > 0 && (
+				<>
+					<div className="sec-label">
+						<span className="mono">{t('Quests')}</span>
+						<span style={{ flex: 1 }} />
+						{quests.length > 3 && (
+							<Link to="/quests" className="mono" style={{ fontSize: 9.5, color: 'var(--lime)', display: 'flex', alignItems: 'center', gap: 2 }}>
+								{t('See All')}<ChevronRight size={11} />
+							</Link>
+						)}
+					</div>
+
+					{activeQuests.length > 0 ? (
+						activeQuests.slice(0, 3).map(quest => {
+							const IconComponent = ICON_MAP[quest.icon] || Target;
+							const progress = Math.min(quest.progress, quest.req_value);
+							const pct = Math.round((progress / quest.req_value) * 100);
+
+							return (
+								<div key={quest.id} className="card" style={{ marginBottom: 10 }}>
+									<div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+										<div
+											className="ex-thumb"
+											style={quest.completed ? { background: 'var(--green-deep)', color: 'var(--lime)', borderColor: 'color-mix(in oklab, var(--lime) 26%, transparent)' } : undefined}
+										>
+											<IconComponent size={19} />
+										</div>
+
+										<div style={{ flex: 1, minWidth: 0 }}>
+											<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+												<div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+													<span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+														{quest.name}
+													</span>
+													{quest.is_weekly && <span className="tag">{t('Weekly')}</span>}
+												</div>
+												<span className="mono num" style={{ fontSize: 9.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+													{progress}/{quest.req_value}
+												</span>
+											</div>
+											<p style={{ fontSize: 12.5, color: 'var(--text-2)', margin: '4px 0 9px', lineHeight: 1.4 }}>
+												{quest.description}
+											</p>
+
+											<div className="meter">
+												<span style={{ width: `${pct}%` }} />
+											</div>
+
+											<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 9 }}>
+												<div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+													<span className="mono num" style={{ fontSize: 9.5, color: 'var(--lime)', display: 'flex', alignItems: 'center', gap: 4 }}>
+														<Star size={11} fill="currentColor" />{quest.exp_reward} XP
+													</span>
+													<span className="mono num" style={{ fontSize: 9.5, color: 'var(--reward)', display: 'flex', alignItems: 'center', gap: 4 }}>
+														<Coin size={12} />{quest.currency_reward}
+													</span>
+												</div>
+
+												{quest.completed && !quest.claimed && (
+													<button
+														className="apply-btn"
+														onClick={() => !isDemo && claimReward(quest.id)}
+														disabled={!!isDemo || claiming === quest.id}
+														style={{ height: 34, padding: '0 15px', opacity: claiming === quest.id ? 0.6 : 1 }}
+													>
+														{isDemo ? 'Demo' : (claiming === quest.id ? '…' : t('Claim'))}
+													</button>
+												)}
+											</div>
+										</div>
+									</div>
+								</div>
+							);
+						})
+					) : (
+						<div className="topmark" style={{ padding: '18px 0' }}>{t('All quests completed!')}</div>
+					)}
+				</>
+			)}
+
+			{/* ── Shop ── */}
+			{shop && (
+				<>
+					<div className="sec-label">
+						<span className="mono">{t('Shop')}</span>
+						<span style={{ flex: 1 }} />
+						<Link to="/shop#skins" className="mono" style={{ fontSize: 9.5, color: 'var(--lime)', display: 'flex', alignItems: 'center', gap: 2 }}>
+							{t('More')}<ChevronRight size={11} />
+						</Link>
+					</div>
+
+					{shop.items.map(item => {
+						const themeKey = item.id.replace('theme_', '');
+						const isActive = shop.active_theme === themeKey;
+						return (
+							<div key={item.id} className="card" style={{ marginBottom: 10 }}>
+								<div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+									{/* Theme preview swatch */}
+									<div style={{
+										width: 44, height: 44, borderRadius: 12,
+										background: `linear-gradient(135deg, ${item.preview.primary}, ${item.preview.accent})`,
+										display: 'flex', alignItems: 'center', justifyContent: 'center',
+										flexShrink: 0,
+										border: isActive ? '2px solid var(--lime)' : '1px solid var(--line-strong)',
+									}}>
+										<Palette size={19} color={item.preview.text_primary || '#fff'} />
+									</div>
+
+									<div style={{ flex: 1, minWidth: 0 }}>
+										<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+											<span style={{ fontSize: 14.5, fontWeight: 700 }}>{item.name}</span>
+											{isActive && <span className="rt-badge" style={{ marginLeft: 0 }}>{t('Active')}</span>}
+										</div>
+										<p style={{ fontSize: 12.5, color: 'var(--text-2)', margin: '3px 0 0', lineHeight: 1.4 }}>
+											{item.description}
+										</p>
+									</div>
+
+									{/* Action */}
+									<div style={{ flexShrink: 0 }}>
+										{item.owned && isActive ? (
+											<Check size={20} style={{ color: 'var(--lime)' }} />
+										) : item.owned ? (
+											<button
+												className="tool-chip"
+												onClick={() => !isDemo && activateTheme(themeKey)}
+												disabled={!!isDemo}
+											>
+												{isDemo ? 'Demo' : t('Use')}
+											</button>
+										) : (
+											<button
+												className="tool-chip"
+												onClick={() => !isDemo && buyItem(item.id)}
+												disabled={!!isDemo || buying === item.id || (gamification?.currency || 0) < item.price}
+												style={(!isDemo && (gamification?.currency || 0) >= item.price) ? {
+													color: 'var(--reward)',
+													borderColor: 'color-mix(in oklab, var(--reward) 40%, transparent)',
+													background: 'color-mix(in oklab, var(--reward) 10%, transparent)',
+													opacity: buying === item.id ? 0.6 : 1,
+												} : { opacity: 0.6 }}
+											>
+												{isDemo ? 'Demo' : <><Coin size={13} />{item.price}</>}
+											</button>
+										)}
+									</div>
+								</div>
 							</div>
-							<div style={{ display: 'flex', gap: '8px' }}>
+						);
+					})}
+
+					{/* Promo code — only for non-demo */}
+					{!isDemo && (
+						<div className="card" style={{ marginBottom: 0 }}>
+							<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+								<Gift size={15} style={{ color: 'var(--reward)' }} />
+								<span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{t('Promo Code')}</span>
+							</div>
+							<div style={{ display: 'flex', gap: 8 }}>
 								<input
 									type="text"
 									value={promoCode}
@@ -1105,39 +885,32 @@ export default function Stats() {
 									onKeyDown={(e) => e.key === 'Enter' && redeemPromo()}
 									placeholder={t('Enter code...')}
 									style={{
-										flex: 1, padding: '8px 12px', fontSize: '13px',
-										borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
-										background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)',
-										outline: 'none',
+										flex: 1, minWidth: 0, height: 42, padding: '0 13px', fontSize: 14,
+										borderRadius: 11, border: '1px solid var(--line)',
+										background: 'var(--raised)', color: 'var(--text)',
+										fontFamily: 'var(--font-disp)', fontWeight: 600, outline: 'none',
 									}}
 								/>
 								<button
+									className="tool-chip on"
 									onClick={redeemPromo}
 									disabled={!promoCode.trim()}
-									style={{
-										padding: '8px 14px', fontSize: '12px', fontWeight: 600,
-										borderRadius: '8px', border: 'none',
-										background: promoCode.trim() ? 'var(--primary)' : 'rgba(255,255,255,0.06)',
-										color: promoCode.trim() ? '#fff' : 'var(--text-tertiary)',
-										cursor: promoCode.trim() ? 'pointer' : 'not-allowed',
-										transition: 'all 0.2s'
-									}}
+									style={{ height: 42, opacity: promoCode.trim() ? 1 : 0.5 }}
 								>
 									{t('Redeem')}
 								</button>
 							</div>
 							{promoMsg && (
 								<div style={{
-									marginTop: '8px', fontSize: '12px', fontWeight: 600,
-									color: promoMsg.ok ? 'var(--primary)' : '#ff6b6b',
-									transition: 'all 0.3s'
+									marginTop: 8, fontSize: 12.5, fontWeight: 700,
+									color: promoMsg.ok ? 'var(--lime)' : 'var(--danger)',
 								}}>
 									{promoMsg.text}
 								</div>
 							)}
 						</div>
 					)}
-				</div>
+				</>
 			)}
 		</div>
 	);

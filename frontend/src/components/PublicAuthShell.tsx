@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, ShieldCheck, Sparkles, LineChart } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './LanguageSwitcher';
 import PublicLegalLinks from './PublicLegalLinks';
@@ -16,6 +17,63 @@ interface PublicAuthShellProps {
 	cardClassName?: string;
 }
 
+/** Labelled auth input with optional show/hide-password toggle. */
+export function AuthField({
+	label,
+	type = 'text',
+	value,
+	onChange,
+	placeholder,
+	autoComplete,
+	hint,
+	required,
+	disabled,
+	minLength,
+}: {
+	label: string;
+	type?: string;
+	value: string;
+	onChange: (v: string) => void;
+	placeholder?: string;
+	autoComplete?: string;
+	hint?: ReactNode;
+	required?: boolean;
+	disabled?: boolean;
+	minLength?: number;
+}) {
+	const [show, setShow] = useState(false);
+	const isPw = type === 'password';
+	return (
+		<div className="afield">
+			<label>{label}</label>
+			<div className={`afield-box ${isPw ? 'has-toggle' : ''}`}>
+				<input
+					type={isPw && show ? 'text' : type}
+					value={value}
+					onChange={(e) => onChange(e.target.value)}
+					placeholder={placeholder}
+					autoComplete={autoComplete}
+					spellCheck="false"
+					required={required}
+					disabled={disabled}
+					minLength={minLength}
+				/>
+				{isPw && (
+					<button
+						className="pw-toggle"
+						type="button"
+						onClick={() => setShow((s) => !s)}
+						aria-label={show ? 'Hide password' : 'Show password'}
+					>
+						{show ? <EyeOff size={19} /> : <Eye size={19} />}
+					</button>
+				)}
+			</div>
+			{hint && <div className="afield-hint">{hint}</div>}
+		</div>
+	);
+}
+
 export default function PublicAuthShell({
 	eyebrow,
 	title,
@@ -28,70 +86,37 @@ export default function PublicAuthShell({
 
 	return (
 		<div className="public-auth-page">
-			<div className="public-auth-bg" aria-hidden="true">
-				<div className="public-auth-grid" />
-				<div className="public-auth-glow is-left" />
-				<div className="public-auth-glow is-right" />
-			</div>
-
-			<nav className="public-auth-nav">
-				<Link to="/" className="public-auth-logo" aria-label="Kairos lift home">
-					<KairosLogo size="sm" />
-				</Link>
-				<div className="public-auth-nav-actions">
-					<LanguageSwitcher compact />
-					<Link to="/" className="public-auth-nav-link motion-btn motion-btn--cta motion-btn--soft motion-btn--public">{t('Home')}</Link>
-				</div>
-			</nav>
-
-			<main className="public-auth-layout">
-				<section className="public-auth-story">
-					<div className="public-auth-story-badge">{eyebrow}</div>
-					<h1>{title}</h1>
-					<p>{subtitle}</p>
-					<div className="public-auth-points">
-						<div className="public-auth-point">
-							<ShieldCheck size={16} />
-							<span>{t('Your data stays in your own training journal')}</span>
-						</div>
-						<div className="public-auth-point">
-							<LineChart size={16} />
-							<span>{t('Log sessions, review charts, and keep progress readable')}</span>
-						</div>
-						<div className="public-auth-point">
-							<Sparkles size={16} />
-							<span>{t('Use AI only where it actually helps')}</span>
-						</div>
-					</div>
-					<Link to="/" className="public-auth-home-cta motion-btn motion-btn--cta motion-btn--soft motion-btn--public">
-						<ArrowLeft size={16} />
-						{t('Back to home')}
+			<div className={`auth-col ${cardClassName}`.trim()}>
+				<div className="topbar">
+					<Link to="/" aria-label="Kairos lift home">
+						<KairosLogo size="sm" />
 					</Link>
-				</section>
+					<span className="spacer" />
+					<LanguageSwitcher />
+				</div>
 
-				<section className="public-auth-card-wrap">
-					<div className={`public-auth-card ${cardClassName}`.trim()}>
-						<div className="public-auth-card-top">
-							<Link to="/" className="public-auth-inline-home motion-btn motion-btn--cta motion-btn--soft motion-btn--public">
-								<ArrowLeft size={15} />
-								{t('Home')}
-							</Link>
-						</div>
-						{children}
-						<div className="public-auth-alt-row">{altPrompt}</div>
-						<div className="public-auth-card-actions">
-							<Link to="/" className="public-auth-secondary-cta motion-btn motion-btn--cta motion-btn--soft motion-btn--public">
-								{t('Go to homepage')}
-							</Link>
-							<Link to="/" className="public-auth-primary-ghost motion-btn motion-btn--cta motion-btn--soft motion-btn--public">
-								{t('Explore home')}
-								<ArrowRight size={16} className="motion-btn__icon" />
-							</Link>
-						</div>
-						<PublicLegalLinks centered compact style={{ marginTop: '18px' }} />
+				<Link to="/" className="backchip" style={{ alignSelf: 'flex-start' }}>
+					<ArrowLeft size={16} />
+					{t('Home')}
+				</Link>
+
+				<div className="auth-head" style={{ marginTop: 18 }}>
+					<span className="welcome">{eyebrow}</span>
+					<div className="auth-title">{title}</div>
+					<p className="auth-sub">{subtitle}</p>
+				</div>
+
+				{children}
+
+				<div className="auth-alt">{altPrompt}</div>
+
+				<div className="legalfoot">
+					<span className="lf-brand mono">Kairos lift · {t('Offline-first training log')}</span>
+					<div className="lf-links">
+						<PublicLegalLinks centered compact />
 					</div>
-				</section>
-			</main>
+				</div>
+			</div>
 		</div>
 	);
 }

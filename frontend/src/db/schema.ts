@@ -12,6 +12,8 @@ export interface User {
 	weight?: number;
 	height?: number;
 	age?: number;
+	gender?: string;
+	currency?: number;
 	priorities?: any;
 	is_admin?: boolean;
 	onboarding_progress?: Record<string, any>;

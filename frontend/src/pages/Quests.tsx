@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Scroll, Target, Trophy, Rocket, Medal, Crown, Repeat, Zap, Mountain, Sparkles, CheckCircle, Lock, User as UserIcon, ArrowLeft } from 'lucide-react';
-import CoinIcon from '../components/icons/CoinIcon';
-import StarIcon from '../components/icons/StarIcon';
+import { Target, Trophy, Rocket, Medal, Crown, Repeat, Zap, Mountain, Sparkles, Lock, User as UserIcon, ArrowLeft, Star, Check } from 'lucide-react';
+import { Coin, SecLabel } from '../components/kit';
 
 interface QuestData {
 	id: number;
@@ -96,202 +95,143 @@ export default function Quests() {
 	const completedQuests = quests.filter(q => q.claimed);
 
 	if (loading) {
-		return <div className="container flex-center fade-in">{t('Loading...')}</div>;
+		return (
+			<div className="container">
+				<div className="mono" style={{ padding: '80px 0', textAlign: 'center', fontSize: 10.5, color: 'var(--text-4)' }}>
+					{t('Loading...')}
+				</div>
+			</div>
+		);
 	}
 
 	return (
-		<div className="container" style={{ paddingBottom: '90px' }}>
-			{/* Header */}
-			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-				<div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-					<button onClick={() => navigate(-1)} style={{
-						background: 'transparent', border: 'none', cursor: 'pointer',
-						display: 'flex', alignItems: 'center', padding: '4px', color: 'var(--text-secondary)'
-					}}>
-						<ArrowLeft size={24} />
-					</button>
-					<Scroll size={28} color="var(--primary)" />
-					<h1 className="text-2xl font-bold">{t('Quests')}</h1>
-				</div>
-				<button
-					onClick={() => setIsDemo(!isDemo)}
-					style={{
-						background: isDemo ? 'rgba(255,179,71,0.15)' : 'none',
-						border: isDemo ? '1px solid #FFB347' : '1px solid transparent',
-						borderRadius: '8px', cursor: 'pointer', padding: '4px 8px',
-						display: 'flex', alignItems: 'center', gap: '4px'
-					}}
-				>
-					<UserIcon size={18} color={isDemo ? '#FFB347' : 'var(--text-tertiary)'} />
-					{isDemo && <span style={{ fontSize: '11px', color: '#FFB347', fontWeight: 600 }}>Demo</span>}
+		<div className="container">
+			<header className="page-hdr" style={{ alignItems: 'center' }}>
+				<button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('Back')}>
+					<ArrowLeft size={20} />
 				</button>
-			</div>
+				<div className="page-title sm" style={{ flex: 1 }}>{t('Quests')}</div>
+				<button
+					className="icon-btn sm"
+					onClick={() => setIsDemo(!isDemo)}
+					aria-label={t('Toggle Demo Mode')}
+					style={isDemo ? {
+						color: 'var(--reward)',
+						borderColor: 'color-mix(in oklab, var(--reward) 40%, transparent)',
+						background: 'color-mix(in oklab, var(--reward) 12%, transparent)',
+					} : undefined}
+				>
+					<UserIcon size={18} />
+				</button>
+			</header>
 
 			{/* Active Quests */}
-			<div style={{ marginBottom: '24px' }}>
-				<h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-					{t('Active')}
-				</h2>
+			<SecLabel>{t('Active')} · {activeQuests.length}</SecLabel>
 
-				{activeQuests.length === 0 ? (
-					<div className="card" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-tertiary)' }}>
-						<Trophy size={40} style={{ opacity: 0.3, margin: '0 auto 12px' }} />
-						<p>{t('All quests completed!')}</p>
-					</div>
-				) : (
-					<div style={{ display: 'grid', gap: '10px' }}>
-						{activeQuests.map(quest => {
-							const IconComponent = ICON_MAP[quest.icon] || Target;
-							const progress = Math.min(quest.progress, quest.req_value);
-							const pct = Math.round((progress / quest.req_value) * 100);
+			{activeQuests.length === 0 ? (
+				<div className="topmark" style={{ padding: '26px 0' }}>
+					{t('All quests completed!')}
+				</div>
+			) : (
+				activeQuests.map(quest => {
+					const IconComponent = ICON_MAP[quest.icon] || Target;
+					const progress = Math.min(quest.progress, quest.req_value);
+					const pct = Math.round((progress / quest.req_value) * 100);
 
-							return (
-								<div key={quest.id} className="card" style={{ padding: '14px 16px', marginBottom: 0 }}>
-									<div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-										{/* Icon */}
-										<div style={{
-											width: '42px', height: '42px', borderRadius: '12px',
-											background: quest.completed
-												? 'linear-gradient(135deg, rgba(204, 255, 0, 0.2), rgba(0, 229, 176, 0.1))'
-												: 'rgba(255, 255, 255, 0.05)',
-											display: 'flex', alignItems: 'center', justifyContent: 'center',
-											flexShrink: 0,
-											border: quest.completed ? '1px solid rgba(204, 255, 0, 0.3)' : '1px solid rgba(255,255,255,0.08)'
-										}}>
-											<IconComponent size={20} color={quest.completed ? 'var(--primary)' : 'var(--text-tertiary)'} />
+					return (
+						<div key={quest.id} className="card" style={{ marginBottom: 10 }}>
+							<div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+								<div
+									className="ex-thumb"
+									style={quest.completed ? { background: 'var(--green-deep)', color: 'var(--lime)', borderColor: 'color-mix(in oklab, var(--lime) 26%, transparent)' } : undefined}
+								>
+									<IconComponent size={19} />
+								</div>
+
+								<div style={{ flex: 1, minWidth: 0 }}>
+									<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+										<div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+											<span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+												{quest.name}
+											</span>
+											{quest.is_weekly && <span className="tag">{t('Weekly')}</span>}
+										</div>
+										<span className="mono num" style={{ fontSize: 9.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+											{progress}/{quest.req_value}
+										</span>
+									</div>
+									<p style={{ fontSize: 12.5, color: 'var(--text-2)', margin: '4px 0 9px', lineHeight: 1.4 }}>
+										{quest.description}
+									</p>
+
+									<div className="meter">
+										<span style={{ width: `${pct}%` }} />
+									</div>
+
+									<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 9 }}>
+										<div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+											<span className="mono num" style={{ fontSize: 9.5, color: 'var(--lime)', display: 'flex', alignItems: 'center', gap: 4 }}>
+												<Star size={11} fill="currentColor" />{quest.exp_reward} XP
+											</span>
+											<span className="mono num" style={{ fontSize: 9.5, color: 'var(--reward)', display: 'flex', alignItems: 'center', gap: 4 }}>
+												<Coin size={12} />{quest.currency_reward}
+											</span>
 										</div>
 
-										{/* Info */}
-										<div style={{ flex: 1, minWidth: 0 }}>
-											<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-												<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-													<h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{quest.name}</h3>
-													{quest.is_weekly && (
-														<span style={{
-															fontSize: '9px', fontWeight: 700, textTransform: 'uppercase',
-															background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1',
-															padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.5px'
-														}}>Weekly</span>
-													)}
-												</div>
-												<span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-													{progress}/{quest.req_value}
-												</span>
-											</div>
-											<p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 8px 0' }}>
-												{quest.description}
-											</p>
-
-											{/* Progress bar */}
-											<div style={{
-												height: '6px', borderRadius: '3px',
-												background: 'rgba(255, 255, 255, 0.08)',
-												overflow: 'hidden', marginBottom: '8px'
-											}}>
-												<div style={{
-													height: '100%', borderRadius: '3px',
-													width: `${pct}%`,
-													background: quest.completed
-														? 'linear-gradient(90deg, var(--primary), #00e5b0)'
-														: 'var(--primary)',
-													transition: 'width 0.5s ease'
-												}} />
-											</div>
-
-											{/* Rewards + Claim */}
-											<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-												<div style={{ display: 'flex', gap: '8px' }}>
-													<span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-														<StarIcon size={12} /> {quest.exp_reward} XP
-													</span>
-													<span style={{ fontSize: '11px', color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-														<CoinIcon size={13} style={{ color: 'var(--gold)' }} /> {quest.currency_reward}
-													</span>
-												</div>
-
-												{quest.completed && !quest.claimed && (
-													<button
-														onClick={() => !isDemo && claimReward(quest.id)}
-														disabled={!!isDemo || claiming === quest.id}
-														className={`motion-btn motion-btn--claim ${isDemo ? '' : 'is-ready'} ${claiming === quest.id ? 'is-bursting' : ''}`.trim()}
-														style={{
-															padding: '6px 16px', fontSize: '12px',
-															fontWeight: 700, borderRadius: '8px',
-															background: isDemo ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, var(--primary), var(--primary-dim))',
-															color: isDemo ? 'var(--text-tertiary)' : '#000',
-															border: 'none',
-															cursor: isDemo ? 'not-allowed' : 'pointer',
-															opacity: claiming === quest.id ? 0.6 : 1,
-															transition: 'all 0.2s'
-														}}
-													>
-														{isDemo ? 'Demo' : (claiming === quest.id ? '...' : t('Claim'))}
-													</button>
-												)}
-											</div>
-										</div>
+										{quest.completed && !quest.claimed && (
+											<button
+												className="apply-btn"
+												onClick={() => !isDemo && claimReward(quest.id)}
+												disabled={!!isDemo || claiming === quest.id}
+												style={{ height: 34, padding: '0 15px', opacity: claiming === quest.id ? 0.6 : 1 }}
+											>
+												{isDemo ? 'Demo' : (claiming === quest.id ? '…' : t('Claim'))}
+											</button>
+										)}
 									</div>
 								</div>
-							);
-						})}
-					</div>
-				)}
-			</div>
+							</div>
+						</div>
+					);
+				})
+			)}
 
 			{/* Completed (claimed) quests */}
 			{completedQuests.length > 0 && (
-				<div>
-					<h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-						{t('Completed')}
-					</h2>
-					<div style={{ display: 'grid', gap: '8px' }}>
-						{completedQuests.map(quest => {
-							const IconComponent = ICON_MAP[quest.icon] || Target;
-							return (
-								<div key={quest.id} style={{
-									display: 'flex', alignItems: 'center', gap: '12px',
-									padding: '10px 14px', borderRadius: '10px',
-									background: 'rgba(255, 255, 255, 0.03)',
-									border: '1px solid rgba(255,255,255,0.05)',
-									opacity: 0.6
-								}}>
-									<IconComponent size={18} color="var(--text-tertiary)" style={{ marginTop: '2px' }} />
-									<div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-										<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-											<span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{quest.name}</span>
-											{quest.is_weekly && (
-												<span style={{
-													fontSize: '9px', fontWeight: 700, textTransform: 'uppercase',
-													background: 'rgba(99, 102, 241, 0.1)', color: 'var(--text-tertiary)',
-													padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.5px'
-												}}>Weekly</span>
-											)}
-										</div>
-										<span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{quest.description}</span>
+				<>
+					<SecLabel>{t('Completed')} · {completedQuests.length}</SecLabel>
+					{completedQuests.map(quest => {
+						const IconComponent = ICON_MAP[quest.icon] || Target;
+						return (
+							<div
+								key={quest.id}
+								className="card"
+								style={{ marginBottom: 8, opacity: 0.6, display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px' }}
+							>
+								<IconComponent size={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+								<div style={{ flex: 1, minWidth: 0 }}>
+									<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+										<span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-2)' }}>{quest.name}</span>
+										{quest.is_weekly && <span className="tag" style={{ fontSize: 8 }}>{t('Weekly')}</span>}
 									</div>
-									<CheckCircle size={16} color="var(--success)" />
+									<span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{quest.description}</span>
 								</div>
-							);
-						})}
-					</div>
-				</div>
+								<span className="log-chk"><Check size={15} /></span>
+							</div>
+						);
+					})}
+				</>
 			)}
 
-			{/* Coming soon: Data Insights */}
-			<div style={{
-				marginTop: '24px',
-				padding: '16px',
-				borderRadius: '12px',
-				background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.05))',
-				border: '1px solid rgba(99, 102, 241, 0.2)',
-				textAlign: 'center'
-			}}>
-				<Lock size={24} color="rgba(99, 102, 241, 0.5)" style={{ margin: '0 auto 8px' }} />
-				<div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-					{t('Coming Soon')}
-				</div>
-				<div style={{ fontSize: '12px', color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-					{t('Spend your coins to unlock advanced data insights and premium stats charts')}
+			{/* Coming soon */}
+			<div className="hero-card" style={{ marginTop: 22 }}>
+				<div className="grain" />
+				<div className="hero-body" style={{ textAlign: 'center', padding: '22px 18px' }}>
+					<Lock size={20} style={{ color: 'var(--green-mid)' }} />
+					<div style={{ fontWeight: 800, fontSize: 15.5, marginTop: 8, letterSpacing: '-0.01em' }}>{t('Coming Soon')}</div>
+					<p style={{ margin: '6px 0 0', fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
+						{t('Spend your coins to unlock advanced data insights and premium stats charts')}
+					</p>
 				</div>
 			</div>
 		</div>

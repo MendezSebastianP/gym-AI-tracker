@@ -81,12 +81,12 @@ export default function GamificationToast() {
 					? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(59, 130, 246, 0.12))'
 					: isLevelUp
 					? 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 165, 0, 0.1))'
-					: 'linear-gradient(135deg, rgba(204, 255, 0, 0.12), rgba(99, 102, 241, 0.08))',
+					: 'linear-gradient(160deg, var(--green-deep), var(--green-deep-2))',
 				border: isJokerMilestone
 					? '1px solid rgba(139, 92, 246, 0.5)'
 					: isLevelUp
 					? '1px solid rgba(255, 215, 0, 0.4)'
-					: '1px solid rgba(204, 255, 0, 0.3)',
+					: '1px solid color-mix(in oklab, var(--lime) 30%, transparent)',
 				borderRadius: '16px',
 				padding: '16px 20px',
 				backdropFilter: 'blur(20px)',
@@ -172,7 +172,7 @@ export default function GamificationToast() {
 			<div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
 				<div style={{
 					width: '36px', height: '36px', borderRadius: '10px',
-					background: 'rgba(204, 255, 0, 0.15)',
+					background: 'color-mix(in oklab, var(--lime) 15%, transparent)',
 					display: 'flex', alignItems: 'center', justifyContent: 'center',
 					flexShrink: 0
 				}}>
@@ -212,8 +212,8 @@ export default function GamificationToast() {
 					{reward.rep_prs > 0 && (
 						<div style={{
 							display: 'flex', alignItems: 'center', gap: '4px',
-							background: 'rgba(99, 102, 241, 0.15)',
-							border: '1px solid rgba(99, 102, 241, 0.3)',
+							background: 'color-mix(in oklab, var(--lime) 12%, transparent)',
+							border: '1px solid color-mix(in oklab, var(--lime) 28%, transparent)',
 							borderRadius: '8px', padding: '4px 10px',
 							fontSize: '12px', color: '#818cf8'
 						}}>

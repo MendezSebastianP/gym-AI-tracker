@@ -1,13 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
-import { ArrowLeft, CheckCircle, Trash2, Lock, Edit, Calendar, HelpCircle, X, Scale, ChevronDown, ChevronUp, Check, Timer, Clock } from 'lucide-react';
+import { ArrowLeft, Trash2, Lock, HelpCircle, X, Scale, Timer, Clock, Lightbulb, Flag, ChevronDown, ChevronsDownUp, CheckCheck, Check } from 'lucide-react';
 import HybridNumber from '../components/HybridNumber';
 import RestTimer from '../components/RestTimer';
 import Stopwatch from '../components/Stopwatch';
-import CheckSuggestionsButton from '../components/CheckSuggestionsButton';
 import SuggestionBadge from '../components/SuggestionBadge';
 import { useProgressionSuggestions } from '../hooks/useProgressionSuggestions';
 import type { ProgressionSuggestion } from '../hooks/useProgressionSuggestions';
@@ -17,6 +16,7 @@ import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
 import SessionFeed from './SessionFeed';
 import { processSyncQueue } from '../db/sync';
+import { K, Pencil } from '../components/kit';
 
 // ─── Cardio helpers ─────────────────────────────────────────────────
 function formatPace(secondsPerKm: number): string {
@@ -79,7 +79,7 @@ export default function ActiveSession() {
 
 	const session = useLiveQuery(() => db.sessions.get(sessionId), [sessionId]);
 	const routine = useLiveQuery(
-		() => session?.routine_id ? db.routines.get(session.routine_id) : Promise.resolve(null),
+		async () => (session?.routine_id ? (await db.routines.get(session.routine_id)) ?? null : null),
 		[session?.routine_id]
 	);
 
@@ -88,9 +88,7 @@ export default function ActiveSession() {
 		[sessionId]
 	);
 
-
 	const [exercises, setExercises] = useState<any[]>([]);
-	const [startTime, setStartTime] = useState<number | null>(null);
 	const [collapsedExercises, setCollapsedExercises] = useState<number[]>([]);
 	const [showRestTimer, setShowRestTimer] = useState(false);
 	const [showStopwatch, setShowStopwatch] = useState(false);
@@ -193,33 +191,6 @@ export default function ActiveSession() {
 			} catch { /* offline — weight log skipped */ }
 		}, 1000);
 	};
-
-	// ─── Auto-advance helper ──────────────────────────────────────
-	// Each input gets an id like "set-{setId}-weight" or "set-{setId}-reps"
-	// After editing weight → focus reps of same set
-	// After editing reps → focus weight of next set (or next exercise first set)
-	const focusNext = useCallback((currentSetId: number, currentField: 'weight' | 'reps') => {
-		if (!sets) return;
-		if (currentField === 'weight') {
-			// Go to reps of same set
-			const el = document.getElementById(`set-${currentSetId}-reps`);
-			if (el) { (el as HTMLInputElement).focus(); (el as HTMLInputElement).select(); }
-		} else {
-			// currentField === 'reps' → go to weight of next set
-			const sortedSets = [...sets].sort((a, b) => {
-				const exA = exercises.findIndex((e: any) => e.exercise_id === a.exercise_id);
-				const exB = exercises.findIndex((e: any) => e.exercise_id === b.exercise_id);
-				if (exA !== exB) return exA - exB;
-				return a.set_number - b.set_number;
-			});
-			const idx = sortedSets.findIndex(s => s.id === currentSetId);
-			if (idx >= 0 && idx < sortedSets.length - 1) {
-				const nextSet = sortedSets[idx + 1];
-				const el = document.getElementById(`set-${nextSet.id}-weight`);
-				if (el) { (el as HTMLInputElement).focus(); (el as HTMLInputElement).select(); }
-			}
-		}
-	}, [sets, exercises]);
 
 	// ─── Pre-fill sets from previous session or routine defaults ──
 	useEffect(() => {
@@ -459,7 +430,6 @@ export default function ActiveSession() {
 					setExercises(enriched);
 				});
 			}
-			setStartTime(new Date(session.started_at).getTime());
 		}
 	}, [routine, session, i18n.language]);
 
@@ -681,10 +651,83 @@ export default function ActiveSession() {
 		});
 	};
 
+	const applySuggestion = (ex: any, suggestion: ProgressionSuggestion) => {
+		const exerciseSetsForApply = sets?.filter((s: any) => s.exercise_id === ex.exercise_id) || [];
+		const isSwap = (suggestion.type === 'exercise_swap' || suggestion.type === 'bw_progression') && suggestion.new_exercise_id;
+
+		if (isSwap) {
+			// Swap exercise_id on all session sets for this exercise
+			exerciseSetsForApply.forEach((s: any) => {
+				db.sets.update(s.id!, { exercise_id: suggestion.new_exercise_id, syncStatus: 'updated' as any });
+			});
+		} else {
+			// Regular weight / reps update
+			exerciseSetsForApply.forEach((s: any) => {
+				if (suggestion.suggested.weight !== undefined) {
+					db.sets.update(s.id!, { weight_kg: suggestion.suggested.weight, syncStatus: 'updated' as any });
+				}
+				if (suggestion.suggested.reps !== undefined) {
+					const repsVal = typeof suggestion.suggested.reps === 'string'
+						? parseInt(suggestion.suggested.reps.split('-')[0]) || 0
+						: suggestion.suggested.reps;
+					db.sets.update(s.id!, { reps: repsVal, syncStatus: 'updated' as any });
+				}
+			});
+		}
+
+		// Update routine definition
+		if (routine && session?.day_index !== undefined) {
+			const updatedDays = JSON.parse(JSON.stringify(routine.days));
+			const dayExercises = updatedDays[session.day_index]?.exercises;
+			if (dayExercises) {
+				const routineExIdx = dayExercises.findIndex((e: any) => e.exercise_id === ex.exercise_id);
+				if (routineExIdx >= 0) {
+					if (isSwap) {
+						dayExercises[routineExIdx] = {
+							...dayExercises[routineExIdx],
+							exercise_id: suggestion.new_exercise_id,
+							...(suggestion.suggested.weight !== undefined ? { weight_kg: suggestion.suggested.weight } : {}),
+							...(suggestion.suggested.reps !== undefined ? { reps: String(suggestion.suggested.reps) } : {}),
+							...(suggestion.suggested.sets !== undefined ? { sets: suggestion.suggested.sets } : {}),
+						};
+					} else {
+						const routineEx = dayExercises[routineExIdx];
+						if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
+						if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
+						if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
+					}
+				}
+			}
+			db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
+			api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => { });
+		}
+		// Save feedback
+		api.post('/progression/feedback', {
+			exercise_id: ex.exercise_id,
+			suggestion_type: suggestion.type,
+			suggested_value: suggestion.suggested,
+			action: 'accepted',
+			applied_value: suggestion.suggested,
+		}).catch(() => { });
+		setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+	};
+
+	const dismissSuggestion = (ex: any) => {
+		const sugg = progressionSuggestions.suggestions.get(ex.exercise_id);
+		if (sugg) {
+			api.post('/progression/feedback', {
+				exercise_id: ex.exercise_id,
+				suggestion_type: sugg.type,
+				suggested_value: sugg.suggested,
+				action: 'rejected',
+			}).catch(() => { });
+		}
+		setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+	};
+
 	const isCompleted = !!session?.completed_at;
-	const isEditable = !isCompleted || editMode;
 	const effortValue = Math.max(1, Math.min(10, effortRating ?? 7));
-	const effortTone = effortValue <= 3 ? 'Easy' : effortValue <= 6 ? 'Moderate' : effortValue <= 8 ? 'Hard' : 'All out';
+	const effortTone = effortValue <= 3 ? t('Easy') : effortValue <= 6 ? t('Moderate') : effortValue <= 8 ? t('Hard') : t('All out');
 
 	const getSessionDuration = () => {
 		if ((session as any)?.duration_seconds && (session as any).duration_seconds > 0) {
@@ -697,320 +740,275 @@ export default function ActiveSession() {
 		return durationMin;
 	};
 
-	if (!session) return <div className="container">Loading session...</div>;
+	if (!session) {
+		return (
+			<div className="container">
+				<div className="mono" style={{ padding: '80px 0', textAlign: 'center', fontSize: 10.5, color: 'var(--text-4)' }}>
+					{t('Loading...')}
+				</div>
+			</div>
+		);
+	}
 
 	// ─── Completed session in browse mode → show feed ─────────────
 	if (isCompleted && !editMode) {
 		return <SessionFeed targetSessionId={sessionId} />;
 	}
 
+	// From here on the session is editable (live, or completed in edit mode).
+	const dayName = routine?.days?.[session.day_index || 0]?.day_name || `${t('Day')} ${(session.day_index || 0) + 1}`;
+	const allExIds = exercises.map((e: any) => e.exercise_id);
+	const allCollapsed = allExIds.length > 0 && allExIds.every((exId: number) => collapsedExercises.includes(exId));
+	const allSessionSets = sets || [];
+	const doneSets = allSessionSets.filter((s: any) => !!s.is_done).length;
+	const totalSets = allSessionSets.length;
+	const pct = totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0;
+	const globalAllDone = totalSets > 0 && doneSets === totalSets;
+
+	const deleteActiveSession = async () => {
+		if (!confirm(t('Are you sure you want to delete this active session?'))) return;
+		if (session.server_id) {
+			try {
+				await api.delete(`/sessions/${session.server_id}`);
+			} catch (e) {
+				// Queue delete for retry when back online
+				await db.syncQueue.add({
+					event_type: 'delete_session',
+					payload: { server_id: session.server_id },
+					client_timestamp: new Date().toISOString(),
+					processed: false,
+				});
+			}
+		}
+		await db.sets.where('session_id').equals(sessionId).delete();
+		await db.sessions.delete(sessionId);
+		navigate('/sessions');
+	};
+
+	const suggestionState = (() => {
+		const { loading, fetched, suggestions } = progressionSuggestions;
+		const visibleCount = [...suggestions.keys()].filter(exId => !dismissedSuggestions.has(exId)).length;
+		return { loading, fetched, visibleCount, hide: fetched && visibleCount === 0 };
+	})();
+
 	return (
 		<>
-		<div className="container fade-in" style={{ paddingBottom: '100px' }}>
-			{isCompleted && editMode && (
-				<div style={{ background: 'rgba(99, 102, 241, 0.15)', color: 'var(--text-primary)', padding: '16px', marginBottom: '16px', borderRadius: '8px', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
-					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-						<span style={{ fontWeight: 'bold' }}>✏️ {t('Editing completed session')}</span>
-						<button
-							className="btn btn-ghost"
-							onClick={() => navigate(`/sessions/${sessionId}`)}
-							style={{ padding: '4px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}
-						>
-							{t('Done')}
-						</button>
-					</div>
+			<div className="container" style={{ paddingBottom: isCompleted ? 24 : 110 }}>
+				{/* ── Editing a completed session ── */}
+				{isCompleted && editMode && (
+					<div className="card" style={{ marginTop: 'calc(18px + env(safe-area-inset-top, 0px))', borderColor: 'color-mix(in oklab, var(--lime) 30%, transparent)' }}>
+						<div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+							<span style={{ fontWeight: 800, fontSize: 16, flex: 1, letterSpacing: '-0.01em' }}>{t('Editing completed session')}</span>
+							<button className="done-pill on" onClick={() => navigate(`/sessions/${sessionId}`)}>
+								<Check size={13} />{t('Done')}
+							</button>
+						</div>
 
-					{/* Duration editor */}
-					<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
-						<label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{t('Duration (minutes)')}</label>
-						<input
-							type="number"
-							value={(session as any).duration_seconds ? Math.round((session as any).duration_seconds / 60) : ''}
-							placeholder={t('Not tracked')}
-							onChange={async (e) => {
-								const mins = parseInt(e.target.value);
-								const seconds = isNaN(mins) ? null : mins * 60;
-								await db.sessions.update(sessionId, {
-									duration_seconds: seconds,
-									syncStatus: 'updated'
-								} as any);
-							}}
-							className="input"
-							style={{ width: '100%', fontSize: '14px', padding: '12px' }}
-						/>
-					</div>
+						<div className="field">
+							<label>{t('Duration (minutes)')}</label>
+							<input
+								type="number"
+								value={(session as any).duration_seconds ? Math.round((session as any).duration_seconds / 60) : ''}
+								placeholder={t('Not tracked')}
+								onChange={async (e) => {
+									const mins = parseInt(e.target.value);
+									const seconds = isNaN(mins) ? null : mins * 60;
+									await db.sessions.update(sessionId, {
+										duration_seconds: seconds,
+										syncStatus: 'updated'
+									} as any);
+								}}
+							/>
+						</div>
 
-					<div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-						<label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{t('Date & Time')}</label>
-						<input
-							type="datetime-local"
-							value={session.started_at ? new Date(new Date(session.started_at).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
-							onChange={async (e) => {
-								if (!e.target.value) return;
-								const newDate = new Date(e.target.value);
+						<div className="field">
+							<label>{t('Date & Time')}</label>
+							<input
+								type="datetime-local"
+								value={session.started_at ? new Date(new Date(session.started_at).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
+								onChange={async (e) => {
+									if (!e.target.value) return;
+									const newDate = new Date(e.target.value);
 
-								const oldStart = new Date(session.started_at);
-								const oldEnd = session.completed_at ? new Date(session.completed_at) : null;
-								const duration = oldEnd ? oldEnd.getTime() - oldStart.getTime() : 0;
+									const oldStart = new Date(session.started_at);
+									const oldEnd = session.completed_at ? new Date(session.completed_at) : null;
+									const duration = oldEnd ? oldEnd.getTime() - oldStart.getTime() : 0;
 
-								const newStartIso = newDate.toISOString();
-								const newEndIso = oldEnd ? new Date(newDate.getTime() + duration).toISOString() : null;
+									const newStartIso = newDate.toISOString();
+									const newEndIso = oldEnd ? new Date(newDate.getTime() + duration).toISOString() : null;
 
-								await db.sessions.update(sessionId, {
-									started_at: newStartIso,
-									completed_at: newEndIso,
-									syncStatus: 'updated'
-								});
-								// Keep weight log date in sync when session date changes
-								const updatedSession = await db.sessions.get(sessionId);
-								if (updatedSession?.weight_log_id) {
-									api.put(`/weight/${updatedSession.weight_log_id}`, {
-										weight_kg: updatedSession.bodyweight_kg,
-										measured_at: newStartIso,
-									}).catch(() => { });
-								}
-							}}
-							className="input"
-							style={{ width: '100%', fontSize: '14px', padding: '12px' }}
-						/>
-					</div>
-
-					{/* Body weight editor — local state + debounce avoids mid-typing re-render race */}
-					<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-						<label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{t('Body Weight (kg)')}</label>
-						<input
-							type="number"
-							inputMode="decimal"
-							value={bwEditText}
-							placeholder={t('Not logged')}
-							onChange={(e) => {
-								setBwEditText(e.target.value);
-								const captured = e.target.value;
-								if (bwEditTimeout.current) clearTimeout(bwEditTimeout.current);
-								bwEditTimeout.current = setTimeout(async () => {
-									const val = parseFloat(captured);
-									const bwVal = isNaN(val) ? null : val;
-									await db.sessions.update(sessionId, { bodyweight_kg: bwVal, syncStatus: 'updated' } as any);
-									if (session.server_id) {
-										try {
-											await api.put(`/sessions/${session.server_id}`, { bodyweight_kg: bwVal });
-											if (bwVal != null) updateUser({ weight: Math.round(bwVal) });
-										} catch { /* offline */ }
+									await db.sessions.update(sessionId, {
+										started_at: newStartIso,
+										completed_at: newEndIso,
+										syncStatus: 'updated'
+									});
+									// Keep weight log date in sync when session date changes
+									const updatedSession = await db.sessions.get(sessionId);
+									if (updatedSession?.weight_log_id) {
+										api.put(`/weight/${updatedSession.weight_log_id}`, {
+											weight_kg: updatedSession.bodyweight_kg,
+											measured_at: newStartIso,
+										}).catch(() => { });
 									}
-								}, 600);
-							}}
-							className="input"
-							style={{ width: '100%', fontSize: '14px', padding: '12px' }}
-						/>
-					</div>
-				</div>
-			)}
+								}}
+							/>
+						</div>
 
-			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-				<div style={{ display: 'flex', alignItems: 'center' }}>
-					<button className="btn btn-ghost" onClick={() => navigate('/sessions')} style={{ paddingLeft: 0, marginRight: '8px' }}>
-						<ArrowLeft size={24} />
-					</button>
-					<div>
-						<h2 style={{ fontSize: '16px', margin: 0, fontWeight: 'bold' }}>
-							{routine?.name || t('Session')}
-						</h2>
-						{!isCompleted && (
-							<SessionElapsedTimer startTime={session.started_at} />
-						)}
-						{isCompleted && (
-							<div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-								<Calendar size={12} />
-								<span>{new Date(session.started_at).toLocaleDateString()}</span>
-								{getSessionDuration() !== null && (
-									<>
-										<span>•</span>
-										<span>{getSessionDuration()} min</span>
-									</>
-								)}
+						{/* Body weight editor — local state + debounce avoids mid-typing re-render race */}
+						<div className="field">
+							<label>{t('Body Weight (kg)')}</label>
+							<input
+								type="number"
+								inputMode="decimal"
+								value={bwEditText}
+								placeholder={t('Not logged')}
+								onChange={(e) => {
+									setBwEditText(e.target.value);
+									const captured = e.target.value;
+									if (bwEditTimeout.current) clearTimeout(bwEditTimeout.current);
+									bwEditTimeout.current = setTimeout(async () => {
+										const val = parseFloat(captured);
+										const bwVal = isNaN(val) ? null : val;
+										await db.sessions.update(sessionId, { bodyweight_kg: bwVal, syncStatus: 'updated' } as any);
+										if (session.server_id) {
+											try {
+												await api.put(`/sessions/${session.server_id}`, { bodyweight_kg: bwVal });
+												if (bwVal != null) updateUser({ weight: Math.round(bwVal) });
+											} catch { /* offline */ }
+										}
+									}, 600);
+								}}
+							/>
+						</div>
+					</div>
+				)}
+
+				{/* ── Header ── */}
+				<header style={{ padding: `calc(${isCompleted ? '8px' : '18px'} + ${isCompleted ? '0px' : 'env(safe-area-inset-top, 0px)'}) 0 0` }}>
+					<div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+						<button className="icon-btn" onClick={() => navigate('/sessions')} aria-label={t('Back')}>
+							<ArrowLeft size={20} />
+						</button>
+						<div style={{ flex: 1, minWidth: 0 }}>
+							<div style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.05, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+								{routine?.name || t('Session')}
 							</div>
+							<div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+								{dayName} · {exercises.length} {t('exercises')}
+								{isCompleted && getSessionDuration() !== null ? ` · ${getSessionDuration()} min` : ''}
+							</div>
+						</div>
+						{!isCompleted && <SessionElapsedTimer startTime={session.started_at} />}
+						<button className="icon-btn sm" onClick={() => setShowHelp(!showHelp)} aria-label={t('Help')}>
+							<HelpCircle size={18} />
+						</button>
+						{!isCompleted && (
+							<button className="icon-btn sm danger" onClick={deleteActiveSession} aria-label={t('Discard')}>
+								<Trash2 size={16} />
+							</button>
 						)}
 					</div>
-				</div>
 
-				<div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-					{/* Help tooltip button */}
-					<button className="btn btn-ghost" onClick={() => setShowHelp(!showHelp)} style={{ padding: '6px' }}>
-						<HelpCircle size={18} color="var(--text-tertiary)" />
-					</button>
-					{isEditable && !isCompleted && (
-						<button
-							className="btn btn-ghost"
-							onClick={async () => {
-								if (!confirm(t('Are you sure you want to delete this active session?'))) return;
-								if (session.server_id) {
-									try {
-										await api.delete(`/sessions/${session.server_id}`);
-									} catch (e) {
-										// Queue delete for retry when back online
-										await db.syncQueue.add({
-											event_type: 'delete_session',
-											payload: { server_id: session.server_id },
-											client_timestamp: new Date().toISOString(),
-											processed: false,
-										});
-									}
-								}
-								await db.sets.where('session_id').equals(sessionId).delete();
-								await db.sessions.delete(sessionId);
-								navigate('/sessions');
-							}}
-							style={{ padding: '6px', color: 'var(--error)' }}
-						>
-							<Trash2 size={18} />
-						</button>
-					)}
-					{isEditable && !isCompleted && (
-						<button className="btn btn-primary motion-btn motion-btn--session is-finish" onClick={finishSession} style={{ padding: '8px 16px', fontSize: '14px' }}>
-							{t('Finish')}
-						</button>
-					)}
-				</div>
-			</div>
-
-			{/* Help tooltip */}
-			{showHelp && (
-				<div style={{
-					background: 'var(--bg-tertiary)',
-					padding: '12px 16px',
-					borderRadius: '8px',
-					fontSize: '13px',
-					color: 'var(--text-secondary)',
-					border: '1px solid rgba(99, 102, 241, 0.3)',
-					marginBottom: '16px',
-					lineHeight: '1.5',
-					position: 'relative'
-				}}>
-					<button onClick={() => setShowHelp(false)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
-						<X size={14} />
-					</button>
-					<strong style={{ color: 'var(--text-primary)' }}>{t('How sessions work')}</strong><br />
-					{t('Drag a number up/down to change it. Single tap opens a scroll wheel. Double-tap to type.')}<br />
-					{t('Tap the circle on each set to mark it done. Tap "All done" to complete an exercise.')}<br />
-					{t('Tap an exercise name to collapse/expand it.')}<br />
-					{t('"Rest" starts a countdown timer. "Stopwatch" counts up — both keep running if you navigate away.')}<br />
-					{t('Tap "Finish" when your workout is done.')}
-				</div>
-			)}
-
-			{/* Toolbar: Rest Timer, Stopwatch, Suggestions, Collapse all, All done */}
-			{isEditable && !isCompleted && (() => {
-				const allExIds = exercises.map((e: any) => e.exercise_id);
-				const allCollapsed = allExIds.every((id: number) => collapsedExercises.includes(id));
-				const allSessionSets = sets || [];
-				const globalAllDone = allSessionSets.length > 0 && allSessionSets.every((s: any) => !!s.is_done);
-				const compactBtn: React.CSSProperties = {
-					padding: '6px 10px', borderRadius: 'var(--radius-sm)',
-					fontSize: 12, fontWeight: 600,
-					border: '1px solid var(--border)', background: 'var(--bg-tertiary)',
-					color: 'var(--text-secondary)', cursor: 'pointer',
-					display: 'flex', alignItems: 'center', gap: 4,
-					whiteSpace: 'nowrap',
-				};
-
-				return (
-					<div style={{ marginBottom: 10 }}>
-						<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+					{/* tools */}
+					{!isCompleted && (
+						<div className="tools">
 							<button
+								className={`tool-chip ${showRestTimer ? 'on' : ''}`}
 								onClick={() => { setShowRestTimer(!showRestTimer); if (!showRestTimer) setShowStopwatch(false); }}
-								className="motion-btn motion-btn--session motion-btn--soft"
-								style={{
-									...compactBtn,
-									background: showRestTimer ? 'var(--primary-glow)' : 'var(--bg-tertiary)',
-									border: showRestTimer ? '1px solid var(--primary-border)' : '1px solid var(--border)',
-									color: showRestTimer ? 'var(--primary)' : 'var(--text-secondary)',
-								}}
 							>
-								<Timer size={13} />
-								{t('Rest')}
+								<Timer size={15} />{t('Rest')}
 							</button>
 							<button
+								className={`tool-chip ${showStopwatch ? 'on' : ''}`}
 								onClick={() => { setShowStopwatch(!showStopwatch); if (!showStopwatch) setShowRestTimer(false); }}
-								className="motion-btn motion-btn--session motion-btn--soft"
-								style={{
-									...compactBtn,
-									background: showStopwatch ? 'var(--primary-glow)' : 'var(--bg-tertiary)',
-									border: showStopwatch ? '1px solid var(--primary-border)' : '1px solid var(--border)',
-									color: showStopwatch ? 'var(--primary)' : 'var(--text-secondary)',
-								}}
 							>
-								<Clock size={13} />
-								{t('Stopwatch')}
+								<Clock size={15} />{t('Stopwatch')}
 							</button>
-							{routine && (() => {
-								const { loading, fetched, suggestions } = progressionSuggestions;
-								const visibleCount = [...suggestions.keys()].filter(id => !dismissedSuggestions.has(id)).length;
-								if (fetched && visibleCount === 0) return null;
-								return (
-									<button
-										onClick={async () => {
-									await progressionSuggestions.fetch();
-									// Collapse all so suggestion badges are immediately visible
-									setCollapsedExercises(allExIds);
-								}}
-										disabled={loading}
-										className={`motion-btn motion-btn--ai motion-btn--soft ${loading ? 'is-loading' : ''}`.trim()}
-										style={{
-											...compactBtn,
-											color: fetched ? 'var(--accent)' : 'var(--text-secondary)',
-											border: fetched ? '1px solid var(--accent)33' : '1px solid var(--border)',
-											opacity: loading ? 0.7 : 1,
-											cursor: loading ? 'wait' : 'pointer',
-										}}
-									>
-										{loading ? '...' : fetched ? `${visibleCount}` : '💡'}
-										{loading ? t('Checking') : fetched ? (visibleCount === 1 ? t('suggestion') : t('suggestions')) : t('Suggestions')}
-									</button>
-								);
-							})()}
-							{exercises.length > 1 && (
+							{routine && !suggestionState.hide && (
 								<button
-									onClick={() => {
-										if (allCollapsed) setCollapsedExercises([]);
-										else setCollapsedExercises(allExIds);
+									className={`tool-chip ${suggestionState.fetched ? 'on' : ''}`}
+									disabled={suggestionState.loading}
+									style={suggestionState.loading ? { opacity: 0.7, cursor: 'wait' } : undefined}
+									onClick={async () => {
+										await progressionSuggestions.fetch();
+										// Collapse all so suggestion badges are immediately visible
+										setCollapsedExercises(allExIds);
 									}}
-									className="motion-btn motion-btn--session motion-btn--soft"
-									style={compactBtn}
 								>
+									<Lightbulb size={15} />
+									{suggestionState.loading
+										? t('Checking')
+										: suggestionState.fetched
+											? `${suggestionState.visibleCount} ${suggestionState.visibleCount === 1 ? t('suggestion') : t('suggestions')}`
+											: t('Suggestions')}
+								</button>
+							)}
+							{exercises.length > 1 && (
+								<button className="tool-chip" onClick={() => setCollapsedExercises(allCollapsed ? [] : allExIds)}>
+									<ChevronsDownUp size={15} />
 									{allCollapsed ? t('Expand all') : t('Collapse all')}
 								</button>
 							)}
 							{exercises.length > 1 && (
-								<button
-									onClick={() => { setAllDone(!globalAllDone); }}
-									className="motion-btn motion-btn--session"
-									style={{
-										...compactBtn,
-										border: globalAllDone ? '1px solid var(--success)' : '1px solid var(--border)',
-										background: globalAllDone ? 'var(--success)' : 'var(--bg-tertiary)',
-										color: globalAllDone ? 'white' : 'var(--text-secondary)',
-										transition: 'all 0.15s',
-									}}
-								>
+								<button className={`tool-chip ${globalAllDone ? 'on' : ''}`} onClick={() => setAllDone(!globalAllDone)}>
+									<CheckCheck size={15} />
 									{globalAllDone ? t('Undo') : t('All done')}
 								</button>
 							)}
 						</div>
-						{showRestTimer && (
-							<div style={{ marginTop: 8 }}>
-								<RestTimer defaultTime={90} />
-							</div>
-						)}
-						{showStopwatch && (
-							<div style={{ marginTop: 8 }}>
-								<Stopwatch />
-							</div>
-						)}
-					</div>
-				);
-			})()}
+					)}
 
-			<div style={{ display: 'grid', gap: '8px' }}>
+					{/* progress */}
+					{!isCompleted && totalSets > 0 && (
+						<div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 13 }}>
+							<div className="meter"><span style={{ width: `${pct}%` }} /></div>
+							<span className="mono num" style={{ fontSize: 10, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+								{doneSets}/{totalSets} {t('done')}
+							</span>
+						</div>
+					)}
+				</header>
+
+				{showHelp && (
+					<div className="coach" style={{ marginTop: 12, position: 'relative' }}>
+						<span className="badge"><HelpCircle size={15} /></span>
+						<div style={{ paddingRight: 18 }}>
+							<b>{t('How sessions work')}</b>
+							<p>
+								{t('Drag a number up/down to change it. Single tap opens a scroll wheel. Double-tap to type.')}{' '}
+								{t('Tap the circle on each set to mark it done. Tap "All done" to complete an exercise.')}{' '}
+								{t('Tap an exercise name to collapse/expand it.')}{' '}
+								{t('"Rest" starts a countdown timer. "Stopwatch" counts up — both keep running if you navigate away.')}{' '}
+								{t('Tap "Finish" when your workout is done.')}
+							</p>
+						</div>
+						<button
+							onClick={() => setShowHelp(false)}
+							style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}
+							aria-label={t('Close')}
+						>
+							<X size={14} />
+						</button>
+					</div>
+				)}
+
+				{showRestTimer && !isCompleted && (
+					<div style={{ marginTop: 10 }}>
+						<RestTimer defaultTime={90} />
+					</div>
+				)}
+				{showStopwatch && !isCompleted && (
+					<div style={{ marginTop: 10 }}>
+						<Stopwatch />
+					</div>
+				)}
+
+				<div className="sec-label" style={{ margin: '16px 2px 11px' }}>
+					<span className="mono">{t('Today')} · {exercises.length} {t('exercises')}</span>
+					<Pencil />
+				</div>
+
+				{/* ── Exercise cards ── */}
 				{exercises.map((ex: any, i: number) => {
 					const exerciseSets = sets?.filter((s: any) => s.exercise_id === ex.exercise_id).sort((a: any, b: any) => a.set_number - b.set_number) || [];
 					const dropSets = exerciseSets.filter((s: any) => (s.set_type || 'normal') === 'drop');
@@ -1019,583 +1017,319 @@ export default function ActiveSession() {
 					const isExerciseLocked = ex.locked === true;
 					const exDoneCount = exerciseSets.filter((s: any) => !!s.is_done).length;
 					const isExAllDone = exerciseSets.length > 0 && exDoneCount === exerciseSets.length;
+					const armedIdx = exerciseSets.findIndex((s: any) => !s.is_done);
+					const isCardio = ex.type === 'Cardio';
+					const isTime = ex.type === 'Time';
 
-					return (
-						<div key={i} className="card" style={{
-							overflow: 'hidden',
-							padding: '10px 16px',
-							borderColor: isExAllDone ? 'var(--success)' : undefined,
-							background: isExAllDone ? 'rgba(0,204,68,0.06)' : undefined,
-							transition: 'all 0.2s',
-						}}>
+					const gridCols = isCardio
+						? `40px 1fr 1fr 1fr${failureTrackingEnabled ? ' 38px' : ''} 28px`
+						: isTime
+							? `40px 1fr${failureTrackingEnabled ? ' 38px' : ''} 28px`
+							: `40px 1fr 1fr${failureTrackingEnabled ? ' 38px' : ''} 28px`;
+
+					const suggestion = progressionSuggestions.fetched && !dismissedSuggestions.has(ex.exercise_id)
+						? progressionSuggestions.suggestions.get(ex.exercise_id)
+						: undefined;
+
+					const metaTags = (
+						<div className="ex-meta">
+							{ex.equipment && ex.equipment !== 'None' && ex.equipment !== 'none' && <span className="tag">{ex.equipment}</span>}
+							{ex.muscle && <span className="tag">{ex.muscle}</span>}
+							{ex.is_bodyweight && <span className="tag">{t('Bodyweight')}</span>}
+							{isExerciseLocked && (
+								<span className="tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+									<Lock size={9} />{t('Locked')}
+								</span>
+							)}
+							{exDoneCount > 0 && !isExAllDone && (
+								<span className="mono num" style={{ fontSize: 9.5, color: 'var(--lime)' }}>
+									{exDoneCount}/{exerciseSets.length}
+								</span>
+							)}
+						</div>
+					);
+
+					// ── Collapsed card ──
+					if (isCollapsed) {
+						const first = exerciseSets[0];
+						return (
 							<div
+								key={i}
+								className="card flush"
 								style={{
-									display: 'flex',
-									justifyContent: 'space-between',
-									alignItems: 'center',
-									marginBottom: isCollapsed ? '0' : '6px',
-									cursor: 'pointer',
+									marginBottom: 12,
+									borderColor: isExAllDone ? 'color-mix(in oklab, var(--lime) 26%, transparent)' : undefined,
 								}}
-								onClick={() => toggleCollapse(ex.exercise_id)}
 							>
-								<div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-									<div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-										<h3 style={{ margin: 0, color: isExAllDone ? 'var(--success)' : undefined, textDecoration: isExAllDone ? 'line-through' : 'none' }}>{ex.name}</h3>
-									{exDoneCount > 0 && !isExAllDone && (
-										<span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>
-											{exDoneCount}/{exerciseSets.length}
-										</span>
-									)}
-									{progressionSuggestions.fetched && progressionSuggestions.suggestions.has(ex.exercise_id) && !dismissedSuggestions.has(ex.exercise_id) && (
-										<SuggestionBadge
-											suggestion={progressionSuggestions.suggestions.get(ex.exercise_id)!}
-											exerciseName={ex.name}
-												onApply={(suggestion: ProgressionSuggestion) => {
-													const exerciseSetsForApply = sets?.filter((s: any) => s.exercise_id === ex.exercise_id) || [];
-													const isSwap = (suggestion.type === 'exercise_swap' || suggestion.type === 'bw_progression') && suggestion.new_exercise_id;
-												
-													if (isSwap) {
-														// Swap exercise_id on all session sets for this exercise
-														exerciseSetsForApply.forEach((s: any) => {
-															db.sets.update(s.id!, { exercise_id: suggestion.new_exercise_id, syncStatus: 'updated' as any });
-														});
-													} else {
-														// Regular weight / reps update
-														exerciseSetsForApply.forEach((s: any) => {
-															if (suggestion.suggested.weight !== undefined) {
-																db.sets.update(s.id!, { weight_kg: suggestion.suggested.weight, syncStatus: 'updated' as any });
-															}
-															if (suggestion.suggested.reps !== undefined) {
-																const repsVal = typeof suggestion.suggested.reps === 'string'
-																	? parseInt(suggestion.suggested.reps.split('-')[0]) || 0
-																	: suggestion.suggested.reps;
-																db.sets.update(s.id!, { reps: repsVal, syncStatus: 'updated' as any });
-															}
-														});
-													}
-												
-													// Update routine definition
-													if (routine && session?.day_index !== undefined) {
-														const updatedDays = JSON.parse(JSON.stringify(routine.days));
-														const dayExercises = updatedDays[session.day_index]?.exercises;
-														if (dayExercises) {
-															const routineExIdx = dayExercises.findIndex((e: any) => e.exercise_id === ex.exercise_id);
-															if (routineExIdx >= 0) {
-																if (isSwap) {
-																	dayExercises[routineExIdx] = {
-																		...dayExercises[routineExIdx],
-																		exercise_id: suggestion.new_exercise_id,
-																		...(suggestion.suggested.weight !== undefined ? { weight_kg: suggestion.suggested.weight } : {}),
-																		...(suggestion.suggested.reps !== undefined ? { reps: String(suggestion.suggested.reps) } : {}),
-																		...(suggestion.suggested.sets !== undefined ? { sets: suggestion.suggested.sets } : {}),
-																	};
-																} else {
-																	const routineEx = dayExercises[routineExIdx];
-																	if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
-																	if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
-																	if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
-																}
-															}
-														}
-														db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
-														api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => { });
-													}
-												// Save feedback
-												api.post('/progression/feedback', {
-													exercise_id: ex.exercise_id,
-													suggestion_type: suggestion.type,
-													suggested_value: suggestion.suggested,
-													action: 'accepted',
-													applied_value: suggestion.suggested,
-												}).catch(() => { });
-												setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
-											}}
-											onDismiss={() => {
-												api.post('/progression/feedback', {
-													exercise_id: ex.exercise_id,
-													suggestion_type: progressionSuggestions.suggestions.get(ex.exercise_id)!.type,
-													suggested_value: progressionSuggestions.suggestions.get(ex.exercise_id)!.suggested,
-													action: 'rejected',
-												}).catch(() => { });
-												setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
-											}}
-										/>
-									)}
-									{ex.is_bodyweight && <span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-secondary)' }}>{t('Bodyweight')}</span>}
-									{isExerciseLocked && (
-										<span style={{
-											fontSize: '10px',
-											background: 'rgba(99, 102, 241, 0.15)',
-											padding: '2px 6px',
-											borderRadius: '4px',
-											color: 'var(--accent, #6366f1)',
-											display: 'flex',
-											alignItems: 'center',
-											gap: '2px'
-										}}>
-											<Lock size={10} /> {t('Locked')}
-										</span>
-									)}
-									</div>
-									{(() => { const meta = [ex.equipment, ex.muscle].filter((v: any) => v && v !== 'None' && v !== 'none'); return meta.length > 0 ? (
-										<div style={{ fontSize: '10px', color: 'var(--text-tertiary)', paddingLeft: '2px', marginTop: '1px' }}>
-											{meta.join(' · ')}
+								<div style={{ padding: 14, cursor: 'pointer' }} onClick={() => toggleCollapse(ex.exercise_id)}>
+									<div className="ex-toprow">
+										<div style={{ flex: 1, minWidth: 0 }}>
+											<span
+												className={`ex-name ${isExAllDone ? 'struck' : ''}`}
+												style={{ fontSize: 16, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+											>
+												{ex.name}
+												{isExAllDone && <span className="strike" />}
+											</span>
 										</div>
-									) : null; })()}
-								</div>
-								{isEditable && (
-									<div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
 										<button
-											className={`motion-btn motion-btn--session ${isExAllDone ? '' : 'motion-btn--soft'}`.trim()}
-											onClick={(e: any) => {
-												e.stopPropagation();
-												setExerciseDone(ex.exercise_id, !isExAllDone);
-											}}
-											style={{
-												padding: '4px 10px',
-												borderRadius: 'var(--radius-full)',
-												border: isExAllDone ? '1px solid var(--success)' : '1px solid var(--border)',
-												background: isExAllDone ? 'var(--success)' : 'var(--bg-tertiary)',
-												color: isExAllDone ? 'white' : 'var(--text-secondary)',
-												fontSize: 11, fontWeight: 700, cursor: 'pointer',
-												display: 'flex', alignItems: 'center', gap: 4,
-												transition: 'all 0.15s',
-											}}
+											className={`done-pill ${isExAllDone ? 'on' : ''}`}
+											onClick={(e) => { e.stopPropagation(); setExerciseDone(ex.exercise_id, !isExAllDone); }}
 										>
-											<Check size={12} />
+											{isExAllDone && <Check size={13} />}
 											{isExAllDone ? t('Done') : t('All done')}
 										</button>
-										<button
-											className="btn btn-ghost p-2"
-											onClick={(e: any) => {
-												e.stopPropagation();
-												toggleCollapse(ex.exercise_id);
-											}}
-											style={{ fontSize: '12px' }}
-										>
-											{isCollapsed ? <>{t('Expand')}</> : <>{t('Collapse')}</>}
+										<button className="expand-btn" onClick={(e) => { e.stopPropagation(); toggleCollapse(ex.exercise_id); }}>
+											{t('Expand')}<ChevronDown size={13} />
 										</button>
 									</div>
-								)}
-							</div>
-
-							{!isCollapsed && (
-								<>
-									<div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.5px', padding: '0 8px', gap: '10px' }}>
-										<span style={{ width: '56px', textAlign: 'center', flexShrink: 0 }}>{t('SET')}</span>
-										{ex.type === 'Cardio' ? (
-											<>
-												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>DIST (km)</span>
-												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>TIME</span>
-												<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>INCLINE</span>
-											</>
-										) : ex.type === 'Time' ? (
-											<span style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>{t('SECONDS')}</span>
-										) : (
-											<>
-												<span style={{ flex: 1, textAlign: 'center', minWidth: '80px' }}>{ex.is_bodyweight ? '+KG' : 'KG'}</span>
-												<span style={{ flex: 1, textAlign: 'center', minWidth: '80px' }}>{t('REPS')}</span>
-											</>
+									<div style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+										{metaTags}
+										{suggestion && (
+											<SuggestionBadge
+												suggestion={suggestion}
+												exerciseName={ex.name}
+												onApply={(sugg: ProgressionSuggestion) => applySuggestion(ex, sugg)}
+												onDismiss={() => dismissSuggestion(ex)}
+											/>
 										)}
-										{isEditable && failureTrackingEnabled && (
-											<span style={{ width: '68px', textAlign: 'center', flexShrink: 0 }}>FAILURE</span>
-										)}
-										<span style={{ width: isEditable ? '44px' : '40px', flexShrink: 0 }}></span>
 									</div>
-
-									{exerciseSets.map((s: any) => {
-										const setDone = !!s.is_done;
-										const setType = s.set_type || 'normal';
-										const isWarmup = setType === 'warmup';
-										const isDrop = setType === 'drop';
-										return (
-												<div key={s.id}>
-													<div style={{
-														display: 'flex',
-														justifyContent: 'space-between',
-														alignItems: 'center',
-														padding: '6px 8px',
-														backgroundColor: setDone ? 'rgba(0,204,68,0.08)' : 'rgba(0,0,0,0.2)',
-													borderRadius: '4px',
-													marginBottom: ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 ? '0' : '4px',
-													gap: '4px',
-													opacity: setDone ? 0.6 : 1,
-														transition: 'all 0.15s',
-														borderLeft: isWarmup ? '3px solid #60a5fa' : isDrop ? '3px solid #f59e0b' : undefined,
-													}}>
-														<div style={{ width: '56px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-															{isEditable ? (
-																<div
-																	onClick={() => setSetDone(s.id, !setDone)}
-																	style={{
-																		minWidth: isWarmup || isDrop ? 52 : 24,
-																		height: 24,
-																		padding: isWarmup || isDrop ? '0 8px' : 0,
-																		borderRadius: isWarmup || isDrop ? '999px' : '50%',
-																		flexShrink: 0,
-																		border: setDone
-																			? '2px solid var(--success)'
-																			: isWarmup
-																				? '1px solid rgba(96, 165, 250, 0.7)'
-																				: isDrop
-																					? '1px solid rgba(245, 158, 11, 0.7)'
-																					: '2px solid var(--border)',
-																		background: setDone
-																			? 'var(--success)'
-																			: isWarmup
-																				? 'rgba(59,130,246,0.18)'
-																				: isDrop
-																					? 'rgba(245,158,11,0.18)'
-																					: 'transparent',
-																		display: 'flex', alignItems: 'center', justifyContent: 'center',
-																		cursor: 'pointer', transition: 'all 0.15s',
-																	}}
-																>
-																	{setDone ? (
-																		<Check size={12} style={{ color: 'white' }} />
-																	) : isWarmup ? (
-																		<span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.4px', color: '#93c5fd' }}>WARM</span>
-																	) : isDrop ? (
-																		<span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.4px', color: '#fbbf24' }}>DROP</span>
-																	) : (
-																		<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)' }}>{s.set_number}</span>
-																	)}
-																</div>
-															) : (
-																<span style={{ width: '54px', fontWeight: 'bold', fontSize: '14px', display: 'inline-flex', justifyContent: 'center' }}>
-																	{isWarmup ? (
-																		<span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.4px', color: '#93c5fd' }}>WARM</span>
-																	) : isDrop ? (
-																		<span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.4px', color: '#fbbf24' }}>DROP</span>
-																	) : (
-																		s.set_number
-																	)}
-																</span>
-															)}
-														</div>
-
-													{isEditable ? (
-														<>
-															{ex.type === 'Cardio' ? (
-																<>
-																	<HybridNumber
-																		value={s.distance_km || 0}
-																		onChange={(v) => updateSet(s.id!, 'distance_km', v)}
-																		step={0.1}
-																		min={0}
-																		max={200}
-																		sensitivity={14}
-																		showDelta={false}
-																		label="km"
-																	/>
-																	<HybridNumber
-																		value={s.duration_sec || 0}
-																		onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
-																		step={30}
-																		min={0}
-																		max={36000}
-																		sensitivity={28}
-																		showDelta={false}
-																		label="sec"
-																	/>
-																	<HybridNumber
-																		value={s.incline || 0}
-																		onChange={(v) => updateSet(s.id!, 'incline', v)}
-																		step={0.5}
-																		min={0}
-																		max={30}
-																		sensitivity={14}
-																		showDelta={false}
-																		label="%"
-																	/>
-																</>
-															) : ex.type === 'Time' ? (
-																<HybridNumber
-																	value={s.duration_sec || 0}
-																	onChange={(v) => updateSet(s.id!, 'duration_sec', v)}
-																	step={5}
-																	min={0}
-																	max={3600}
-																	sensitivity={28}
-																	showDelta={false}
-																/>
-																) : (
-																		<>
-																			<div style={{ flex: 1, minWidth: '80px', display: 'flex', justifyContent: 'center' }}>
-																				<HybridNumber
-																					value={s.weight_kg || 0}
-																					onChange={(v) => updateSet(s.id!, 'weight_kg', v)}
-																				step={ex.is_bodyweight ? 1 : 2.5}
-																				min={0}
-																				max={9999}
-																				sensitivity={14}
-																			/>
-																		</div>
-																			<div style={{ flex: 1, minWidth: '80px', display: 'flex', justifyContent: 'center' }}>
-																				<HybridNumber
-																					value={s.reps || 0}
-																					onChange={(v) => updateSet(s.id!, 'reps', v)}
-																				step={1}
-																				min={0}
-																				max={100}
-																					sensitivity={28}
-																				/>
-																			</div>
-																		</>
-																	)}
-																	{failureTrackingEnabled && (
-																		<div style={{ width: '68px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-																			<button
-																				className="btn btn-ghost"
-																				onClick={() => updateSet(s.id!, 'to_failure', !s.to_failure)}
-																				style={{
-																					minWidth: '34px',
-																					height: '34px',
-																					display: 'flex',
-																					alignItems: 'center',
-																					justifyContent: 'center',
-																					flexShrink: 0,
-																					padding: 0,
-																					fontWeight: 800,
-																					fontSize: '12px',
-																					borderRadius: '999px',
-																					border: s.to_failure ? '1px solid rgba(248, 113, 113, 0.9)' : '1px solid var(--border)',
-																					background: s.to_failure ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
-																					color: s.to_failure ? '#f87171' : 'var(--text-tertiary)',
-																				}}
-																				title="Mark to failure"
-																			>
-																				F
-																			</button>
-																		</div>
-																	)}
-															<button
-																className="btn btn-ghost"
-																onClick={() => deleteSet(s.id!)}
-																style={{ minWidth: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-															>
-																<Trash2 size={20} style={{ color: 'var(--error)' }} />
-															</button>
-														</>
-													) : (
-														<>
-															{ex.type === 'Cardio' ? (
-																<>
-																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.distance_km || 0}</span>
-																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{formatDurationMMSS(s.duration_sec || 0)}</span>
-																	<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.incline || '-'}</span>
-																</>
-																) : ex.type === 'Time' ? (
-																		<span style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>{s.duration_sec || 0}s</span>
-																	) : (
-																		<>
-																			<span style={{ flex: 1, minWidth: '80px', textAlign: 'center' }}>{s.weight_kg}</span>
-																			<span style={{ flex: 1, minWidth: '80px', textAlign: 'center' }}>{s.reps}</span>
-																		</>
-																	)}
-															<span style={{ width: '40px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-																<CheckCircle size={16} color="var(--success)" />
-															</span>
-														</>
-													)}
-												</div>
-												{ex.type === 'Cardio' && s.distance_km > 0 && s.duration_sec > 0 && (
-													<div style={{ fontSize: '11px', color: 'var(--text-tertiary)', textAlign: 'center', padding: '2px 0 6px', marginBottom: '4px' }}>
-														Pace: {formatPace(s.duration_sec / s.distance_km)} /km
-													</div>
-												)}
-											</div>
-										);
-									})}
-
-									{isEditable && (
-										<div style={{ display: 'grid', gap: '8px', marginTop: '8px' }}>
-										<button
-											className="btn btn-secondary motion-btn motion-btn--session"
-											onClick={() => addSet(ex.exercise_id)}
-											style={{ width: '100%', fontSize: '14px', padding: '8px' }}
-										>
-												+ {ex.type === 'Cardio' ? t('Add Interval') : t('Add Set')}
-											</button>
-											{dropSetsEnabled && supportsSetTypes && dropSets.length < maxDropSets && (
-												<button
-													className="btn btn-ghost motion-btn motion-btn--session motion-btn--soft"
-													onClick={() => addSet(ex.exercise_id, 'drop')}
-													style={{
-														width: '100%',
-														padding: '7px 10px',
-														fontSize: '12px',
-														border: '1px dashed rgba(245, 158, 11, 0.7)',
-														color: '#fbbf24',
-														background: 'rgba(245, 158, 11, 0.08)',
-													}}
-												>
-													+ Add Drop Set
-												</button>
-											)}
+									{exerciseSets.length > 0 && first && (
+										<div className="ex-sumline num">
+											<b>{exerciseSets.length} {t('sets')}</b>
+											<span className="x">
+												{isCardio
+													? `${first.distance_km || 0} km · ${formatDurationMMSS(first.duration_sec || 0)}`
+													: isTime
+														? `${first.duration_sec || 0}s`
+														: `${first.weight_kg || 0} kg${first.reps ? ` × ${first.reps}` : ''}`}
+											</span>
 										</div>
 									)}
-								</>
-							)}
+								</div>
+							</div>
+						);
+					}
 
-							{isCollapsed && exerciseSets.length > 0 && (() => {
-								const first = exerciseSets[0];
+					// ── Expanded card ──
+					return (
+						<div key={i} className="card flush" style={{ marginBottom: 12 }}>
+							<div className="ex-head" style={{ paddingBottom: 8, cursor: 'pointer' }} onClick={() => toggleCollapse(ex.exercise_id)}>
+								<div className="ex-thumb" style={{ width: 40, height: 40 }}><K.dumbbell width={20} height={20} /></div>
+								<div style={{ flex: 1, minWidth: 0 }}>
+									<span className="ex-name" style={{ fontSize: 15.5 }}>{ex.name}</span>
+									<div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+										{metaTags}
+										{suggestion && (
+											<span onClick={(e) => e.stopPropagation()}>
+												<SuggestionBadge
+													suggestion={suggestion}
+													exerciseName={ex.name}
+													onApply={(sugg: ProgressionSuggestion) => applySuggestion(ex, sugg)}
+													onDismiss={() => dismissSuggestion(ex)}
+												/>
+											</span>
+										)}
+									</div>
+								</div>
+								<button className="expand-btn open" onClick={(e) => { e.stopPropagation(); toggleCollapse(ex.exercise_id); }} aria-label={t('Collapse')}>
+									<ChevronDown size={13} />
+								</button>
+							</div>
+
+							<div className="set-tablehdr" style={{ gridTemplateColumns: gridCols }}>
+								<span>{t('Set')}</span>
+								{isCardio ? (
+									<>
+										<span>km</span>
+										<span>{t('Time')}</span>
+										<span>{t('Incline')}</span>
+									</>
+								) : isTime ? (
+									<span>{t('Seconds')}</span>
+								) : (
+									<>
+										<span>{ex.is_bodyweight ? '+kg' : 'kg'}</span>
+										<span>{t('Reps')}</span>
+									</>
+								)}
+								{failureTrackingEnabled && <span>{t('Fail')}</span>}
+								<span></span>
+							</div>
+
+							{exerciseSets.map((s: any, si: number) => {
+								const setDone = !!s.is_done;
+								const setType = s.set_type || 'normal';
+								const isWarmup = setType === 'warmup';
+								const isDrop = setType === 'drop';
 								return (
-									<div style={{ padding: '6px 0 2px', fontSize: '13px', color: 'var(--text-tertiary)', display: 'flex', gap: 8, alignItems: 'center' }}>
-										<span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{exerciseSets.length} {t('sets')}</span>
-										{ex.type === 'Cardio' ? (
-											<span>{first.distance_km || 0} km · {first.duration_sec || 0}s</span>
-										) : ex.type === 'Time' ? (
-											<span>{first.duration_sec || 0}s</span>
-										) : (
-											<span>{first.weight_kg || 0} kg × {first.reps || 0}</span>
+									<div key={s.id}>
+										<div className={`set-row ${si === armedIdx ? 'armed' : ''}`} style={{ gridTemplateColumns: gridCols }}>
+											<button
+												className={`set-circle ${setDone ? 'done' : ''} ${isWarmup ? 'warm' : ''} ${isDrop ? 'drop' : ''}`}
+												onClick={() => setSetDone(s.id!, !setDone)}
+												aria-label={`${t('Set')} ${s.set_number}`}
+											>
+												{setDone ? <Check size={15} /> : isWarmup ? 'W' : isDrop ? 'D' : s.set_number}
+											</button>
+
+											{isCardio ? (
+												<>
+													<HybridNumber value={s.distance_km || 0} onChange={(v) => updateSet(s.id!, 'distance_km', v)} step={0.1} min={0} max={200} sensitivity={14} showDelta={false} />
+													<HybridNumber value={s.duration_sec || 0} onChange={(v) => updateSet(s.id!, 'duration_sec', v)} step={30} min={0} max={36000} sensitivity={28} showDelta={false} />
+													<HybridNumber value={s.incline || 0} onChange={(v) => updateSet(s.id!, 'incline', v)} step={0.5} min={0} max={30} sensitivity={14} showDelta={false} />
+												</>
+											) : isTime ? (
+												<HybridNumber value={s.duration_sec || 0} onChange={(v) => updateSet(s.id!, 'duration_sec', v)} step={5} min={0} max={3600} sensitivity={28} showDelta={false} />
+											) : (
+												<>
+													<HybridNumber value={s.weight_kg || 0} onChange={(v) => updateSet(s.id!, 'weight_kg', v)} step={ex.is_bodyweight ? 1 : 2.5} min={0} max={9999} sensitivity={14} />
+													<HybridNumber value={s.reps || 0} onChange={(v) => updateSet(s.id!, 'reps', v)} step={1} min={0} max={100} sensitivity={28} />
+												</>
+											)}
+
+											{failureTrackingEnabled && (
+												<button
+													className={`fbtn ${s.to_failure ? 'on' : ''}`}
+													onClick={() => updateSet(s.id!, 'to_failure', !s.to_failure)}
+													aria-label={t('To failure')}
+												>
+													F
+												</button>
+											)}
+											<button className="del-btn" onClick={() => deleteSet(s.id!)} aria-label={t('Delete')}>
+												<Trash2 size={16} />
+											</button>
+										</div>
+										{isCardio && s.distance_km > 0 && s.duration_sec > 0 && (
+											<div className="mono num" style={{ fontSize: 9, color: 'var(--text-4)', textAlign: 'center', padding: '2px 0 5px' }}>
+												{t('Pace')}: {formatPace(s.duration_sec / s.distance_km)} /km
+											</div>
 										)}
 									</div>
 								);
-							})()}
+							})}
+
+							<div className="card-actions">
+								<button className="ghost-btn add" onClick={() => addSet(ex.exercise_id)}>
+									+ {isCardio ? t('Add Interval') : t('Add Set')}
+								</button>
+								{dropSetsEnabled && supportsSetTypes && dropSets.length < maxDropSets && (
+									<button className="ghost-btn drop" onClick={() => addSet(ex.exercise_id, 'drop')}>
+										{t('Drop set')}
+									</button>
+								)}
+							</div>
 						</div>
 					);
 				})}
+
+				{exercises.some((e: any) => e.type !== 'Cardio' && e.type !== 'Time') && (
+					<div className="hint" style={{ margin: '2px 0 8px' }}>
+						{t('Drag to scrub · double-tap to type · tap ● to complete')}
+					</div>
+				)}
+
+				{/* Body Weight (optional) */}
+				{!isCompleted && (
+					<div style={{ marginTop: 14 }}>
+						<div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: bwOpen ? 11 : 0 }}>
+							<button className="bw-pill" onClick={() => setBwOpen(!bwOpen)} style={{ border: 'none', cursor: 'pointer' }}>
+								<Scale size={13} />
+								{t('Body Weight')}{!bwOpen && bwValue > 0 ? ` · ${bwValue} kg` : ''}
+							</button>
+						</div>
+						{bwOpen && (
+							<>
+								<div className="bw-field">
+									<div style={{ flex: '0 0 130px' }}>
+										<HybridNumber value={bwValue} onChange={saveBw} step={0.5} min={0} max={300} sensitivity={14} showDelta={false} />
+									</div>
+									<div className="bw-delta">{t('Logged with this session')}</div>
+								</div>
+								<div className="hint">{t('Drag to adjust · double-tap to type')}</div>
+							</>
+						)}
+					</div>
+				)}
 			</div>
 
-			{/* Hint text at bottom of exercises */}
-			{isEditable && !isCompleted && exercises.some((e: any) => e.type !== 'Cardio' && e.type !== 'Time') && (
-				<div style={{ fontSize: 10, color: 'var(--text-tertiary)', textAlign: 'center', padding: '4px 0 0' }}>
-					drag &bull; tap=drum &bull; double-tap=type
-				</div>
-			)}
-
-
-			{/* Body Weight (optional) */}
-			{isEditable && !isCompleted && (
-				<div style={{ marginTop: 8 }}>
-					<button
-						onClick={() => setBwOpen(!bwOpen)}
-						style={{
-							padding: '6px 10px', borderRadius: 'var(--radius-sm)',
-							fontSize: 12, fontWeight: 600,
-							border: bwOpen ? '1px solid var(--primary-border)' : '1px solid var(--border)',
-							background: bwOpen ? 'var(--primary-glow)' : 'var(--bg-tertiary)',
-							color: bwOpen ? 'var(--primary)' : 'var(--text-secondary)',
-							cursor: 'pointer',
-							display: 'flex', alignItems: 'center', gap: 4,
-							whiteSpace: 'nowrap',
-						}}
-					>
-						<Scale size={13} />
-						{t('Body Weight')}{!bwOpen && bwValue > 0 ? ` · ${bwValue} kg` : ''}
-					</button>
-					{bwOpen && (
-						<div style={{ marginTop: 8, padding: '10px 16px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
-							<HybridNumber
-								value={bwValue}
-								onChange={saveBw}
-								step={0.5}
-								min={0}
-								max={300}
-								sensitivity={14}
-								showDelta={false}
-							/>
-						</div>
-					)}
-				</div>
-			)}
-
-		</div>
-		{showEffortModal && createPortal(
-			<div
-				style={{
-					position: 'fixed',
-					inset: 0,
-					background: 'rgba(0,0,0,0.55)',
-					display: 'flex',
-					alignItems: 'center',
-					justifyContent: 'center',
-					zIndex: 250,
-					padding: '16px',
-				}}
-			>
+			{/* ── Fixed finish footer — portaled: route-scene transforms/filters
+			       would otherwise turn position:fixed into page-relative ── */}
+			{!isCompleted && createPortal(
 				<div
-					style={{
-						width: '100%',
-						maxWidth: '420px',
-						background: 'var(--bg-secondary)',
-						borderRadius: '18px',
-						padding: '18px 14px 16px',
-						border: '1px solid var(--border)',
-					}}
+					className="session-footer"
+					style={{ bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) - 12px)', paddingBottom: 12 }}
 				>
-					<div style={{ fontSize: '17px', fontWeight: 700, marginBottom: '6px', textAlign: 'center' }}>
-						How hard was this session?
+					<div className="session-footer-inner">
+						<div className={`finish-wrap ${pct >= 100 ? 'complete' : ''}`} style={{ ['--p' as any]: pct }}>
+							<button className="finish-btn" onClick={finishSession}>
+								<Flag size={17} />
+								{pct >= 100 ? t('Finish — all sets logged') : t('Finish session')}
+							</button>
+						</div>
 					</div>
-					<div style={{ fontSize: '12px', color: 'var(--text-tertiary)', textAlign: 'center', marginBottom: '14px' }}>
-						1 = easy · 10 = all out
-					</div>
-					<div style={{ marginBottom: '14px' }}>
-						<div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' }}>
-							<span style={{ fontSize: '24px', fontWeight: 800, color: '#86efac' }}>{effortValue}</span>
-							<span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>{effortTone}</span>
+				</div>,
+				document.body
+			)}
+
+			{/* ── Finish / effort sheet ── */}
+			{showEffortModal && createPortal(
+				<div className="sheet-scrim" onClick={(e) => { if (e.target === e.currentTarget) setShowEffortModal(false); }}>
+					<div className="sheet">
+						<div className="sheet-grab" />
+						<h3>{t('Finish session')}</h3>
+						<p className="sub">
+							{doneSets}/{totalSets} {t('sets')}
+							{bwValue > 0 ? ` · ${bwValue} kg` : ''} — {t('rate the effort (optional)')}
+						</p>
+						<div className="effort-readout">
+							<div className="effort-num num">{effortValue}</div>
+							<div className="effort-word">{effortTone}</div>
 						</div>
 						<input
+							className="effort-slider"
 							type="range"
 							min={1}
 							max={10}
 							step={1}
 							value={effortValue}
 							onChange={(e) => setEffortRating(parseInt(e.target.value, 10))}
-							style={{
-								width: '100%',
-								accentColor: '#22c55e',
-								cursor: 'pointer',
-							}}
 						/>
-						<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-							<span>Easy</span>
-							<span>All out</span>
+						<div className="effort-scale">
+							<span>{t('Easy')}</span>
+							<span>{t('Moderate')}</span>
+							<span>{t('Hard')}</span>
+							<span>{t('All out')}</span>
 						</div>
-						<div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '4px', marginTop: '6px' }}>
-							{Array.from({ length: 10 }, (_, i) => {
-								const val = i + 1;
-								const active = val === effortValue;
-								return (
-									<div
-										key={val}
-										style={{
-											textAlign: 'center',
-											fontSize: '10px',
-											fontWeight: active ? 800 : 500,
-											color: active ? '#86efac' : 'var(--text-tertiary)',
-										}}
-									>
-										{val}
-									</div>
-								);
-							})}
+						<div className="sheet-actions">
+							<button className="sheet-btn sec" onClick={() => setShowEffortModal(false)}>
+								{t('Keep going')}
+							</button>
+							<button
+								className="sheet-btn primary"
+								onClick={async () => {
+									setShowEffortModal(false);
+									await completeSession(effortValue);
+								}}
+							>
+								<Flag size={15} />{t('Save session')}
+							</button>
 						</div>
-					</div>
-					<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
 						<button
-							className="btn btn-ghost"
+							className="link-quiet"
+							style={{ display: 'block', margin: '12px auto 0' }}
 							onClick={async () => {
 								setShowEffortModal(false);
 								await completeSession(null);
 							}}
 						>
-							Skip
-						</button>
-						<button
-							className="btn btn-primary"
-							onClick={async () => {
-								setShowEffortModal(false);
-								await completeSession(effortValue);
-							}}
-						>
-							Done
+							{t('Skip rating')}
 						</button>
 					</div>
-				</div>
-			</div>
-		, document.body)}
+				</div>,
+				document.body
+			)}
 		</>
 	);
 }

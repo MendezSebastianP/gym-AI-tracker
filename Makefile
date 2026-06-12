@@ -12,14 +12,14 @@ build: ## Full rebuild of all containers (no cache)
 quick-build: ## Quick build using cache
 	docker compose build
 
-up: ## Start all containers in background
-	docker compose up -d
+up: ## Start all containers in background (dev profile includes nginx on :8080)
+	docker compose --profile dev up -d
 
 down: ## Stop and remove containers
-	docker compose down
+	docker compose --profile dev down
 
 restart: ## Restart all containers
-	docker compose restart
+	docker compose --profile dev restart
 
 logs: ## Follow logs of all containers
 	docker compose logs -f

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Check, ShoppingBag, Palette, Flame } from 'lucide-react';
+import { ArrowLeft, Check, Flame } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import CoinIcon from '../components/icons/CoinIcon';
+import { SecLabel } from '../components/kit';
 import {
 	STYLES, CFG_C1, CFG_C2, CFG_C3,
 	FlameSlotA, FlameSlotB, FlameSlotOrb, FlameSlotD,
@@ -71,13 +72,13 @@ interface ShopData {
 
 const RARITY_COLORS: Record<string, string> = {
 	common:    'rgba(160,160,160,0.45)',
-	rare:      'rgba(99,102,241,0.55)',
+	rare:      'rgba(79,148,100,0.6)',
 	epic:      'rgba(168,85,247,0.60)',
 	legendary: 'rgba(251,191,36,0.65)',
 };
 const RARITY_BORDER: Record<string, string> = {
 	common:    'rgba(180,180,180,0.18)',
-	rare:      'rgba(99,102,241,0.22)',
+	rare:      'rgba(79,148,100,0.28)',
 	epic:      'rgba(168,85,247,0.28)',
 	legendary: 'rgba(251,191,36,0.32)',
 };
@@ -152,17 +153,6 @@ function SkinPreview({ skinId }: { skinId: string }) {
 			{skinId === 'skin_c3' && <FlameSlotOrb cfg={CFG_C3} state="lit" index={3} />}
 			{skinId === 'skin_d'  && <FlameSlotD   state="lit" index={3} />}
 			{skinId === 'skin_a'  && <FlameSlotA   state="lit" index={3} />}
-		</div>
-	);
-}
-
-// ── Section heading ───────────────────────────────────────────────────────────
-
-function SectionHeading({ icon, title }: { icon: React.ReactNode; title: string }) {
-	return (
-		<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, marginTop: 8 }}>
-			{icon}
-			<span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>{title}</span>
 		</div>
 	);
 }
@@ -268,53 +258,48 @@ export default function Shop() {
 	// ── Render ────────────────────────────────────────────────────────────────
 
 	return (
-		<div style={{ minHeight: '100vh', background: 'var(--bg-primary)', padding: '0 0 80px' }}>
+		<div className="container">
 			<style>{STYLES + THEME_STYLES}</style>
 
 			{/* Header */}
-			<div style={{
-				position: 'sticky', top: 0, zIndex: 50,
-				background: 'var(--bg-primary)', borderBottom: '1px solid var(--border)',
-				padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
-			}}>
-				<button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 4, display: 'flex' }}>
-					<ChevronLeft size={22} />
+			<header className="page-hdr" style={{ alignItems: 'center' }}>
+				<button className="icon-btn" onClick={() => navigate(-1)} aria-label="Back">
+					<ArrowLeft size={20} />
 				</button>
-				<div style={{ flex: 1 }}>
-					<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-						<ShoppingBag size={18} color="var(--primary)" />
-						<span style={{ fontWeight: 700, fontSize: 17 }}>Shop</span>
-					</div>
-					<div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 1 }}>Themes & streak skins</div>
+				<div style={{ flex: 1, minWidth: 0 }}>
+					<div className="page-title sm">Shop</div>
+					<div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 4 }}>Themes · Streak skins</div>
 				</div>
-				<div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.25)', borderRadius: 10, padding: '5px 10px' }}>
-					<CoinIcon size={14} style={{ color: 'var(--gold)' }} />
-					<span style={{ fontWeight: 700, fontSize: 14, color: 'var(--gold)' }}>{currency}</span>
+				<div
+					className="num"
+					style={{
+						display: 'flex', alignItems: 'center', gap: 6, height: 36, padding: '0 13px',
+						borderRadius: 11, fontWeight: 800, fontSize: 14.5, color: 'var(--reward)',
+						background: 'color-mix(in oklab, var(--reward) 11%, transparent)',
+						border: '1px solid color-mix(in oklab, var(--reward) 28%, transparent)',
+					}}
+				>
+					<CoinIcon size={14} style={{ color: 'var(--reward)' }} />
+					{currency}
 				</div>
-			</div>
+			</header>
 
 			{/* Feedback */}
 			{msg && (
-				<div style={{
-					margin: '12px 16px 0', padding: '10px 14px', borderRadius: 10,
-					background: msg.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-					border: `1px solid ${msg.ok ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
-					fontSize: 13, fontWeight: 600,
-					color: msg.ok ? '#4ade80' : '#f87171',
-				}}>
+				<div className="topmark" style={{ color: msg.ok ? 'var(--lime)' : 'var(--danger)', marginTop: 8 }}>
 					{msg.text}
 				</div>
 			)}
 
 			{!shop && (
-				<div style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)', fontSize: 13 }}>Loading...</div>
+				<div className="mono" style={{ textAlign: 'center', padding: '60px 0', fontSize: 10.5, color: 'var(--text-4)' }}>Loading...</div>
 			)}
 
 			{shop && (
-				<div style={{ padding: '16px 16px 0' }}>
+				<div>
 
 					{/* ── Themes section ────────────────────────────────────────── */}
-					<SectionHeading icon={<Palette size={18} color="var(--primary)" />} title="Themes" />
+					<SecLabel>Themes</SecLabel>
 
 					{shop.items.map(theme => {
 						const themeKey = theme.id.replace('theme_', '');
@@ -340,7 +325,7 @@ export default function Shop() {
 										<div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
 											<span style={{ fontWeight: 700, fontSize: 14 }}>{theme.name}</span>
 											{isActive && (
-												<span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: isGold ? 'rgba(255,215,0,0.18)' : 'rgba(99,102,241,0.18)', color: isGold ? '#FFD700' : 'var(--primary)', fontWeight: 700 }}>Active</span>
+												<span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: isGold ? 'rgba(255,215,0,0.18)' : 'color-mix(in oklab, var(--lime) 16%, transparent)', color: isGold ? '#FFD700' : 'var(--lime)', fontWeight: 700 }}>Active</span>
 											)}
 											{isGold && (
 												<span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: 'rgba(251,191,36,0.65)', color: '#000', fontWeight: 700 }}>legendary</span>
@@ -365,7 +350,7 @@ export default function Shop() {
 													<button
 														onClick={() => activateThemeItem(themeKey)}
 														disabled={!!activating}
-														style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, borderRadius: 8, border: `1.5px solid ${isGold ? 'rgba(255,215,0,0.4)' : 'var(--primary)'}`, background: isGold ? 'rgba(255,215,0,0.1)' : 'rgba(99,102,241,0.1)', color: isGold ? '#FFD700' : 'var(--primary)', cursor: 'pointer' }}
+														style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, borderRadius: 8, border: `1.5px solid ${isGold ? 'rgba(255,215,0,0.4)' : 'color-mix(in oklab, var(--lime) 45%, transparent)'}`, background: isGold ? 'rgba(255,215,0,0.1)' : 'color-mix(in oklab, var(--lime) 10%, transparent)', color: isGold ? '#FFD700' : 'var(--lime)', cursor: 'pointer' }}
 													>
 														Apply
 													</button>
@@ -374,7 +359,7 @@ export default function Shop() {
 												<button
 													onClick={() => buyItem(theme.id)}
 													disabled={!!buying || !canAfford}
-													style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', background: canAfford ? (isGold ? 'linear-gradient(135deg, #B8860B, #FFD700, #B8860B)' : 'linear-gradient(135deg, var(--primary), var(--accent))') : 'rgba(255,255,255,0.06)', color: canAfford ? (isGold ? '#000' : '#fff') : 'var(--text-tertiary)', cursor: (!canAfford || !!buying) ? 'not-allowed' : 'pointer', opacity: buying === theme.id ? 0.6 : 1 }}
+													style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', background: canAfford ? (isGold ? 'linear-gradient(135deg, #B8860B, #FFD700, #B8860B)' : 'var(--lime)') : 'rgba(255,255,255,0.06)', color: canAfford ? (isGold ? '#000' : 'var(--on-lime)') : 'var(--text-tertiary)', cursor: (!canAfford || !!buying) ? 'not-allowed' : 'pointer', opacity: buying === theme.id ? 0.6 : 1 }}
 												>
 													{theme.price === 0 ? 'Free' : <><CoinIcon size={12} /> {theme.price}</>}
 												</button>
@@ -391,7 +376,7 @@ export default function Shop() {
 
 					{/* ── Streak Skins section ──────────────────────────────────── */}
 					<div id="skins-section" style={{ scrollMarginTop: 70 }} />
-					<SectionHeading icon={<Flame size={18} color="var(--text-secondary)" />} title="Streak Skins" />
+					<SecLabel>Streak Skins</SecLabel>
 
 					{shop.skin_items.map(skin => {
 						const isActive = activeSkin === skin.id;
@@ -449,8 +434,8 @@ export default function Shop() {
 						);
 					})}
 
-					<div style={{ padding: '4px 4px 16px', textAlign: 'center', fontSize: 11, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-						Skins change your streak display on the Home screen.
+					<div className="hint" style={{ margin: '4px 0 16px' }}>
+						Skins change your streak display on the Home screen
 					</div>
 				</div>
 			)}

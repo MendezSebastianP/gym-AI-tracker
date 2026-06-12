@@ -103,11 +103,11 @@ function SwipeTimeAdjust({ value, onChange, min = 15, max = 600, disabled = fals
 				</div>
 			)}
 
-			<div style={{
+			<div className="num" style={{
 				fontSize: '32px',
 				fontWeight: 800,
 				letterSpacing: '-1px',
-				color: dragging ? 'var(--primary)' : 'inherit',
+				color: dragging ? 'var(--lime)' : 'inherit',
 				transition: dragging ? 'none' : 'color 0.2s',
 			}}>
 				{minutes}:{seconds.toString().padStart(2, '0')}
@@ -189,13 +189,13 @@ export function RestTimer({ defaultTime = 90, onFinish }: RestTimerProps) {
 			alignItems: 'center',
 			gap: 16,
 			padding: '20px 16px',
-			background: finished ? 'rgba(0, 204, 68, 0.06)' : 'var(--bg-secondary)',
-			border: `1px solid ${finished ? 'var(--success)' : 'var(--border)'}`,
+			background: finished ? 'color-mix(in oklab, var(--lime) 7%, var(--card-solid))' : 'var(--card-solid)',
+			border: `1px solid ${finished ? 'color-mix(in oklab, var(--lime) 40%, transparent)' : 'var(--line-strong)'}`,
 			borderRadius: 'var(--radius-lg)',
 			transition: 'all 0.3s',
 		}}>
 			{/* Label */}
-			<div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+			<div className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>
 				{finished ? 'Rest complete!' : running ? 'Resting...' : 'Rest Timer — drag time to adjust'}
 			</div>
 
@@ -229,7 +229,7 @@ export function RestTimer({ defaultTime = 90, onFinish }: RestTimerProps) {
 					color: finished ? 'var(--success)' : 'var(--text-primary)',
 				}}>
 					{running ? (
-						<div style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px' }}>
+						<div className="num" style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px' }}>
 							{Math.floor(remaining / 60)}:{(remaining % 60).toString().padStart(2, '0')}
 						</div>
 					) : (

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Clock } from 'lucide-react';
 
 interface SessionElapsedTimerProps {
 	startTime: string; // ISO string
@@ -24,9 +23,9 @@ export default function SessionElapsedTimer({ startTime }: SessionElapsedTimerPr
 		: `${mins}:${secs.toString().padStart(2, '0')}`;
 
 	return (
-		<div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--primary)' }}>
-			<Clock size={12} />
-			<span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatted}</span>
+		<div className="elapsed num">
+			<span className="dot" />
+			{formatted}
 		</div>
 	);
 }

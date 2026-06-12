@@ -124,7 +124,7 @@ export function MotionProvider({ children }: FrameChildrenProps) {
 
 export function PublicRouteFrame({ children }: FrameChildrenProps) {
 	const reducedMotion = useReducedMotion();
-	const custom = useMemo<VariantCustom>(() => ({ direction: 1, reducedMotion }), [reducedMotion]);
+	const custom = useMemo<VariantCustom>(() => ({ direction: 1, reducedMotion: !!reducedMotion }), [reducedMotion]);
 
 	return (
 		<motion.div
@@ -142,7 +142,7 @@ export function PublicRouteFrame({ children }: FrameChildrenProps) {
 
 export function StandaloneAppRouteFrame({ children }: FrameChildrenProps) {
 	const reducedMotion = useReducedMotion();
-	const custom = useMemo<VariantCustom>(() => ({ direction: 1, reducedMotion }), [reducedMotion]);
+	const custom = useMemo<VariantCustom>(() => ({ direction: 1, reducedMotion: !!reducedMotion }), [reducedMotion]);
 
 	return (
 		<motion.div

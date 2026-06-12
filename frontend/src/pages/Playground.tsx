@@ -554,8 +554,6 @@ function PageTransitionPreview() {
 // ── Logo Lab ─────────────────────────────────────────────────────────────────
 
 const LIME = '#CCFF00';
-const CYAN = '#00FFFF';
-const GOLD = '#FFD700';
 const APP_DARK = '#121212';
 const APP_BORDER = '#333333';
 
@@ -622,17 +620,6 @@ function K6({ c }: { c: string }) {
 
 // Active K used in logos — K3 Sport/Italic (selected)
 function KFill({ c }: { c: string }) { return <K3 c={c} />; }
-function KGrad({ id }: { id: string }) {
-	return (
-		<>
-			<rect x="16" y="18" width="7" height="44" fill={`url(#${id})`} />
-			<rect x="11" y="14" width="17" height="5" fill={`url(#${id})`} />
-			<rect x="11" y="61" width="17" height="5" fill={`url(#${id})`} />
-			<polygon points="23,39 27,33 61,15 57,21" fill={`url(#${id})`} />
-			<polygon points="23,41 27,47 57,59 61,65" fill={`url(#${id})`} />
-		</>
-	);
-}
 
 function KShowcase() {
 	const styles = [

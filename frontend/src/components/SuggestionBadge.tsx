@@ -17,13 +17,13 @@ export default function SuggestionBadge({ suggestion, exerciseName, onApply, onD
 	const [popupPos, setPopupPos] = useState({ top: 0, left: 0, width: 320 });
 
 	const typeColors: Record<string, string> = {
-		weight_increase: 'var(--primary)',
-		rep_increase: 'var(--primary)',
-		deload: '#f59e0b',
-		exercise_swap: '#8b8cf8',
-		bw_progression: 'var(--primary)',
-		cardio_increase: 'var(--primary)',
-		plateau_warning: '#f59e0b',
+		weight_increase: 'var(--lime)',
+		rep_increase: 'var(--lime)',
+		deload: 'var(--reward)',
+		exercise_swap: 'var(--reward)',
+		bw_progression: 'var(--lime)',
+		cardio_increase: 'var(--lime)',
+		plateau_warning: 'var(--reward)',
 	};
 
 	const typeLabels: Record<string, string> = {
@@ -38,7 +38,7 @@ export default function SuggestionBadge({ suggestion, exerciseName, onApply, onD
 
 	const color = typeColors[suggestion.type] || 'var(--primary)';
 	const label = typeLabels[suggestion.type] || 'Suggestion';
-	const applyTextColor = suggestion.type === 'deload' ? '#fff' : suggestion.type === 'exercise_swap' ? '#fff' : '#000';
+	const applyTextColor = 'var(--on-lime)';
 	const resolvedExerciseName = exerciseName?.trim() || 'Current exercise';
 
 	const updatePopupPosition = useCallback(() => {
@@ -137,11 +137,11 @@ export default function SuggestionBadge({ suggestion, exerciseName, onApply, onD
 							left: popupPos.left,
 							width: popupPos.width,
 							maxWidth: 'calc(100vw - 24px)',
-							background: 'var(--bg-secondary)',
-							border: `1px solid ${color}44`,
-							borderRadius: '8px',
-							padding: '12px',
-							boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+							background: 'var(--card-solid)',
+							border: '1px solid var(--line-strong)',
+							borderRadius: '14px',
+							padding: '13px 14px',
+							boxShadow: '0 16px 38px -16px rgba(0,0,0,0.6)',
 							pointerEvents: 'auto',
 						}}
 					>
@@ -206,15 +206,15 @@ export default function SuggestionBadge({ suggestion, exerciseName, onApply, onD
 					<div style={{ display: 'flex', gap: '8px' }}>
 						<button
 							onClick={() => { onApply(suggestion); setExpanded(false); }}
-							className="btn motion-btn motion-btn--session"
 							style={{
 								flex: 1,
 								background: color,
 								color: applyTextColor,
 								border: 'none',
-								padding: '7px 12px',
-								borderRadius: '6px',
-								fontSize: '12px',
+								padding: '9px 12px',
+								borderRadius: '10px',
+								fontFamily: 'var(--font-disp)',
+								fontSize: '12.5px',
 								fontWeight: 700,
 								cursor: 'pointer',
 								display: 'flex',
@@ -227,8 +227,8 @@ export default function SuggestionBadge({ suggestion, exerciseName, onApply, onD
 						</button>
 						<button
 							onClick={() => { setExpanded(false); onDismiss(); }}
-							className="btn btn-ghost"
-							style={{ padding: '7px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+							className="tool-chip"
+							style={{ height: 'auto', padding: '9px 12px', fontSize: '12.5px' }}
 						>
 							Dismiss
 						</button>

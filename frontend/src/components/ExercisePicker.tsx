@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { useTranslation } from 'react-i18next';
-import { X, Search, Filter, Dumbbell, Layers, Activity, Plus, Check } from 'lucide-react';
+import { X, Search, Filter, Dumbbell, Layers, Activity, Plus, Check, ChevronDown } from 'lucide-react';
 import { api } from '../api/client';
 
 interface ExercisePickerProps {
@@ -229,47 +229,44 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false, 
 		}
 	};
 
+	const activeFilterCount = Object.values(filters).filter(Boolean).length;
+
 	if (isCreating) {
 		return createPortal(
-			<div style={{
-				position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-				backgroundColor: 'var(--bg-primary)', zIndex: 200, padding: '16px',
-				display: 'flex', flexDirection: 'column'
-			}}>
-				<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-					<h2 className="text-xl font-bold">{t('Custom Exercise')}</h2>
-					<button className="btn btn-ghost" onClick={() => setIsCreating(false)} style={{ padding: '8px' }}>
-						<X size={24} />
-					</button>
+			<div className="flow sub">
+				<div className="flow-hdr" style={{ alignItems: 'center' }}>
+					<span className="flow-title sm">{t('Custom Exercise')}</span>
+					<button className="flow-cancel" onClick={() => setIsCreating(false)}>{t('Cancel')}</button>
 				</div>
-				<div className="flex flex-col gap-4">
-					<div>
-						<label className="text-sm text-secondary mb-1 block">{t('Name')} *</label>
-						<input className="input w-full" value={customName} onChange={e => setCustomName(e.target.value)} placeholder={t("e.g. My Special Curl")} autoFocus />
+				<div className="flow-scroll">
+					<div className="field" style={{ marginTop: 6 }}>
+						<label>{t('Name')} *</label>
+						<input value={customName} onChange={e => setCustomName(e.target.value)} placeholder={t("e.g. My Special Curl")} autoFocus />
 					</div>
-					<div>
-						<label className="text-sm text-secondary mb-1 block">{t('Target Zone')}</label>
-						<select className="input w-full" value={customGroup} onChange={e => setCustomGroup(e.target.value)}>
+					<div className="field">
+						<label>{t('Target Zone')}</label>
+						<select value={customGroup} onChange={e => setCustomGroup(e.target.value)}>
 							<option value="">{t('Select Target Zone')}</option>
-							{options.groups.map(g => <option key={g} value={g}>{t(g!)}</option>)}
+							{options.groups.map(g => <option key={g} value={g!}>{t(g!)}</option>)}
 						</select>
 					</div>
-					<div>
-						<label className="text-sm text-secondary mb-1 block">{t('Specific Muscle')}</label>
-						<select className="input w-full" value={customMuscle} onChange={e => setCustomMuscle(e.target.value)}>
+					<div className="field">
+						<label>{t('Specific Muscle')}</label>
+						<select value={customMuscle} onChange={e => setCustomMuscle(e.target.value)}>
 							<option value="">{t('Select Muscle')}</option>
 							{options.muscles.map(m => <option key={m} value={m as string}>{t(m as string)}</option>)}
 						</select>
 					</div>
-					<div>
-						<label className="text-sm text-secondary mb-1 block">{t('Equipment')}</label>
-						<select className="input w-full" value={customEquipment} onChange={e => setCustomEquipment(e.target.value)}>
+					<div className="field">
+						<label>{t('Equipment')}</label>
+						<select value={customEquipment} onChange={e => setCustomEquipment(e.target.value)}>
 							<option value="">{t('Select Equipment')}</option>
 							{options.equipment.map(e => <option key={e} value={e as string}>{t(e as string)}</option>)}
 						</select>
 					</div>
 					<button
-						className="btn btn-primary mt-4 py-3"
+						className="btn-primary"
+						style={{ width: '100%', marginTop: 22 }}
 						onClick={handleCreateCustom}
 						disabled={!customName.trim() || isSubmitting}
 					>
@@ -282,73 +279,55 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false, 
 	}
 
 	return createPortal(
-		<div style={{
-			position: 'fixed', top: 0, left: 0, right: 0, bottom: '65px',
-			backgroundColor: 'var(--bg-primary)', zIndex: 200,
-			padding: '16px 16px 0',
-			display: 'flex', flexDirection: 'column'
-		}}>
-			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-				<div style={{ position: 'relative', flex: 1 }}>
-					<Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+		<div className="flow sub">
+			<div className="pk-searchbar">
+				<div className="pk-search">
+					<span className="sic"><Search size={18} /></span>
 					<input
 						autoFocus
-						className="input"
 						placeholder={cardioMode ? t("Search cardio exercises...") : t("Search exercises...")}
 						value={search}
 						onChange={e => setSearch(e.target.value)}
-						style={{ width: '100%', paddingLeft: '36px' }}
 					/>
 				</div>
 				{!cardioMode && (
 					<button
-						className={`btn ${showFilters || Object.values(filters).some(Boolean) ? 'btn-primary' : 'btn-secondary'}`}
+						className={`pk-filter ${showFilters || activeFilterCount > 0 ? 'on' : ''}`}
 						onClick={() => setShowFilters(!showFilters)}
-						style={{ padding: '10px' }}
+						aria-label={t('Filters')}
 					>
-						<Filter size={20} />
+						<Filter size={18} />
+						{!showFilters && activeFilterCount > 0 && <span className="pk-filter-count num">{activeFilterCount}</span>}
 					</button>
 				)}
-				<button className="btn btn-ghost" onClick={onClose} style={{ padding: '8px' }}>
-					<X size={24} />
+				<button className="pk-close" onClick={onClose} aria-label={t('Close')}>
+					<X size={20} />
 				</button>
 			</div>
 
 			{!cardioMode && showFilters && (
-				<div style={{ marginBottom: '8px', borderRadius: '10px', border: '1px solid var(--border)', overflow: 'hidden' }}>
-					{/* Header row */}
-					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: expandedFilter ? '1px solid var(--border)' : 'none', background: 'var(--bg-secondary)' }}>
-						<span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('Filters')}</span>
-						{Object.values(filters).some(Boolean) && (
-							<button onClick={clearFilters} style={{ fontSize: '11px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+				<div className="filters">
+					<div className="filters-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+						<span>{t('Filters')}</span>
+						{activeFilterCount > 0 && (
+							<button onClick={clearFilters} style={{ fontFamily: 'var(--font-disp)', fontSize: 12, fontWeight: 600, color: 'var(--lime)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textTransform: 'none', letterSpacing: 0 }}>
 								{t('Clear All')}
 							</button>
 						)}
 					</div>
 
-					{/* Accordion: Target Zone (mutually exclusive with Specific Muscle) */}
-					<div style={{ borderBottom: '1px solid var(--border)' }}>
-						<button
-							onClick={() => toggleFilterSection('group')}
-							style={{
-								width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
-								padding: '10px 12px', background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer',
-								opacity: filters.muscle ? 0.45 : 1,
-							}}
-						>
-							<Layers size={13} color={filters.group ? 'var(--primary)' : 'var(--text-tertiary)'} />
-							<span style={{ flex: 1, textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Target Zone')}</span>
-							{filters.group && (
-								<span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '8px', background: 'rgba(204, 255, 0, 0.15)', color: 'var(--primary)', fontWeight: 600 }}>
-									{t(filters.group)}
-								</span>
-							)}
-							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{expandedFilter === 'group' ? '▲' : '▼'}</span>
-						</button>
+					{/* Target Zone (mutually exclusive with Specific Muscle) */}
+					<div className="filt-sec" style={{ opacity: filters.muscle ? 0.45 : 1 }}>
+						<div className="filt-row" onClick={() => toggleFilterSection('group')}>
+							<span className="fr-ic"><Layers size={13} /></span>
+							<span className="fr-name">{t('Target Zone')}</span>
+							{filters.group && <span className="fr-count">{t(filters.group)}</span>}
+							<span className={`fr-chev ${expandedFilter === 'group' ? 'open' : ''}`}><ChevronDown size={15} /></span>
+						</div>
 						{expandedFilter === 'group' && (
-							<div style={{ padding: '8px 12px 10px', display: 'flex', flexWrap: 'wrap', gap: '6px', background: 'var(--bg-primary)' }}>
+							<div className="chip-wrap">
 								{options.groups.map(g => (
-									<button key={g} onClick={() => { toggleFilter('group', g!); if (filters.group !== g) setExpandedFilter(null); }} className={`chip ${filters.group === g ? 'active' : 'inactive'}`}>
+									<button key={g} className={`fchip ${filters.group === g ? 'on' : ''}`} onClick={() => { toggleFilter('group', g!); if (filters.group !== g) setExpandedFilter(null); }}>
 										{t(g!)}
 									</button>
 								))}
@@ -356,36 +335,20 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false, 
 						)}
 					</div>
 
-					{/* "or" divider — only shown when neither is selected */}
-					{!filters.group && !filters.muscle && (
-						<div style={{ textAlign: 'center', fontSize: '10px', color: 'var(--text-tertiary)', padding: '3px 0', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', letterSpacing: '0.5px' }}>
-							— or —
-						</div>
-					)}
+					{!filters.group && !filters.muscle && <div className="filt-or">— {t('or')} —</div>}
 
-					{/* Accordion: Specific Muscle (mutually exclusive with Target Zone) */}
-					<div style={{ borderBottom: '1px solid var(--border)' }}>
-						<button
-							onClick={() => toggleFilterSection('muscle')}
-							style={{
-								width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
-								padding: '10px 12px', background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer',
-								opacity: filters.group ? 0.45 : 1,
-							}}
-						>
-							<Activity size={13} color={filters.muscle ? 'var(--primary)' : 'var(--text-tertiary)'} />
-							<span style={{ flex: 1, textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Specific Muscle')}</span>
-							{filters.muscle && (
-								<span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '8px', background: 'rgba(204, 255, 0, 0.15)', color: 'var(--primary)', fontWeight: 600 }}>
-									{t(filters.muscle)}
-								</span>
-							)}
-							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{expandedFilter === 'muscle' ? '▲' : '▼'}</span>
-						</button>
+					{/* Specific Muscle */}
+					<div className="filt-sec" style={{ opacity: filters.group ? 0.45 : 1 }}>
+						<div className="filt-row" onClick={() => toggleFilterSection('muscle')}>
+							<span className="fr-ic"><Activity size={13} /></span>
+							<span className="fr-name">{t('Specific Muscle')}</span>
+							{filters.muscle && <span className="fr-count">{t(filters.muscle)}</span>}
+							<span className={`fr-chev ${expandedFilter === 'muscle' ? 'open' : ''}`}><ChevronDown size={15} /></span>
+						</div>
 						{expandedFilter === 'muscle' && (
-							<div style={{ padding: '8px 12px 10px', display: 'flex', flexWrap: 'wrap', gap: '6px', background: 'var(--bg-primary)' }}>
+							<div className="chip-wrap">
 								{options.muscles.map(m => (
-									<button key={m} onClick={() => { toggleFilter('muscle', m!); if (filters.muscle !== m) setExpandedFilter(null); }} className={`chip ${filters.muscle === m ? 'active' : 'inactive'}`}>
+									<button key={m} className={`fchip ${filters.muscle === m ? 'on' : ''}`} onClick={() => { toggleFilter('muscle', m!); if (filters.muscle !== m) setExpandedFilter(null); }}>
 										{t(m!)}
 									</button>
 								))}
@@ -393,28 +356,18 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false, 
 						)}
 					</div>
 
-								{/* Accordion: Equipment */}
-					<div>
-						<button
-							onClick={() => toggleFilterSection('equipment')}
-							style={{
-								width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
-								padding: '10px 12px', background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer',
-							}}
-						>
-							<Dumbbell size={13} color={filters.equipment ? 'var(--primary)' : 'var(--text-tertiary)'} />
-							<span style={{ flex: 1, textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('Equipment')}</span>
-							{filters.equipment && (
-								<span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '8px', background: 'rgba(204, 255, 0, 0.15)', color: 'var(--primary)', fontWeight: 600 }}>
-									{t(filters.equipment)}
-								</span>
-							)}
-							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{expandedFilter === 'equipment' ? '▲' : '▼'}</span>
-						</button>
+					{/* Equipment */}
+					<div className="filt-sec">
+						<div className="filt-row" onClick={() => toggleFilterSection('equipment')}>
+							<span className="fr-ic"><Dumbbell size={13} /></span>
+							<span className="fr-name">{t('Equipment')}</span>
+							{filters.equipment && <span className="fr-count">{t(filters.equipment)}</span>}
+							<span className={`fr-chev ${expandedFilter === 'equipment' ? 'open' : ''}`}><ChevronDown size={15} /></span>
+						</div>
 						{expandedFilter === 'equipment' && (
-							<div style={{ padding: '8px 12px 10px', display: 'flex', flexWrap: 'wrap', gap: '6px', background: 'var(--bg-primary)' }}>
+							<div className="chip-wrap">
 								{options.equipment.map(e => (
-									<button key={e} onClick={() => { toggleFilter('equipment', e!); if (filters.equipment !== e) setExpandedFilter(null); }} className={`chip ${filters.equipment === e ? 'active' : 'inactive'}`}>
+									<button key={e} className={`fchip ${filters.equipment === e ? 'on' : ''}`} onClick={() => { toggleFilter('equipment', e!); if (filters.equipment !== e) setExpandedFilter(null); }}>
 										{t(e!)}
 									</button>
 								))}
@@ -424,135 +377,93 @@ export default function ExercisePicker({ onSelect, onClose, cardioMode = false, 
 				</div>
 			)}
 
-			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: '8px' }}>
+			<div className="pk-list">
 				{/* Create Custom option only in regular mode */}
 				{!cardioMode && (
-					<div
-						onClick={() => {
-							setCustomName(search); // pre-fill with search term
-							setIsCreating(true);
-						}}
-						style={{ padding: '12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--accent)' }}
-						className="hover:bg-white/5"
-					>
-						<div style={{ background: 'rgba(99, 102, 241, 0.15)', padding: '8px', borderRadius: '8px' }}>
-							<Plus size={16} />
-						</div>
-						<div style={{ fontWeight: 'bold', fontSize: '15px' }}>{t('Create Custom Exercise')}</div>
-					</div>
+					<>
+						<button
+							className="custom-row"
+							onClick={() => {
+								setCustomName(search); // pre-fill with search term
+								setIsCreating(true);
+							}}
+						>
+							<span className="cr-ic"><Plus size={18} /></span>
+							<span className="cr-txt">{t('Create Custom Exercise')}</span>
+						</button>
+						<div className="pk-div" />
+					</>
 				)}
 
 				{filteredExercises?.map(ex => {
 					const isSelected = multiSelect && selected.has(ex.id);
 					return (
-						<div
+						<button
 							key={ex.id}
+							className={`exp-row ${isSelected ? 'sel' : ''}`}
 							onClick={() => multiSelect ? toggleSelected(ex) : onSelect(ex)}
-							style={{
-								padding: '12px', borderBottom: '1px solid var(--border)',
-								cursor: 'pointer', transition: 'background 0.2s',
-								display: 'flex', alignItems: 'center', gap: '10px',
-								background: isSelected ? 'rgba(204, 255, 0, 0.06)' : 'transparent',
-							}}
-							className="hover:bg-white/5"
 						>
 							{multiSelect && (
-								<div style={{
-									width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0,
-									border: isSelected ? '2px solid var(--primary)' : '2px solid var(--border)',
-									background: isSelected ? 'var(--primary)' : 'transparent',
-									display: 'flex', alignItems: 'center', justifyContent: 'center',
-									transition: 'all 0.15s',
-								}}>
-									{isSelected && <Check size={14} color="#000" strokeWidth={3} />}
-								</div>
+								<span className="ex-cb">{isSelected && <Check size={15} strokeWidth={3} />}</span>
 							)}
-							<div style={{ flex: 1, minWidth: 0 }}>
-								<div style={{ fontWeight: 'bold', fontSize: '15px' }}>{ex._displayName}</div>
-								<div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-									{ex.muscle_group && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={10} /> {t(ex.muscle_group)}</span>}
-									{ex.equipment && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Dumbbell size={10} /> {t(ex.equipment)}</span>}
-									{ex.muscle && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Activity size={10} /> {t(ex.muscle)}</span>}
+							<div className="er-main">
+								<div className="er-name">{ex._displayName}</div>
+								<div className="er-tags">
+									{ex.muscle_group && <span className="er-tag"><Layers size={12} />{t(ex.muscle_group)}</span>}
+									{ex.equipment && <span className="er-tag"><Dumbbell size={12} />{t(ex.equipment)}</span>}
+									{ex.muscle && <span className="er-tag"><Activity size={12} />{t(ex.muscle)}</span>}
 								</div>
 							</div>
-						</div>
+						</button>
 					);
 				})}
 
 				{exercises === undefined && !loadingTimedOut && (
-					<div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-tertiary)' }}>
-						<p>{t('Loading exercises...')}</p>
-					</div>
+					<div className="topmark" style={{ padding: '40px 20px' }}>{t('Loading exercises...')}</div>
 				)}
 				{(loadingTimedOut || (exercises !== undefined && filteredExercises.length === 0)) && (
-					<div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-tertiary)' }}>
+					<div className="b-empty" style={{ marginTop: 30 }}>
 						<p>{cardioMode ? t('No cardio exercises found.') : t('No exercises found.')}</p>
 						{!cardioMode && (!exercises || exercises.length === 0) && (
-							<p style={{ fontSize: '12px', marginTop: '8px' }}>{t('Make sure your exercise library is synced.')}</p>
+							<p style={{ fontSize: 12, marginTop: 8 }}>{t('Make sure your exercise library is synced.')}</p>
 						)}
 					</div>
 				)}
 			</div>
 
-		{/* Multi-select bottom bar — flex sibling so it never overlaps the list */}
-		{multiSelect && (
-			<div style={{ flexShrink: 0, background: 'var(--bg-secondary)', borderTop: '1px solid var(--border)' }}>
-				{/* Expandable selected names */}
-				{showSelectedNames && selected.size > 0 && (
-					<div style={{
-						padding: '8px 16px 6px',
-						borderBottom: '1px solid var(--border)',
-						display: 'flex', flexWrap: 'wrap', gap: '6px',
-						maxHeight: '100px', overflowY: 'auto',
-					}}>
-						{Array.from(selected.values()).map((ex: any) => (
-							<span key={ex.id} style={{
-								fontSize: '12px', fontWeight: 600,
-								padding: '3px 10px', borderRadius: '20px',
-								background: 'rgba(204,255,0,0.12)', color: 'var(--primary)',
-								border: '1px solid rgba(204,255,0,0.25)',
-							}}>
-								{ex._displayName || ex.name}
-							</span>
-						))}
-					</div>
-				)}
-				{/* Action row */}
-				<div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-					<button
-						onClick={() => selected.size > 0 && setShowSelectedNames(p => !p)}
-						style={{
-							fontSize: '14px', fontWeight: 600, padding: 0,
-							color: selected.size > 0 ? 'var(--text-primary)' : 'var(--text-tertiary)',
-							background: 'none', border: 'none',
-							cursor: selected.size > 0 ? 'pointer' : 'default',
-							display: 'flex', alignItems: 'center', gap: '5px',
-						}}
-					>
-						{selected.size} {t('selected')}
-						{selected.size > 0 && (
-							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
-								{showSelectedNames ? '▲' : '▼'}
-							</span>
+			{/* Multi-select bottom bar — flex sibling so it never overlaps the list */}
+			{multiSelect && (
+				<div className="pk-bar">
+					<div className="pk-bar-inner">
+						{showSelectedNames && selected.size > 0 && (
+							<div className="sel-tray">
+								{Array.from(selected.values()).map((ex: any) => (
+									<span key={ex.id} className="sel-chip">
+										{ex._displayName || ex.name}
+										<span className="sc-x" onClick={(e) => { e.stopPropagation(); toggleSelected(ex); }}>
+											<X size={13} />
+										</span>
+									</span>
+								))}
+							</div>
 						)}
-					</button>
-					<button
-						onClick={handleAddAll}
-						disabled={selected.size === 0}
-						style={{
-							padding: '10px 24px', borderRadius: '10px', border: 'none',
-							background: selected.size > 0 ? 'var(--primary)' : 'var(--bg-tertiary)',
-							color: selected.size > 0 ? '#000' : 'var(--text-tertiary)',
-							fontSize: '14px', fontWeight: 700,
-							cursor: selected.size > 0 ? 'pointer' : 'not-allowed',
-							transition: 'all 0.15s',
-						}}
-					>
-						{t('Add All')}
-					</button>
+						<div className="pk-bar-foot">
+							<div
+								className={`pk-count ${selected.size === 0 ? 'zero' : ''}`}
+								onClick={() => selected.size > 0 && setShowSelectedNames(p => !p)}
+							>
+								<span className="num">{selected.size}</span> {t('selected')}
+								{selected.size > 0 && (
+									<span className={`tray-tog ${showSelectedNames ? 'open' : ''}`}><ChevronDown size={15} /></span>
+								)}
+							</div>
+							<button className="pk-add" disabled={selected.size === 0} onClick={handleAddAll}>
+								{t('Add All')}{selected.size > 1 ? ` · ${selected.size}` : ''}
+							</button>
+						</div>
+					</div>
 				</div>
-			</div>
-		)}
+			)}
 		</div>,
 		document.body
 	);

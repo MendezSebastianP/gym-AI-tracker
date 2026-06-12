@@ -1,14 +1,11 @@
 /**
- * KairosLogo — reusable brand component.
- * Uses K3 (Sport/Italic) letterform + Logo B glow effect.
+ * KairosLogo — brand mark. Lime tile + K letterform, flat (no glow).
  *
  * Props:
- *   size        — 'sm' (28px icon), 'md' (40px icon), 'lg' (56px icon). Default: 'md'
+ *   size        — 'sm' (26px icon), 'md' (34px icon), 'lg' (48px icon). Default: 'md'
  *   showWordmark — render "KAIROS lift" text next to the icon. Default: true
- *   showTagline  — render "Seize the moment" below wordmark. Default: false
+ *   showTagline  — render mono tagline below wordmark. Default: false
  */
-
-const LIME = '#CCFF00';
 
 interface KairosLogoProps {
 	size?: 'sm' | 'md' | 'lg';
@@ -17,23 +14,9 @@ interface KairosLogoProps {
 	className?: string;
 }
 
-const SIZE_MAP = {
-	sm: 28,
-	md: 40,
-	lg: 56,
-};
-
-const TEXT_SIZE_MAP = {
-	sm: 14,
-	md: 20,
-	lg: 28,
-};
-
-const TAGLINE_SIZE_MAP = {
-	sm: 8,
-	md: 10,
-	lg: 12,
-};
+const SIZE_MAP = { sm: 26, md: 34, lg: 48 };
+const TEXT_SIZE_MAP = { sm: 14, md: 17, lg: 22 };
+const TAGLINE_SIZE_MAP = { sm: 8, md: 9, lg: 10 };
 
 export default function KairosLogo({
 	size = 'md',
@@ -42,78 +25,49 @@ export default function KairosLogo({
 	className,
 }: KairosLogoProps) {
 	const px = SIZE_MAP[size];
-	const filterId = `kairos-glow-${size}`;
-	const fontSize = TEXT_SIZE_MAP[size];
-	const taglineFontSize = TAGLINE_SIZE_MAP[size];
-	const radius = Math.round(px * 0.22);
 
 	return (
 		<div
 			className={className}
-			style={{ display: 'inline-flex', alignItems: 'center', gap: Math.round(px * 0.35) }}
+			style={{ display: 'inline-flex', alignItems: 'center', gap: Math.round(px * 0.3) }}
 		>
-			<svg
-				width={px}
-				height={px}
-				viewBox="0 0 80 80"
-				fill="none"
-				aria-hidden="true"
-				style={{ flexShrink: 0 }}
-			>
-				<defs>
-					<filter id={filterId} x="-40%" y="-40%" width="180%" height="180%">
-						<feGaussianBlur stdDeviation="4" result="blur" />
-						<feMerge>
-							<feMergeNode in="blur" />
-							<feMergeNode in="blur" />
-							<feMergeNode in="SourceGraphic" />
-						</feMerge>
-					</filter>
-				</defs>
-				<rect width="80" height="80" rx={radius * (80 / px)} fill="#050505" />
-				<g filter={`url(#${filterId})`}>
-					<path
-						d="M11,66 L23,66 L26,47 L64,68 L63,60 L34,40 L69,20 L72,12 L28,33 L31,14 L19,14 Z"
-						fill={LIME}
-					/>
-				</g>
+			<svg viewBox="0 0 32 32" width={px} height={px} aria-hidden="true" style={{ flexShrink: 0, display: 'block', borderRadius: px * 0.28 }}>
+				<rect width="32" height="32" rx="9" fill="var(--lime)" />
+				<path
+					d="M11 6.5V25.5M11 16.4L19.5 6.5M13.6 14.6L21 25.5"
+					stroke="var(--on-lime)"
+					strokeWidth="3.1"
+					strokeLinecap="round"
+					strokeLinejoin="round"
+				/>
 			</svg>
 
 			{showWordmark && (
 				<div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
 					<div
 						style={{
-							fontSize,
-							fontWeight: 900,
-							letterSpacing: '-0.02em',
+							fontSize: TEXT_SIZE_MAP[size],
+							fontWeight: 800,
+							letterSpacing: '-0.01em',
 							lineHeight: 1,
-							color: '#fff',
-							textShadow: `0 0 18px ${LIME}55`,
+							color: 'var(--text)',
 							whiteSpace: 'nowrap',
 						}}
 					>
 						KAIROS
-						<span
-							style={{
-								color: LIME,
-								textShadow: `0 0 10px ${LIME}`,
-							}}
-						>
-							{' '}lift
-						</span>
+						<span style={{ fontWeight: 500, color: 'var(--text-3)', marginLeft: 5, letterSpacing: 0 }}>lift</span>
 					</div>
 					{showTagline && (
 						<div
+							className="mono"
 							style={{
-								fontSize: taglineFontSize,
-								color: '#555',
-								letterSpacing: '0.18em',
-								textTransform: 'uppercase',
-								marginTop: 3,
+								fontSize: TAGLINE_SIZE_MAP[size],
+								color: 'var(--text-4)',
+								marginTop: 4,
 								lineHeight: 1,
 							}}
 						>
-							Seize the moment
+							Train · Log · Repeat
 						</div>
 					)}
 				</div>

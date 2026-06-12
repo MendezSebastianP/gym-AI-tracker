@@ -21,17 +21,9 @@ export default function CheckSuggestionsButton({
 		<button
 			onClick={onClick}
 			disabled={loading}
-			className={`btn btn-ghost motion-btn motion-btn--ai ${loading ? 'is-loading' : ''}`.trim()}
+			className={`tool-chip ${fetched ? 'on' : ''}`}
 			style={{
-				display: 'flex',
-				alignItems: 'center',
-				gap: '6px',
-				padding: '6px 14px',
-				borderRadius: '8px',
-				fontSize: '13px',
-				fontWeight: 500,
-				color: fetched ? 'var(--accent)' : 'var(--text-secondary)',
-				border: `1px solid ${fetched ? 'var(--accent)33' : 'var(--border, #333)'}`,
+				height: 34,
 				cursor: loading ? 'wait' : 'pointer',
 				opacity: loading ? 0.7 : 1,
 			}}

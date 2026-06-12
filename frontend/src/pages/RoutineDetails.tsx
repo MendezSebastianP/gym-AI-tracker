@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
-import { Play, ArrowLeft, Edit, Save, X, Lock, Unlock, Plus, Trash2, GripVertical, FileText, Pencil } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Lock, Unlock, Plus, Trash2, GripVertical, FileText, Pencil as PencilIcon, Check } from 'lucide-react';
 import CheckSuggestionsButton from '../components/CheckSuggestionsButton';
 import SuggestionBadge from '../components/SuggestionBadge';
 import { useProgressionSuggestions } from '../hooks/useProgressionSuggestions';
@@ -15,6 +15,7 @@ import HybridNumber from '../components/HybridNumber';
 import { api } from '../api/client';
 import { useState } from 'react';
 import ExercisePicker from '../components/ExercisePicker';
+import { K, SecLabel } from '../components/kit';
 
 export default function RoutineDetails() {
 	const { id } = useParams();
@@ -122,11 +123,7 @@ export default function RoutineDetails() {
 				? t('Bodyweight')
 				: [equipmentLabel, data.muscle].filter(Boolean).join(' · ');
 			if (!contextLabel) return null;
-			return (
-				<span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '4px', color: 'var(--text-tertiary)' }}>
-					{contextLabel}
-				</span>
-			);
+			return <span className="exl-tag">{contextLabel}</span>;
 		}
 		return null;
 	};
@@ -178,7 +175,7 @@ export default function RoutineDetails() {
 			setEditedDays(null);
 		} catch (e) {
 			console.error("Failed to save routine", e);
-			alert("Error saving routine changes");
+			alert(t('Error saving routine changes'));
 		} finally {
 			setSaving(false);
 		}
@@ -271,7 +268,7 @@ export default function RoutineDetails() {
 				exercise_id: exercise.id,
 				name: exercise.name,
 				sets: isCardio ? 1 : 3,
-				rips: isCardio ? '20 min' : '10',
+				reps: isCardio ? '20 min' : '10',
 				rest: isCardio ? 0 : 60,
 				weight_kg: 0,
 				locked: false
@@ -295,346 +292,323 @@ export default function RoutineDetails() {
 			navigate(`/sessions/${sessionId}`);
 		} catch (e) {
 			console.error("Failed to start session", e);
-			alert("Error starting session");
+			alert(t('Error starting session'));
 		}
 	};
 
-	if (!routine) return <div className="container">{t('Loading...')}</div>;
+	if (!routine) {
+		return (
+			<div className="container">
+				<div className="mono" style={{ padding: '80px 0', textAlign: 'center', fontSize: 10.5, color: 'var(--text-4)' }}>
+					{t('Loading...')}
+				</div>
+			</div>
+		);
+	}
 
 	return (
-		<div className="container fade-in" style={{ paddingBottom: '80px' }}>
-			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-				<div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
-					<button className="btn btn-ghost" onClick={() => navigate('/routines')} style={{ paddingLeft: 0 }}>
-						<ArrowLeft size={24} />
-					</button>
-					{editMode ? (
-						<input
-							type="text"
-							className="input"
-							value={editedName}
-							onChange={(e) => setEditedName(e.target.value)}
-							placeholder={t('Routine name')}
-							style={{
-								fontSize: '24px',
-								fontWeight: 'bold',
-								padding: '4px 8px',
-								flex: 1,
-								minWidth: 0,
-								background: 'transparent',
-							}}
-						/>
-					) : (
-						<h1 style={{ marginBottom: 0 }}>{routine.name}</h1>
-					)}
-				</div>
-				{!editMode ? (
-					<div style={{ display: 'flex', gap: '8px' }}>
-						<button
-							className="btn btn-ghost"
-							onClick={() => navigate(`/routines/${id}/report`)}
-							style={{ padding: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}
-							title="Progression Report"
-						>
-							<FileText size={16} />
-						</button>
-						<button className="btn btn-secondary" onClick={startEdit} style={{ padding: '8px 16px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-							<Edit size={16} /> {t('Edit')}
-						</button>
-					</div>
+		<div className="container">
+			<header className="page-hdr" style={{ alignItems: 'center' }}>
+				<button className="icon-btn" onClick={() => navigate('/routines')} aria-label={t('Back')}>
+					<ArrowLeft size={20} />
+				</button>
+				{editMode ? (
+					<input
+						type="text"
+						value={editedName}
+						onChange={(e) => setEditedName(e.target.value)}
+						placeholder={t('Routine name')}
+						style={{
+							flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none',
+							borderBottom: '1.5px dashed var(--line-strong)',
+							color: 'var(--text)', fontFamily: 'var(--font-disp)', fontWeight: 800,
+							fontSize: 24, letterSpacing: '-0.02em', padding: '0 0 4px',
+						}}
+					/>
 				) : (
-					<div style={{ display: 'flex', gap: '8px' }}>
-						<button className="btn btn-ghost" onClick={cancelEdit} style={{ padding: '8px', fontSize: '14px' }}>
-							<X size={16} />
-						</button>
-						<button className="btn btn-primary" onClick={saveEdit} disabled={saving} style={{ padding: '8px 16px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-							<Save size={16} /> {saving ? 'Saving...' : t('Save')}
-						</button>
+					<div className="page-title sm" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+						{routine.name}
 					</div>
 				)}
-			</div>
+				{!editMode ? (
+					<>
+						<button className="icon-btn sm" onClick={() => navigate(`/routines/${id}/report`)} aria-label={t('Progression Report')}>
+							<FileText size={16} />
+						</button>
+						<button className="edit-btn" onClick={startEdit}>
+							<Edit2 size={13} />{t('Edit')}
+						</button>
+					</>
+				) : (
+					<>
+						<button className="icon-btn sm" onClick={cancelEdit} aria-label={t('Cancel')}>
+							<X size={16} />
+						</button>
+						<button className="done-pill on" onClick={saveEdit} style={{ opacity: saving ? 0.6 : 1 }}>
+							<Save size={13} />{saving ? t('Saving...') : t('Save')}
+						</button>
+					</>
+				)}
+			</header>
 
 			{editMode ? (
-				<div style={{ marginBottom: '16px' }}>
-					<textarea
-						className="input"
-						value={editedDescription}
-						onChange={(e) => setEditedDescription(e.target.value)}
-						placeholder={t('Add a description...')}
-						style={{ width: '100%', minHeight: '60px', resize: 'vertical', fontSize: '14px' }}
-					/>
-				</div>
+				<textarea
+					className="ai-ta"
+					value={editedDescription}
+					onChange={(e) => setEditedDescription(e.target.value)}
+					placeholder={t('Add a description...')}
+					style={{ minHeight: 64, marginTop: 4 }}
+				/>
 			) : (
-				<div style={{ marginBottom: '24px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-					{routine.description || <span style={{ fontStyle: 'italic', opacity: 0.5 }}>{t('No description')}</span>}
-				</div>
+				routine.description && (
+					<p style={{ margin: '4px 0 0', fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-2)' }}>
+						{routine.description}
+					</p>
+				)
 			)}
 
-			<h3 style={{ marginBottom: '16px', color: 'var(--primary)', borderBottom: '1px solid #333', paddingBottom: '8px' }}>
-				{t('Program Days')}
-			</h3>
+			<SecLabel>{t('Program Days')} · {days.length}</SecLabel>
 
-			<div style={{ display: 'grid', gap: '16px' }}>
-				{days.map((day: any, dIndex: number) => (
-					<div key={dIndex} className="card" style={{ marginBottom: 0 }}>
-						<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-							{editMode ? (
-								<div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-									<input
-										type="text"
-										className="input"
-										value={day.day_name || ''}
-										onChange={(e) => {
-											const newDays = JSON.parse(JSON.stringify(editedDays));
-											newDays[dIndex].day_name = e.target.value;
-											setEditedDays(newDays);
+			{days.map((day: any, dIndex: number) => (
+				<div key={dIndex} className="b-day" style={{ marginTop: dIndex === 0 ? 0 : 12 }}>
+					<div className="b-day-head">
+						{editMode ? (
+							<>
+								<input
+									type="text"
+									value={day.day_name || ''}
+									onChange={(e) => {
+										const newDays = JSON.parse(JSON.stringify(editedDays));
+										newDays[dIndex].day_name = e.target.value;
+										setEditedDays(newDays);
+									}}
+									style={{
+										flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none',
+										color: 'var(--text)', fontFamily: 'var(--font-disp)', fontWeight: 800,
+										fontSize: 17, letterSpacing: '-0.01em', padding: '2px 0',
+									}}
+								/>
+								<button className="b-day-del" onClick={() => removeDay(dIndex)} aria-label={t('Remove Day')}>
+									<Trash2 size={15} />
+								</button>
+							</>
+						) : (
+							<>
+								<span className="b-day-title">{day.day_name}</span>
+								{getValidSuggestionsCount(dIndex) !== 0 && (
+									<CheckSuggestionsButton
+										loading={progressionSuggestions.loading && suggestionDayIndex === dIndex}
+										fetched={progressionSuggestions.fetched && suggestionDayIndex === dIndex}
+										suggestionsCount={getValidSuggestionsCount(dIndex) || 0}
+										onClick={() => {
+											if (suggestionDayIndex === dIndex) {
+												progressionSuggestions.fetch();
+											} else {
+												setSuggestionDayIndex(dIndex);
+												setPendingFetchDay(dIndex);
+											}
 										}}
-										style={{ fontWeight: 'bold', fontSize: '18px', padding: '4px 8px', flex: 1 }}
 									/>
-									<button
-										className="btn btn-ghost p-2"
-										onClick={() => removeDay(dIndex)}
-										title={t('Remove Day')}
-										style={{ color: 'var(--error)' }}
-									>
-										<Trash2 size={18} />
-									</button>
-								</div>
-							) : (
-								<h3 style={{ margin: 0 }}>{day.day_name}</h3>
-							)}
-							{!editMode && (
-								<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-									{getValidSuggestionsCount(dIndex) !== 0 && (
-										<CheckSuggestionsButton
-											loading={progressionSuggestions.loading && suggestionDayIndex === dIndex}
-											fetched={progressionSuggestions.fetched && suggestionDayIndex === dIndex}
-											suggestionsCount={getValidSuggestionsCount(dIndex) || 0}
-											onClick={() => {
-												if (suggestionDayIndex === dIndex) {
-													progressionSuggestions.fetch();
-												} else {
-													setSuggestionDayIndex(dIndex);
-													setPendingFetchDay(dIndex);
-												}
-											}}
-										/>
-									)}
-									<button
-										className="btn btn-primary motion-btn motion-btn--cta"
-										style={{ padding: '8px 16px', fontSize: '14px' }}
-										onClick={() => startSession(dIndex)}
-									>
-										<Play size={16} fill="black" style={{ marginRight: '6px' }} /> {t('Start Workout')}
-									</button>
-								</div>
-							)}
-						</div>
+								)}
+							</>
+						)}
+					</div>
 
-						<div style={{ display: 'grid', gap: '8px' }}>
-							{editMode ? (
-								<>
-
-
-									<DndContext
-										sensors={sensors}
-										collisionDetection={closestCenter}
-										onDragEnd={(e) => handleDragEnd(e, dIndex)}
-									>
-										<SortableContext items={day.exercises.map((e: any) => e._id)} strategy={verticalListSortingStrategy}>
-											{day.exercises.map((ex: any, eIndex: number) => (
-												<SortableExerciseRow
-													key={ex._id}
-													ex={ex}
-													eIndex={eIndex}
-													dIndex={dIndex}
-													getExerciseName={getExerciseName}
-													getExerciseContext={getExerciseContext}
-													updateExerciseField={updateExerciseField}
-													toggleExerciseLock={toggleExerciseLock}
-													removeExercise={removeExercise}
-													editing={editingExerciseId === ex._id}
-													onStartEdit={() => setEditingExerciseId(ex._id)}
-													onStopEdit={() => setEditingExerciseId(null)}
-												/>
-											))}
-										</SortableContext>
-									</DndContext>
-
-
-									<div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-										<button
-											className="btn btn-secondary"
-											style={{ flex: 2, fontSize: '13px', padding: '8px' }}
-											onClick={() => setShowPicker({ dayIndex: dIndex })}
-										>
-											<Plus size={14} style={{ marginRight: '4px' }} /> {t('Add Exercise')}
-										</button>
-										<button
-											className="btn btn-secondary"
-											style={{ flex: 1, fontSize: '13px', padding: '8px' }}
-											onClick={() => setShowPicker({ dayIndex: dIndex, cardioMode: true })}
-										>
-											<Plus size={14} style={{ marginRight: '4px' }} /> {t('Cardio')}
-										</button>
+					{editMode ? (
+						<>
+							<DndContext
+								sensors={sensors}
+								collisionDetection={closestCenter}
+								onDragEnd={(e) => handleDragEnd(e, dIndex)}
+							>
+								<SortableContext items={day.exercises.map((e: any) => e._id)} strategy={verticalListSortingStrategy}>
+									<div className="b-ex-list" style={{ marginTop: day.exercises.length > 0 ? 12 : 0 }}>
+										{day.exercises.map((ex: any, eIndex: number) => (
+											<SortableExerciseRow
+												key={ex._id}
+												ex={ex}
+												eIndex={eIndex}
+												dIndex={dIndex}
+												getExerciseName={getExerciseName}
+												getExerciseContext={getExerciseContext}
+												updateExerciseField={updateExerciseField}
+												toggleExerciseLock={toggleExerciseLock}
+												removeExercise={removeExercise}
+												editing={editingExerciseId === ex._id}
+												onStartEdit={() => setEditingExerciseId(ex._id)}
+												onStopEdit={() => setEditingExerciseId(null)}
+											/>
+										))}
 									</div>
-								</>
-							) : (
-								// Read-only view
-								day.exercises.map((ex: any, i: number) => {
+								</SortableContext>
+							</DndContext>
+
+							<div className="b-add-row">
+								<button className="b-add-btn" onClick={() => setShowPicker({ dayIndex: dIndex })}>
+									<Plus size={15} />{t('Add Exercise')}
+								</button>
+								<button className="b-add-btn sec" onClick={() => setShowPicker({ dayIndex: dIndex, cardioMode: true })}>
+									<Plus size={15} />{t('Cardio')}
+								</button>
+							</div>
+						</>
+					) : (
+						<>
+							{/* Read-only view */}
+							<div style={{ marginTop: 10 }}>
+								{day.exercises.map((ex: any, i: number) => {
 									const nameKey = `${dIndex}-${i}`;
 									const nameExpanded = expandedNames.has(nameKey);
 									return (
-									<div key={i} style={{ marginBottom: '8px' }}>
-										<div style={{ display: 'flex', alignItems: 'flex-start', color: 'var(--text-secondary)', fontSize: '14px', gap: '6px' }}>
-											<span style={{ width: '24px', color: 'var(--text-tertiary)', flexShrink: 0, paddingTop: '1px' }}>{i + 1}</span>
-											<div
-												onClick={(e) => { e.stopPropagation(); toggleNameExpanded(nameKey); }}
-												style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: nameExpanded ? 'wrap' : 'nowrap', cursor: 'pointer' }}
-											>
-												<span
-													style={{
-														overflow: nameExpanded ? 'visible' : 'hidden',
-														textOverflow: nameExpanded ? 'clip' : 'ellipsis',
-														whiteSpace: nameExpanded ? 'normal' : 'nowrap',
-														minWidth: 0,
-														wordBreak: 'break-word',
-													}}
-												>
-													{getExerciseName(ex)}
+										<div key={i} style={{ padding: '7px 0', borderTop: i > 0 ? '1px solid var(--line)' : 'none' }}>
+											<div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+												<span className="mono num" style={{ width: 18, flexShrink: 0, fontSize: 10.5, color: 'var(--text-4)', paddingTop: 3 }}>
+													{i + 1}
 												</span>
-												{getExerciseContext(ex)}
-											</div>
-											<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-												{ex.locked && (
-													<Lock size={12} style={{ color: 'var(--primary)' }} />
-												)}
-												<span>{ex.sets} x {ex.reps}</span>
-												{(ex.weight_kg > 0) && (
-													<span style={{ color: 'var(--primary)', fontSize: '12px' }}>
-														{ex.weight_kg}kg
+												<div
+													onClick={(e) => { e.stopPropagation(); toggleNameExpanded(nameKey); }}
+													style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 7, flexWrap: nameExpanded ? 'wrap' : 'nowrap', cursor: 'pointer' }}
+												>
+													<span
+														style={{
+															fontSize: 14.5, fontWeight: 600,
+															overflow: nameExpanded ? 'visible' : 'hidden',
+															textOverflow: nameExpanded ? 'clip' : 'ellipsis',
+															whiteSpace: nameExpanded ? 'normal' : 'nowrap',
+															minWidth: 0,
+															wordBreak: 'break-word',
+														}}
+													>
+														{getExerciseName(ex)}
 													</span>
-												)}
+													{getExerciseContext(ex)}
+												</div>
+												<div className="num" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, fontSize: 13.5, fontWeight: 700 }}>
+													{ex.locked && <Lock size={11} style={{ color: 'var(--lime)' }} />}
+													<span>{ex.sets} × {ex.reps}</span>
+													{(ex.weight_kg > 0) && (
+														<span style={{ color: 'var(--lime)', fontSize: 12.5 }}>{ex.weight_kg}kg</span>
+													)}
+												</div>
 											</div>
-										</div>
-										{(() => {
-											if (suggestionDayIndex !== dIndex || !progressionSuggestions.fetched) return null;
-											const sug = progressionSuggestions.suggestions.get(ex.exercise_id);
-											if (!sug || dismissedSuggestions.has(ex.exercise_id)) return null;
+											{(() => {
+												if (suggestionDayIndex !== dIndex || !progressionSuggestions.fetched) return null;
+												const sug = progressionSuggestions.suggestions.get(ex.exercise_id);
+												if (!sug || dismissedSuggestions.has(ex.exercise_id)) return null;
 
-											let applied = true;
-											if (sug.suggested.weight !== undefined && ex.weight_kg !== sug.suggested.weight) applied = false;
-											if (sug.suggested.reps !== undefined && ex.reps !== String(sug.suggested.reps)) applied = false;
-											if (sug.suggested.sets !== undefined && ex.sets !== sug.suggested.sets) applied = false;
+												let applied = true;
+												if (sug.suggested.weight !== undefined && ex.weight_kg !== sug.suggested.weight) applied = false;
+												if (sug.suggested.reps !== undefined && ex.reps !== String(sug.suggested.reps)) applied = false;
+												if (sug.suggested.sets !== undefined && ex.sets !== sug.suggested.sets) applied = false;
 
-											if (applied) return null; // Already applied to routine def
+												if (applied) return null; // Already applied to routine def
 
-											return (
-												<div style={{ paddingLeft: '24px' }}>
-													<SuggestionBadge
-														suggestion={sug}
-														exerciseName={getExerciseName(ex)}
-														onApply={(suggestion: ProgressionSuggestion) => {
-															// Update routine definition
-															if (routine) {
-																const updatedDays = JSON.parse(JSON.stringify(routine.days));
-																const dayExercises = updatedDays[dIndex]?.exercises;
-																if (dayExercises) {
-																	const routineEx = dayExercises.find((e: any) => e.exercise_id === ex.exercise_id);
-																	if (routineEx) {
-																		if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
-																		if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
-																		if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
-																		if (suggestion.new_exercise_id) routineEx.exercise_id = suggestion.new_exercise_id;
+												return (
+													<div style={{ paddingLeft: 27, marginTop: 4 }}>
+														<SuggestionBadge
+															suggestion={sug}
+															exerciseName={getExerciseName(ex)}
+															onApply={(suggestion: ProgressionSuggestion) => {
+																// Update routine definition
+																if (routine) {
+																	const updatedDays = JSON.parse(JSON.stringify(routine.days));
+																	const dayExercises = updatedDays[dIndex]?.exercises;
+																	if (dayExercises) {
+																		const routineEx = dayExercises.find((e: any) => e.exercise_id === ex.exercise_id);
+																		if (routineEx) {
+																			if (suggestion.suggested.weight !== undefined) routineEx.weight_kg = suggestion.suggested.weight;
+																			if (suggestion.suggested.reps !== undefined) routineEx.reps = String(suggestion.suggested.reps);
+																			if (suggestion.suggested.sets !== undefined) routineEx.sets = suggestion.suggested.sets;
+																			if (suggestion.new_exercise_id) routineEx.exercise_id = suggestion.new_exercise_id;
+																		}
 																	}
-																}
-																db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
-																api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => { });
+																	db.routines.update(routine.id!, { days: updatedDays, syncStatus: 'updated' as any });
+																	api.put(`/routines/${routine.id}`, { days: updatedDays }).catch(() => { });
 
-																// Sync suggestion to active draft session if it exists
-																const syncDraft = async () => {
-																	try {
-																		const activeSession = await db.sessions
-																			.where('routine_id').equals(routine.id!)
-																			.filter((s: any) => !s.completed_at).first();
+																	// Sync suggestion to active draft session if it exists
+																	const syncDraft = async () => {
+																		try {
+																			const activeSession = await db.sessions
+																				.where('routine_id').equals(routine.id!)
+																				.filter((s: any) => !s.completed_at).first();
 
-																		if (activeSession && activeSession.id) {
-																			const updates: any = { syncStatus: 'updated' };
-																			if (suggestion.suggested.weight !== undefined) updates.weight_kg = suggestion.suggested.weight;
-																			if (suggestion.suggested.reps !== undefined) {
-																				updates.reps = parseInt(String(suggestion.suggested.reps).split('-')[0]) || 0;
-																			}
+																			if (activeSession && activeSession.id) {
+																				const updates: any = { syncStatus: 'updated' };
+																				if (suggestion.suggested.weight !== undefined) updates.weight_kg = suggestion.suggested.weight;
+																				if (suggestion.suggested.reps !== undefined) {
+																					updates.reps = parseInt(String(suggestion.suggested.reps).split('-')[0]) || 0;
+																				}
 
-																			if (Object.keys(updates).length > 1) {
-																				const setsToUpdate = await db.sets
-																					.where('session_id').equals(activeSession.id)
-																					.filter((s: any) => s.exercise_id === ex.exercise_id).toArray();
+																				if (Object.keys(updates).length > 1) {
+																					const setsToUpdate = await db.sets
+																						.where('session_id').equals(activeSession.id)
+																						.filter((s: any) => s.exercise_id === ex.exercise_id).toArray();
 
-																				for (const s of setsToUpdate) {
-																					if (s.id) await db.sets.update(s.id, updates);
+																					for (const s of setsToUpdate) {
+																						if (s.id) await db.sets.update(s.id, updates);
+																					}
 																				}
 																			}
-																		}
-																	} catch { /* ignore session sync prep errors */ }
-																};
-																syncDraft();
-															}
-															api.post('/progression/feedback', {
-																exercise_id: ex.exercise_id,
-																suggestion_type: suggestion.type,
-																suggested_value: suggestion.suggested,
-																action: 'accepted',
-																applied_value: suggestion.suggested,
-															}).catch(() => { });
-															setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
-														}}
-														onDismiss={() => {
-															api.post('/progression/feedback', {
-																exercise_id: ex.exercise_id,
-																suggestion_type: progressionSuggestions.suggestions.get(ex.exercise_id)!.type,
-																suggested_value: progressionSuggestions.suggestions.get(ex.exercise_id)!.suggested,
-																action: 'rejected',
-															}).catch(() => { });
-															setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
-														}}
-													/>
-												</div>
-											);
-										})()}
-									</div>
-								);
-								})
-							)}
-						</div>
-					</div>
-				))}
-				{editMode && (
-					<button
-						className="btn btn-secondary fade-in"
-						onClick={addDay}
-						style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', marginTop: '8px' }}
-					>
-						<Plus size={18} /> {t('Add New Day')}
-					</button>
-				)}
-			</div>
+																		} catch { /* ignore session sync prep errors */ }
+																	};
+																	syncDraft();
+																}
+																api.post('/progression/feedback', {
+																	exercise_id: ex.exercise_id,
+																	suggestion_type: suggestion.type,
+																	suggested_value: suggestion.suggested,
+																	action: 'accepted',
+																	applied_value: suggestion.suggested,
+																}).catch(() => { });
+																setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+															}}
+															onDismiss={() => {
+																api.post('/progression/feedback', {
+																	exercise_id: ex.exercise_id,
+																	suggestion_type: progressionSuggestions.suggestions.get(ex.exercise_id)!.type,
+																	suggested_value: progressionSuggestions.suggestions.get(ex.exercise_id)!.suggested,
+																	action: 'rejected',
+																}).catch(() => { });
+																setDismissedSuggestions(prev => new Set([...prev, ex.exercise_id]));
+															}}
+														/>
+													</div>
+												);
+											})()}
+										</div>
+									);
+								})}
+							</div>
 
-			{
-				showPicker && (
-					<ExercisePicker
-						multiSelect={!showPicker.cardioMode}
-						onSelect={(ex) => addExerciseToDay(showPicker.dayIndex, ex)}
-						onSelectMultiple={(exs) => addExercisesToDay(showPicker.dayIndex, exs)}
-						onClose={() => setShowPicker(null)}
-						cardioMode={showPicker.cardioMode ?? false}
-					/>
-				)
-			}
-		</div >
+							<button className="btn-primary sm" style={{ width: '100%', marginTop: 12 }} onClick={() => startSession(dIndex)}>
+								<K.bolt />{t('Start Workout')}
+							</button>
+						</>
+					)}
+				</div>
+			))}
+
+			{editMode && (
+				<button className="b-add-day" onClick={addDay}>
+					<Plus size={17} />{t('Add New Day')}
+				</button>
+			)}
+
+			{showPicker && (
+				<ExercisePicker
+					multiSelect={!showPicker.cardioMode}
+					onSelect={(ex) => addExerciseToDay(showPicker.dayIndex, ex)}
+					onSelectMultiple={(exs) => addExercisesToDay(showPicker.dayIndex, exs)}
+					onClose={() => setShowPicker(null)}
+					cardioMode={showPicker.cardioMode ?? false}
+				/>
+			)}
+		</div>
 	);
 }
 
 function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, getExerciseContext, updateExerciseField, toggleExerciseLock, removeExercise, editing, onStartEdit, onStopEdit }: any) {
+	const { t } = useTranslation();
 	const {
 		attributes,
 		listeners,
@@ -653,115 +627,132 @@ function SortableExerciseRow({ ex, eIndex, dIndex, getExerciseName, getExerciseC
 	return (
 		<div
 			ref={setNodeRef}
+			className="b-ex-row"
 			style={{
 				transform: CSS.Transform.toString(transform),
 				transition,
-				backgroundColor: ex.locked ? 'rgba(99,102,241,0.06)' : 'var(--bg-card)',
-				border: editing ? '1px solid var(--primary)' : ex.locked ? '1px solid rgba(99,102,241,0.3)' : '1px solid var(--border)',
-				borderRadius: '8px',
-				marginBottom: '6px',
+				flexWrap: 'wrap',
+				borderColor: editing
+					? 'color-mix(in oklab, var(--lime) 40%, transparent)'
+					: ex.locked
+						? 'color-mix(in oklab, var(--green-mid) 50%, transparent)'
+						: undefined,
 				overflow: editing ? 'visible' : 'hidden',
 				position: 'relative',
 				zIndex: editing ? 2 : 0,
 			}}
 		>
 			{/* Single row: grip | name+meta | pill | lock | trash */}
-			<div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 8px' }}>
-				<div
-					style={{ width: '20px', cursor: 'grab', display: 'flex', justifyContent: 'center', flexShrink: 0 }}
-					{...attributes} {...listeners}
-				>
-					<GripVertical size={14} color="var(--text-tertiary)" />
-				</div>
-				<div
-					onClick={(e) => { e.stopPropagation(); setNameExpanded(v => !v); }}
-					style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: nameExpanded ? 'wrap' : 'nowrap', cursor: 'pointer' }}
-				>
-					<span
-						style={{
-							fontSize: '14px',
-							fontWeight: 700,
-							overflow: nameExpanded ? 'visible' : 'hidden',
-							textOverflow: nameExpanded ? 'clip' : 'ellipsis',
-							whiteSpace: nameExpanded ? 'normal' : 'nowrap',
-							wordBreak: 'break-word',
-							minWidth: 0,
-						}}
-					>
-						{getExerciseName(ex)}
-					</span>
-					{getExerciseContext && getExerciseContext(ex)}
-				</div>
-				{/* Pill button */}
-				<button
-					onClick={onStartEdit}
-					style={{
-						display: 'flex', alignItems: 'center', gap: '4px',
-						padding: '4px 8px', borderRadius: '6px', flexShrink: 0,
-						border: '1px solid var(--border)', background: 'var(--bg-secondary)',
-						color: 'var(--text-primary)', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
-					}}
-				>
-					{pillLabel}
-					<Pencil size={9} color="var(--text-tertiary)" />
-				</button>
-				{/* Lock toggle */}
-				<button
-					onClick={() => toggleExerciseLock(dIndex, eIndex)}
-					style={{
-						padding: '4px', borderRadius: '4px', border: 'none', background: 'none',
-						cursor: 'pointer', flexShrink: 0,
-						color: ex.locked ? 'var(--accent, #6366f1)' : 'var(--text-tertiary)',
-					}}
-					title={ex.locked ? 'Locked — pre-fills from plan' : 'Free — pre-fills from last session'}
-				>
-					{ex.locked ? <Lock size={14} /> : <Unlock size={14} />}
-				</button>
-				{/* Trash */}
-				<button
-					onClick={() => removeExercise(dIndex, eIndex)}
-					style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center' }}
-				>
-					<Trash2 size={15} color="var(--error)" />
-				</button>
+			<div
+				style={{ width: 20, cursor: 'grab', display: 'flex', justifyContent: 'center', flexShrink: 0, color: 'var(--text-4)' }}
+				{...attributes} {...listeners}
+			>
+				<GripVertical size={14} />
 			</div>
+			<div
+				onClick={(e) => { e.stopPropagation(); setNameExpanded(v => !v); }}
+				className="be-main"
+				style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: nameExpanded ? 'wrap' : 'nowrap', cursor: 'pointer' }}
+			>
+				<span
+					className="be-name"
+					style={{
+						overflow: nameExpanded ? 'visible' : 'hidden',
+						textOverflow: nameExpanded ? 'clip' : 'ellipsis',
+						whiteSpace: nameExpanded ? 'normal' : 'nowrap',
+						wordBreak: 'break-word',
+						minWidth: 0,
+					}}
+				>
+					{getExerciseName(ex)}
+				</span>
+				{getExerciseContext && getExerciseContext(ex)}
+			</div>
+			{/* sets×reps·kg pill */}
+			<button
+				onClick={onStartEdit}
+				className="num"
+				style={{
+					display: 'flex', alignItems: 'center', gap: 5,
+					padding: '5px 10px', borderRadius: 8, flexShrink: 0,
+					border: '1px solid var(--line-strong)', background: 'var(--raised)',
+					color: 'var(--text)', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, fontFamily: 'var(--font-disp)',
+				}}
+			>
+				{pillLabel}
+				<PencilIcon size={9} style={{ color: 'var(--text-4)' }} />
+			</button>
+			{/* Lock toggle */}
+			<button
+				onClick={() => toggleExerciseLock(dIndex, eIndex)}
+				style={{
+					padding: 4, borderRadius: 4, border: 'none', background: 'none',
+					cursor: 'pointer', flexShrink: 0, display: 'flex',
+					color: ex.locked ? 'var(--lime)' : 'var(--text-4)',
+				}}
+				title={ex.locked ? t('Locked — pre-fills from plan') : t('Free — pre-fills from last session')}
+			>
+				{ex.locked ? <Lock size={14} /> : <Unlock size={14} />}
+			</button>
+			{/* Trash */}
+			<button className="be-del" onClick={() => removeExercise(dIndex, eIndex)} aria-label={t('Delete')}>
+				<Trash2 size={15} />
+			</button>
 
 			{/* Inline edit panel */}
 			{editing && (
-				<div style={{ padding: '8px 12px 14px 36px', borderTop: '1px solid var(--border)', background: 'rgba(204,255,0,0.03)', display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
-					<HybridNumber
-						value={ex.sets}
-						onChange={v => updateExerciseField(dIndex, eIndex, 'sets', v)}
-						min={1} max={20} step={1} sensitivity={28} label="Sets" showDelta={false}
-					/>
-					<span style={{ fontSize: '13px', color: 'var(--text-tertiary)', fontWeight: 600, paddingBottom: '12px' }}>×</span>
+				<div
+					onClick={e => e.stopPropagation()}
+					style={{
+						flexBasis: '100%', display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap',
+						padding: '10px 2px 4px 26px', borderTop: '1px solid var(--line)', marginTop: 8,
+					}}
+				>
+					<div style={{ width: 78 }}>
+						<HybridNumber
+							value={ex.sets}
+							onChange={v => updateExerciseField(dIndex, eIndex, 'sets', v)}
+							min={1} max={20} step={1} sensitivity={28} label={t('Sets')} showDelta={false}
+						/>
+					</div>
 					{isCardio ? (
-						<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-							<span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duration</span>
+						<div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+							<span className="mono" style={{ fontSize: 8.5, color: 'var(--text-4)', textAlign: 'center' }}>{t('Duration')}</span>
 							<input
-								className="input"
-								style={{ width: '80px', height: '40px', fontSize: '13px', padding: '4px 8px' }}
 								value={ex.reps}
 								onChange={e => updateExerciseField(dIndex, eIndex, 'reps', e.target.value)}
+								style={{
+									width: 78, height: 44, borderRadius: 10, textAlign: 'center',
+									background: 'var(--raised)', border: '1px solid var(--line)', color: 'var(--text)',
+									fontFamily: 'var(--font-disp)', fontWeight: 700, fontSize: 14, outline: 'none',
+								}}
 							/>
 						</div>
 					) : (
-						<HybridNumber
-							value={Number(ex.reps) || 10}
-							onChange={v => updateExerciseField(dIndex, eIndex, 'reps', String(v))}
-							min={1} max={100} step={1} sensitivity={28} label="Reps" showDelta={false}
-						/>
+						<div style={{ width: 78 }}>
+							<HybridNumber
+								value={Number(ex.reps) || 10}
+								onChange={v => updateExerciseField(dIndex, eIndex, 'reps', String(v))}
+								min={1} max={100} step={1} sensitivity={28} label={t('Reps')} showDelta={false}
+							/>
+						</div>
 					)}
-					<HybridNumber
-						value={ex.weight_kg || 0}
-						onChange={v => updateExerciseField(dIndex, eIndex, 'weight_kg', v)}
-						min={0} max={500} step={2.5} sensitivity={14} label="KG" showDelta={false}
-					/>
+					<div style={{ width: 78 }}>
+						<HybridNumber
+							value={ex.weight_kg || 0}
+							onChange={v => updateExerciseField(dIndex, eIndex, 'weight_kg', v)}
+							min={0} max={500} step={2.5} sensitivity={14} label="kg" showDelta={false}
+						/>
+					</div>
 					<button
-						onClick={onStopEdit}
-						style={{ padding: '8px 14px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#000', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '2px' }}
+						onClick={e => { e.stopPropagation(); onStopEdit(); }}
+						style={{
+							marginLeft: 'auto', height: 40, padding: '0 16px', borderRadius: 11, border: 'none',
+							background: 'var(--lime)', color: 'var(--on-lime)', fontFamily: 'var(--font-disp)',
+							fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+						}}
 					>
-						Done
+						<Check size={14} />{t('Done')}
 					</button>
 				</div>
 			)}

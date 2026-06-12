@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { api } from '../api/client';
-import { ArrowLeft, Calendar, Clock, Edit, CheckCircle, ChevronUp, ChevronDown, Trash2, Pencil } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Edit2, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
+import { K } from '../components/kit';
 
 function formatPace(secondsPerKm: number): string {
 	if (!secondsPerKm || !isFinite(secondsPerKm)) return '--:--';
@@ -19,6 +20,58 @@ function formatDurationMMSS(totalSec: number): string {
 	const m = Math.floor(totalSec / 60);
 	const s = totalSec % 60;
 	return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/** Best set summary shown at the right of each exercise header. */
+function topSetLabel(ex: any, sets: any[]): string {
+	if (sets.length === 0) return '';
+	if (ex.type === 'Cardio') {
+		const best = sets.reduce((a, b) => ((b.distance_km || 0) > (a.distance_km || 0) ? b : a));
+		return best.distance_km ? `${best.distance_km} km` : '';
+	}
+	if (ex.type === 'Time') {
+		const m = Math.max(...sets.map((s: any) => s.duration_sec || 0));
+		return m > 0 ? `${m}s hold` : '';
+	}
+	const weighted = sets.filter((s: any) => s.weight_kg != null && s.weight_kg > 0);
+	if (weighted.length === 0) {
+		const m = Math.max(...sets.map((s: any) => s.reps || 0));
+		return m > 0 ? `BW × ${m}` : '';
+	}
+	const best = weighted.reduce((a, b) => (b.weight_kg > a.weight_kg ? b : a));
+	return `top ${best.weight_kg} × ${best.reps}`;
+}
+
+/** One logged set row inside an exercise block. */
+function LogRow({ ex, s, idx }: { ex: any; s: any; idx: number }) {
+	let wEl;
+	let rEl;
+	if (ex.type === 'Cardio' && s.distance_km) {
+		wEl = <span className="log-w num">{s.distance_km}<small>km</small></span>;
+		rEl = (
+			<span className="log-r num">
+				{formatDurationMMSS(s.duration_sec || 0)}
+				{s.distance_km > 0 && s.duration_sec > 0 ? ` · ${formatPace(s.duration_sec / s.distance_km)} /km` : ''}
+			</span>
+		);
+	} else if (ex.type === 'Time') {
+		wEl = <span className="log-w num">{s.duration_sec || 0}<small>s</small></span>;
+		rEl = <span className="log-r">hold</span>;
+	} else if (s.weight_kg == null || s.weight_kg === 0) {
+		wEl = <span className="log-w bw">BW</span>;
+		rEl = <span className="log-r num"><span className="x">×</span>{s.reps} reps</span>;
+	} else {
+		wEl = <span className="log-w num">{s.weight_kg}<small>kg</small></span>;
+		rEl = <span className="log-r num"><span className="x">×</span>{s.reps} reps</span>;
+	}
+	return (
+		<div className="log-row">
+			<span className="log-chk"><K.checkRing /></span>
+			<span className="log-no num">{idx + 1}</span>
+			{wEl}
+			{rEl}
+		</div>
+	);
 }
 
 // ─── Single session card in the feed ─────────────────────────────────
@@ -38,7 +91,6 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 
 	// Fallback: if Dexie has the session but no sets for it (iOS Safari/Edge
 	// can evict IndexedDB silently), fetch them from the server and hydrate.
-	// Otherwise the card renders metadata only and looks "collapsed".
 	const hydratedRef = useRef(false);
 	useEffect(() => {
 		hydratedRef.current = false;
@@ -94,7 +146,6 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 	useEffect(() => {
 		if (!sets || sets.length === 0) return;
 
-		// Get unique exercise IDs from the actual sets
 		const seenIds = new Set<number>();
 		const uniqueExIds: number[] = [];
 		for (const s of sets.sort((a: any, b: any) => a.set_number - b.set_number)) {
@@ -104,7 +155,6 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 			}
 		}
 
-		// Sort by routine day order so history matches the routine/session view
 		const day = routine?.days?.[session?.day_index ?? -1];
 		const routineOrder: number[] = day?.exercises?.map((e: any) => e.exercise_id) ?? [];
 		const orderedExIds = routineOrder.length > 0
@@ -137,7 +187,7 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 		}
 	}, [session?.self_rated_effort]);
 
-	const effortTone = (v: number) => v <= 3 ? 'Easy' : v <= 6 ? 'Moderate' : v <= 8 ? 'Hard' : 'All out';
+	const effortTone = (v: number) => v <= 3 ? t('Easy') : v <= 6 ? t('Moderate') : v <= 8 ? t('Hard') : t('All out');
 
 	const saveEffortRating = async () => {
 		if (!session?.server_id) return;
@@ -157,14 +207,16 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 
 	if (!session || !sets) {
 		return (
-			<div className="card" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-				Loading...
+			<div className="hist-card">
+				<div className="mono" style={{ textAlign: 'center', padding: 20, fontSize: 10, color: 'var(--text-4)' }}>
+					{t('Loading...')}
+				</div>
 			</div>
 		);
 	}
 
-	const dayName = routine?.days?.[session.day_index || 0]?.day_name || `Day ${(session.day_index || 0) + 1}`;
-	const dateStr = new Date(session.started_at).toLocaleDateString(undefined, {
+	const dayName = routine?.days?.[session.day_index || 0]?.day_name || `${t('Day')} ${(session.day_index || 0) + 1}`;
+	const dateStr = new Date(session.started_at).toLocaleDateString(i18n.language, {
 		weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
 	});
 	const duration = (session as any).duration_seconds != null && (session as any).duration_seconds > 0
@@ -173,7 +225,6 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 			? Math.round((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 60000)
 			: 0);
 
-	// Group sets by exercise
 	const setsByExercise = new Map<number, any[]>();
 	for (const s of sets) {
 		const arr = setsByExercise.get(s.exercise_id) || [];
@@ -183,14 +234,12 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 
 	const deleteExercise = async (exerciseId: number) => {
 		if (!confirm(t('Remove this exercise from the session history?'))) return;
-		// Delete from server (sets that have been synced)
 		const exSets = (sets || []).filter((s: any) => s.exercise_id === exerciseId);
 		for (const s of exSets) {
 			if (s.server_id) {
 				try { await api.delete(`/sets/${s.server_id}`); } catch { /* best-effort */ }
 			}
 		}
-		// Delete from IndexedDB using index query (more reliable than bulkDelete)
 		await db.sets
 			.where('session_id').equals(sessionId)
 			.and((s: any) => s.exercise_id === exerciseId)
@@ -219,254 +268,163 @@ function FeedCard({ sessionId, isTarget, allRoutines }: {
 	};
 
 	return (
-		<div
-			className="card"
-			style={{
-				border: isTarget ? '2px solid var(--primary)' : '1px solid var(--border)',
-				background: isTarget
-					? 'linear-gradient(to bottom, rgba(99,102,241,0.08), transparent)'
-					: undefined,
-				marginBottom: 0,
-			}}
-		>
-			{/* Header */}
-			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-				<div>
-					<div style={{ fontSize: '16px', fontWeight: 700 }}>
-						{routine?.name || t('Session')}
+		<div className={`hist-card ${isTarget ? 'latest' : ''}`}>
+			<div className="hc-head">
+				<div className="hc-titlewrap">
+					<div className="hc-eyebrow">
+						<span className="hc-routine">{routine?.name || t('Session')}</span>
 					</div>
-					<div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-						{dayName}
-					</div>
+					<div className="hc-day">{dayName}</div>
 				</div>
-				<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-					<button
-						className="btn btn-ghost"
-						onClick={() => navigate(`/sessions/${sessionId}?edit=true`)}
-						style={{ padding: '8px', color: 'var(--text-tertiary)' }}
-					>
-						<Edit size={16} />
-					</button>
-					<button
-						className="btn btn-ghost"
-						onClick={handleDelete}
-						style={{ padding: '8px', color: 'var(--error)' }}
-					>
-						<Trash2 size={16} />
-					</button>
-				</div>
+				<button className="edit-btn" onClick={() => navigate(`/sessions/${sessionId}?edit=true`)}>
+					<Edit2 size={13} />{t('Edit')}
+				</button>
+				<button
+					onClick={handleDelete}
+					aria-label={t('Delete')}
+					style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: '8px 2px', flexShrink: 0 }}
+				>
+					<Trash2 size={16} />
+				</button>
 			</div>
 
-			{/* Date & Duration */}
-			<div style={{ display: 'flex', gap: '12px', marginBottom: '14px', flexWrap: 'wrap' }}>
-				<div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-					<Calendar size={12} /> {dateStr}
-				</div>
-				{duration > 0 && (
-					<div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-						<Clock size={12} /> {duration} min
-					</div>
-				)}
+			<div className="hc-meta">
+				<span className="mi"><Calendar size={14} />{dateStr}</span>
+				{duration > 0 && <span className="mi"><Clock size={14} /><span className="num">{duration} min</span></span>}
 			</div>
 
-			{/* Effort Rating */}
 			{effortTrackingEnabled && (
-				<div style={{ marginBottom: '12px' }}>
-					{!editingEffort ? (
-						<button
-							className="btn btn-ghost"
-							onClick={() => {
-								setEditEffortValue(session?.self_rated_effort ?? 7);
-								setEditingEffort(true);
-							}}
-							style={{
-								padding: '4px 10px',
-								fontSize: '12px',
-								color: session?.self_rated_effort != null ? '#86efac' : 'var(--text-tertiary)',
-								border: '1px solid',
-								borderColor: session?.self_rated_effort != null ? 'rgba(134,239,172,0.3)' : 'var(--border)',
-								borderRadius: '6px',
-								display: 'inline-flex',
-								alignItems: 'center',
-								gap: '5px',
-							}}
-						>
-							{session?.self_rated_effort != null ? (
-								<>
-									<span style={{ fontWeight: 700 }}>{session.self_rated_effort}/10</span>
-									<span style={{ color: 'var(--text-tertiary)' }}>·</span>
-									<span>{effortTone(session.self_rated_effort)}</span>
-									<Pencil size={11} style={{ marginLeft: '2px' }} />
-								</>
-							) : (
-								<>Rate effort <Pencil size={11} /></>
-							)}
-						</button>
-					) : (
-						<div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '8px', padding: '10px 12px' }}>
-							<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12px' }}>
-								<span style={{ fontWeight: 700, color: '#86efac' }}>{editEffortValue}/10</span>
-								<span style={{ color: 'var(--text-tertiary)' }}>{effortTone(editEffortValue)}</span>
-							</div>
-							<input
-								type="range"
-								min={1} max={10} step={1}
-								value={editEffortValue}
-								onChange={(e) => setEditEffortValue(parseInt(e.target.value, 10))}
-								style={{ width: '100%', accentColor: '#22c55e', cursor: 'pointer', marginBottom: '8px' }}
-							/>
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-								<button className="btn btn-ghost" style={{ fontSize: '12px', padding: '6px' }} onClick={() => setEditingEffort(false)}>
-									Cancel
-								</button>
-								<button className="btn btn-primary" style={{ fontSize: '12px', padding: '6px' }} onClick={saveEffortRating}>
-									Save
-								</button>
-							</div>
+				!editingEffort ? (
+					<button
+						className="effort-pill"
+						onClick={() => {
+							setEditEffortValue(session?.self_rated_effort ?? 7);
+							setEditingEffort(true);
+						}}
+						style={{ cursor: 'pointer' }}
+					>
+						{session?.self_rated_effort != null ? (
+							<>
+								<span className="ep-score num">{session.self_rated_effort}/10</span>
+								<span className="ep-dot" />
+								<span className="ep-word">{effortTone(session.self_rated_effort)}</span>
+								<Edit2 size={11} style={{ color: 'var(--text-3)' }} />
+							</>
+						) : (
+							<>
+								<span className="ep-word">{t('Rate effort')}</span>
+								<Edit2 size={11} style={{ color: 'var(--text-3)' }} />
+							</>
+						)}
+					</button>
+				) : (
+					<div style={{ marginTop: 13, padding: '12px 14px', borderRadius: 14, background: 'var(--card-tint)', border: '1px solid var(--line)' }}>
+						<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+							<span style={{ fontWeight: 800, fontSize: 17, color: 'var(--lime)' }} className="num">{editEffortValue}/10</span>
+							<span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{effortTone(editEffortValue)}</span>
 						</div>
-					)}
-				</div>
+						<input
+							className="effort-slider"
+							type="range"
+							min={1} max={10} step={1}
+							value={editEffortValue}
+							onChange={(e) => setEditEffortValue(parseInt(e.target.value, 10))}
+							style={{ margin: '14px 0 4px' }}
+						/>
+						<div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+							<button className="tool-chip" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditingEffort(false)}>
+								{t('Cancel')}
+							</button>
+							<button className="tool-chip on" style={{ flex: 1, justifyContent: 'center' }} onClick={saveEffortRating}>
+								{t('Save')}
+							</button>
+						</div>
+					</div>
+				)
 			)}
 
-			{/* Exercises & Sets */}
-			<div style={{ display: 'grid', gap: '10px' }}>
-				{exercises.map((ex: any, i: number) => {
-					const exSets = (setsByExercise.get(ex.exercise_id) || []).sort((a: any, b: any) => a.set_number - b.set_number);
-					if (exSets.length === 0) return null;
-					const normalSets = exSets.filter((s: any) => (s.set_type || 'normal') === 'normal');
-					const extraSets = exSets.filter((s: any) => (s.set_type || 'normal') !== 'normal');
-					const showExtraSets = !!expandedExtraSets[ex.exercise_id];
-					const dropCount = extraSets.filter((s: any) => (s.set_type || 'normal') === 'drop').length;
-					const warmupCount = extraSets.filter((s: any) => (s.set_type || 'normal') === 'warmup').length;
+			{exercises.map((ex: any, i: number) => {
+				const exSets = (setsByExercise.get(ex.exercise_id) || []).sort((a: any, b: any) => a.set_number - b.set_number);
+				if (exSets.length === 0) return null;
+				const normalSets = exSets.filter((s: any) => (s.set_type || 'normal') === 'normal');
+				const extraSets = exSets.filter((s: any) => (s.set_type || 'normal') !== 'normal');
+				const showExtraSets = !!expandedExtraSets[ex.exercise_id];
+				const dropCount = extraSets.filter((s: any) => (s.set_type || 'normal') === 'drop').length;
+				const warmupCount = extraSets.filter((s: any) => (s.set_type || 'normal') === 'warmup').length;
 
-					return (
-						<div key={i} style={{
-							background: 'rgba(0,0,0,0.15)', borderRadius: '8px',
-							padding: '10px 12px', fontSize: '13px'
-						}}>
-							<div style={{ fontWeight: 600, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
-								<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-									{ex.name}
-									{(ex.equipment || ex.muscle) && (
-										<span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '4px', color: 'var(--text-tertiary)' }}>
-											{[ex.equipment, ex.muscle].filter(Boolean).join(' · ')}
-										</span>
-									)}
-								</div>
-								<button
-									onClick={() => deleteExercise(ex.exercise_id)}
-									style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
-								>
-									<Trash2 size={13} color="var(--error)" />
-								</button>
-							</div>
-							<div style={{ display: 'grid', gap: '3px' }}>
-								{normalSets.map((s: any, normalIdx: number) => (
-									<div key={s.id} style={{
-										display: 'flex', alignItems: 'center', gap: '8px',
-										fontSize: '12px', color: 'var(--text-secondary)',
-										padding: '2px 0'
-									}}>
-										<CheckCircle size={12} color="var(--success)" style={{ flexShrink: 0 }} />
-										<span style={{ minWidth: '16px', fontSize: '11px', fontWeight: 700, color: 'var(--text-tertiary)' }}>{normalIdx + 1}.</span>
-										{ex.type === 'Cardio' && s.distance_km ? (
-											<span>{s.distance_km} km in {formatDurationMMSS(s.duration_sec || 0)}{s.distance_km > 0 && s.duration_sec > 0 ? ` (${formatPace(s.duration_sec / s.distance_km)} /km)` : ''}</span>
-										) : ex.type === 'Time' ? (
-											<span>{s.duration_sec || 0}s</span>
-										) : (
-											<>
-												<span style={{ minWidth: '50px' }}>{s.weight_kg != null ? `${s.weight_kg} kg` : 'NA'}</span>
-												<span>× {s.reps} reps</span>
-											</>
-										)}
-									</div>
-								))}
-
-								{extraSets.length > 0 && (
-									<div style={{ marginTop: '4px' }}>
-										<button
-											className="btn btn-ghost"
-											onClick={() => setExpandedExtraSets((prev) => ({ ...prev, [ex.exercise_id]: !prev[ex.exercise_id] }))}
-											style={{
-												width: '100%',
-												padding: '6px 8px',
-												fontSize: '11px',
-												border: '1px solid rgba(148,163,184,0.35)',
-												background: 'rgba(148,163,184,0.08)',
-												color: 'var(--text-secondary)',
-												display: 'flex',
-												alignItems: 'center',
-												justifyContent: 'space-between',
-												gap: '8px',
-											}}
-										>
-											<span>
-												{showExtraSets ? t('Hide extra sets') : t('Show extra sets')} ({extraSets.length})
-												{dropCount > 0 ? ` · ${dropCount} drop` : ''}
-												{warmupCount > 0 ? ` · ${warmupCount} warmup` : ''}
-											</span>
-											{showExtraSets ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-										</button>
-										{showExtraSets && (
-											<div style={{ display: 'grid', gap: '3px', marginTop: '6px' }}>
-												{extraSets.map((s: any, extraIdx: number) => {
-													const setType = s.set_type || 'normal';
-													const isDrop = setType === 'drop';
-													const tagLabel = isDrop ? 'DROP' : 'WARMUP';
-													return (
-														<div key={s.id} style={{
-															display: 'flex',
-															alignItems: 'center',
-															gap: '8px',
-															fontSize: '12px',
-															color: 'var(--text-secondary)',
-															padding: '2px 0',
-														}}>
-															<span
-																style={{
-																	minWidth: '52px',
-																	display: 'inline-flex',
-																	alignItems: 'center',
-																	justifyContent: 'center',
-																	padding: '2px 6px',
-																	borderRadius: '999px',
-																	fontSize: '10px',
-																	fontWeight: 800,
-																	letterSpacing: '0.4px',
-																	border: isDrop ? '1px solid rgba(245,158,11,0.6)' : '1px solid rgba(96,165,250,0.6)',
-																	background: isDrop ? 'rgba(245,158,11,0.14)' : 'rgba(96,165,250,0.14)',
-																	color: isDrop ? '#fbbf24' : '#93c5fd',
-																}}
-															>
-																{tagLabel} {extraIdx + 1}
-															</span>
-															{ex.type === 'Cardio' && s.distance_km ? (
-																<span>{s.distance_km} km in {formatDurationMMSS(s.duration_sec || 0)}{s.distance_km > 0 && s.duration_sec > 0 ? ` (${formatPace(s.duration_sec / s.distance_km)} /km)` : ''}</span>
-															) : ex.type === 'Time' ? (
-																<span>{s.duration_sec || 0}s</span>
-															) : (
-																<>
-																	<span style={{ minWidth: '50px' }}>{s.weight_kg != null ? `${s.weight_kg} kg` : 'NA'}</span>
-																	<span>× {s.reps} reps</span>
-																</>
-															)}
-														</div>
-													);
-												})}
-											</div>
-										)}
-									</div>
-								)}
-							</div>
+				return (
+					<div className="ex-log" key={i}>
+						<div className="exl-head">
+							<span className="exl-name">{ex.name}</span>
+							<span className="exl-top">{topSetLabel(ex, exSets)}</span>
+							<button
+								onClick={() => deleteExercise(ex.exercise_id)}
+								aria-label={t('Delete')}
+								style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: 2, flexShrink: 0, alignSelf: 'center' }}
+							>
+								<Trash2 size={13} />
+							</button>
 						</div>
-					);
-				})}
-			</div>
+						{(ex.equipment || ex.muscle) && (
+							<div className="exl-tagrow">
+								<span className="exl-tag">{[ex.equipment, ex.muscle].filter(Boolean).join(' · ')}</span>
+							</div>
+						)}
+
+						{normalSets.map((s: any, idx: number) => (
+							<LogRow key={s.id} ex={ex} s={s} idx={idx} />
+						))}
+
+						{extraSets.length > 0 && (
+							<>
+								<button
+									className="expand-btn"
+									onClick={() => setExpandedExtraSets((prev) => ({ ...prev, [ex.exercise_id]: !prev[ex.exercise_id] }))}
+									style={{ marginTop: 4 }}
+								>
+									{showExtraSets ? t('Hide extra sets') : t('Show extra sets')} ({extraSets.length}
+									{dropCount > 0 ? ` · ${dropCount} drop` : ''}
+									{warmupCount > 0 ? ` · ${warmupCount} warmup` : ''})
+									{showExtraSets ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+								</button>
+								{showExtraSets && extraSets.map((s: any, extraIdx: number) => {
+									const isDrop = (s.set_type || 'normal') === 'drop';
+									return (
+										<div className="log-row" key={s.id} style={{ gridTemplateColumns: '52px 86px 1fr' }}>
+											<span
+												className={isDrop ? 'pr' : 'tag'}
+												style={{ justifySelf: 'start', fontSize: 8.5 }}
+											>
+												{isDrop ? 'DROP' : 'WARM'} {extraIdx + 1}
+											</span>
+											{ex.type === 'Cardio' && s.distance_km ? (
+												<span className="log-w num" style={{ gridColumn: 'span 2' }}>
+													{s.distance_km}<small>km</small>
+													<span className="log-r num" style={{ marginLeft: 8 }}>{formatDurationMMSS(s.duration_sec || 0)}</span>
+												</span>
+											) : ex.type === 'Time' ? (
+												<span className="log-w num" style={{ gridColumn: 'span 2' }}>{s.duration_sec || 0}<small>s</small></span>
+											) : (
+												<>
+													<span className="log-w num">
+														{s.weight_kg != null && s.weight_kg > 0 ? <>{s.weight_kg}<small>kg</small></> : <span className="log-w bw">BW</span>}
+													</span>
+													<span className="log-r num"><span className="x">×</span>{s.reps} reps</span>
+												</>
+											)}
+										</div>
+									);
+								})}
+							</>
+						)}
+					</div>
+				);
+			})}
 		</div>
 	);
 }
 
-// ─── Session Feed (Facebook-style scroll) ────────────────────────────
+// ─── Session Feed (continuous scroll history) ────────────────────────
 export default function SessionFeed({ targetSessionId }: { targetSessionId: number }) {
 	const { t } = useTranslation();
 	const navigate = useNavigate();
@@ -475,12 +433,10 @@ export default function SessionFeed({ targetSessionId }: { targetSessionId: numb
 	const bottomSentinelRef = useRef<HTMLDivElement>(null);
 	const initialScrollDone = useRef(false);
 
-	const LOAD_SIZE = 3; // Sessions to load per expansion
+	const LOAD_SIZE = 3;
 
-	// Load all routines for name resolution
 	const routines = useLiveQuery(() => db.routines.toArray()) || [];
 
-	// Load all completed sessions sorted newest first
 	const allCompleted = useLiveQuery(
 		() => db.sessions.orderBy('started_at').reverse().filter(s => !!s.completed_at).toArray(),
 		[]
@@ -488,7 +444,6 @@ export default function SessionFeed({ targetSessionId }: { targetSessionId: numb
 
 	const [visibleRange, setVisibleRange] = useState<{ start: number; end: number } | null>(null);
 
-	// Initialize the visible range centered on the target session
 	useEffect(() => {
 		if (!allCompleted || allCompleted.length === 0) return;
 		const targetIdx = allCompleted.findIndex(s => s.id === targetSessionId);
@@ -499,24 +454,20 @@ export default function SessionFeed({ targetSessionId }: { targetSessionId: numb
 		setVisibleRange({ start, end });
 	}, [allCompleted, targetSessionId]);
 
-	// Scroll to the target session after initial render
 	useEffect(() => {
 		if (visibleRange && !initialScrollDone.current && targetRef.current) {
-			// Small timeout to let DOM render
 			setTimeout(() => {
 				targetRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
-				window.scrollBy(0, -60); // offset for sticky header
+				window.scrollBy(0, -60);
 				initialScrollDone.current = true;
 			}, 100);
 		}
 	}, [visibleRange]);
 
-	// Reset on target change
 	useEffect(() => {
 		initialScrollDone.current = false;
 	}, [targetSessionId]);
 
-	// IntersectionObserver for infinite scroll
 	useEffect(() => {
 		if (!allCompleted || !visibleRange) return;
 
@@ -545,7 +496,13 @@ export default function SessionFeed({ targetSessionId }: { targetSessionId: numb
 	}, [allCompleted, visibleRange]);
 
 	if (!allCompleted || !visibleRange) {
-		return <div className="container" style={{ textAlign: 'center', padding: '40px' }}>Loading sessions...</div>;
+		return (
+			<div className="container">
+				<div className="mono" style={{ textAlign: 'center', padding: '80px 0', fontSize: 10.5, color: 'var(--text-4)' }}>
+					{t('Loading...')}
+				</div>
+			</div>
+		);
 	}
 
 	const visibleSessions = allCompleted.slice(visibleRange.start, visibleRange.end + 1);
@@ -553,48 +510,22 @@ export default function SessionFeed({ targetSessionId }: { targetSessionId: numb
 	const canLoadOlder = visibleRange.end < allCompleted.length - 1;
 
 	return (
-		<div className="container fade-in" style={{ paddingBottom: '100px' }}>
-			{/* Sticky header */}
-			<div style={{
-				display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-				marginBottom: '16px', position: 'sticky', top: 0, zIndex: 10,
-				background: 'var(--bg-primary)', padding: '10px 0',
-				borderBottom: '1px solid var(--border)'
-			}}>
-				<div style={{ display: 'flex', alignItems: 'center' }}>
-					<button className="btn btn-ghost" onClick={() => navigate('/sessions')} style={{ paddingLeft: 0, marginRight: '8px' }}>
-						<ArrowLeft size={24} />
-					</button>
-					<h2 style={{ fontSize: '16px', margin: 0, fontWeight: 'bold' }}>
-						{t('Session History')}
-					</h2>
-				</div>
-				<span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+		<div className="container">
+			<header className="page-hdr" style={{ alignItems: 'center' }}>
+				<button className="icon-btn" onClick={() => navigate('/sessions')} aria-label={t('Back')}>
+					<ArrowLeft size={20} />
+				</button>
+				<div className="page-title sm">{t('Session History')}</div>
+				<span className="mono num" style={{ fontSize: 11, color: 'var(--text-3)' }}>
 					{allCompleted.length} {t('sessions')}
 				</span>
+			</header>
+
+			<div ref={topSentinelRef} className="topmark">
+				{canLoadNewer ? t('Scroll for newer sessions') : t('No newer sessions')}
 			</div>
 
-			{/* Load newer indicator */}
-			{canLoadNewer && (
-				<div ref={topSentinelRef} style={{
-					textAlign: 'center', padding: '12px', marginBottom: '8px',
-					fontSize: '12px', color: 'var(--text-tertiary)',
-					display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
-				}}>
-					<ChevronUp size={14} /> {t('Scroll for newer sessions')}
-				</div>
-			)}
-			{!canLoadNewer && (
-				<div ref={topSentinelRef} style={{
-					textAlign: 'center', padding: '8px', marginBottom: '8px',
-					fontSize: '11px', color: 'var(--text-tertiary)'
-				}}>
-					{t('No newer sessions')}
-				</div>
-			)}
-
-			{/* Session cards */}
-			<div style={{ display: 'grid', gap: '16px' }}>
+			<div style={{ display: 'grid', gap: 0 }}>
 				{visibleSessions.map((s: any) => (
 					<div key={s.id} ref={s.id === targetSessionId ? targetRef : undefined}>
 						<FeedCard
@@ -606,24 +537,9 @@ export default function SessionFeed({ targetSessionId }: { targetSessionId: numb
 				))}
 			</div>
 
-			{/* Load older indicator */}
-			{canLoadOlder && (
-				<div ref={bottomSentinelRef} style={{
-					textAlign: 'center', padding: '12px', marginTop: '8px',
-					fontSize: '12px', color: 'var(--text-tertiary)',
-					display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
-				}}>
-					{t('Scroll for older sessions')} <ChevronDown size={14} />
-				</div>
-			)}
-			{!canLoadOlder && (
-				<div ref={bottomSentinelRef} style={{
-					textAlign: 'center', padding: '8px', marginTop: '8px',
-					fontSize: '11px', color: 'var(--text-tertiary)'
-				}}>
-					{t('No older sessions')}
-				</div>
-			)}
+			<div ref={bottomSentinelRef} className="topmark" style={{ margin: '10px 0 4px' }}>
+				{canLoadOlder ? t('Scroll for older sessions') : `${t("That's everything")} · ${allCompleted.length}`}
+			</div>
 		</div>
 	);
 }

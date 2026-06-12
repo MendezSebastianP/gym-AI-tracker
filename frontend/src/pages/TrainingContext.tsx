@@ -219,9 +219,9 @@ export default function TrainingContext() {
 					style={{
 						padding: '16px',
 						justifyContent: 'space-between',
-						backgroundColor: prefs[key] === opt ? 'rgba(204,255,0,0.1)' : 'var(--bg-tertiary)',
+						backgroundColor: prefs[key] === opt ? 'color-mix(in oklab, var(--lime) 10%, transparent)' : 'var(--bg-tertiary)',
 						color: prefs[key] === opt ? 'var(--primary)' : 'var(--text-secondary)',
-						border: prefs[key] === opt ? '1px solid var(--primary)' : '1px solid var(--border)',
+						border: prefs[key] === opt ? '1px solid color-mix(in oklab, var(--lime) 45%, transparent)' : '1px solid var(--border)',
 						borderRadius: '8px',
 						textAlign: 'left',
 						fontWeight: 'normal',
@@ -277,8 +277,8 @@ export default function TrainingContext() {
 							flexDirection: 'column',
 							alignItems: 'flex-start',
 							gap: '6px',
-							backgroundColor: contextLevel === level ? 'rgba(204,255,0,0.1)' : 'var(--bg-tertiary)',
-							border: contextLevel === level ? '1px solid var(--primary)' : '1px solid var(--border)',
+							backgroundColor: contextLevel === level ? 'color-mix(in oklab, var(--lime) 10%, transparent)' : 'var(--bg-tertiary)',
+							border: contextLevel === level ? '1px solid color-mix(in oklab, var(--lime) 45%, transparent)' : '1px solid var(--border)',
 							borderRadius: '12px',
 							textAlign: 'left',
 							position: 'relative',
@@ -397,9 +397,9 @@ export default function TrainingContext() {
 
 				const btnStyle = (active: boolean): React.CSSProperties => ({
 					padding: '16px', justifyContent: 'space-between',
-					backgroundColor: active ? 'rgba(204,255,0,0.1)' : 'var(--bg-tertiary)',
+					backgroundColor: active ? 'color-mix(in oklab, var(--lime) 10%, transparent)' : 'var(--bg-tertiary)',
 					color: active ? 'var(--primary)' : 'var(--text-secondary)',
-					border: active ? '1px solid var(--primary)' : '1px solid var(--border)',
+					border: active ? '1px solid color-mix(in oklab, var(--lime) 45%, transparent)' : '1px solid var(--border)',
 					borderRadius: '8px', textAlign: 'left', fontWeight: 'normal',
 				});
 
@@ -478,9 +478,9 @@ export default function TrainingContext() {
 							{['No', 'Yes'].map(v => (
 								<button key={v} className="btn" style={{
 									flex: 1,
-									backgroundColor: prefs.has_injuries === v ? 'rgba(204,255,0,0.1)' : 'transparent',
+									backgroundColor: prefs.has_injuries === v ? 'color-mix(in oklab, var(--lime) 10%, transparent)' : 'transparent',
 									color: prefs.has_injuries === v ? 'var(--primary)' : 'var(--text-secondary)',
-									border: prefs.has_injuries === v ? '1px solid var(--primary)' : '1px solid var(--border)',
+									border: prefs.has_injuries === v ? '1px solid color-mix(in oklab, var(--lime) 45%, transparent)' : '1px solid var(--border)',
 									padding: '12px',
 								}} onClick={() => updatePref('has_injuries', v)}>
 									{t(v)}
@@ -631,9 +631,9 @@ export default function TrainingContext() {
 								<button key={val} onClick={() => updateProfile('gender', val)} className="btn w-full"
 									style={{
 										padding: '16px', justifyContent: 'space-between',
-										backgroundColor: profileAnswers.gender === val ? 'rgba(204,255,0,0.1)' : 'var(--bg-tertiary)',
+										backgroundColor: profileAnswers.gender === val ? 'color-mix(in oklab, var(--lime) 10%, transparent)' : 'var(--bg-tertiary)',
 										color: profileAnswers.gender === val ? 'var(--primary)' : 'var(--text-secondary)',
-										border: profileAnswers.gender === val ? '1px solid var(--primary)' : '1px solid var(--border)',
+										border: profileAnswers.gender === val ? '1px solid color-mix(in oklab, var(--lime) 45%, transparent)' : '1px solid var(--border)',
 										borderRadius: '8px', textAlign: 'left', fontWeight: 'normal',
 									}}>
 									<span>{label}</span>
