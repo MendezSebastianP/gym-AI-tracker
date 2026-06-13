@@ -65,6 +65,12 @@ services:
       context: .
       dockerfile: deploy/Dockerfile.webhook
     restart: always
+    # Explicit resolvers — the container's auto-generated resolv.conf had no
+    # working nameserver, so redeploy.sh's `git fetch` failed with
+    # "Could not resolve host: github.com" and aborted every deploy.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     depends_on:
       - dockerproxy
     # Port intentionally NOT exposed — Caddy proxies /hooks/* to webhook:9000 internally
